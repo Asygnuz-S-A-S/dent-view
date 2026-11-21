@@ -62,7 +62,13 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
-          <span className="truncate text-sm text-muted-foreground">{marca?.nombre || activa?.name || "Plataforma"}</span>
+          {/* Logo del centro (data URL validado al guardarlo); sin logo, su nombre en el color de la marca. */}
+          {marca?.logo ? (
+            // eslint-disable-next-line @next/next/no-img-element -- logo del centro como data URL
+            <img src={marca.logo} alt={marca.nombre || activa?.name || "Centro"} className="h-8 max-w-40 shrink-0 object-contain" />
+          ) : (
+            <span className="truncate text-base font-semibold text-sidebar-primary">{marca?.nombre || activa?.name || "Plataforma"}</span>
+          )}
           {ctx && <BuscadorGlobal />}
         </header>
         {/* SidebarInset ya es el <main> de la página: aquí solo un div (BUG-01). */}
