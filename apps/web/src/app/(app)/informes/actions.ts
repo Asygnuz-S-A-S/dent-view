@@ -13,7 +13,9 @@ import { numeroOrden, transicionValida } from "@/lib/ordenes";
 import { calcularEdad } from "@/lib/pacientes";
 import { ADMIN, MEDICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
-import { esquemaLogo } from "@/lib/marca";
+import { esquemaLogo, normalizarHex } from "@/lib/marca";
+import { cargarCapturasPdf } from "@/lib/informe-capturas";
+import { filtroImagenes, normalizarCapturas } from "@/lib/imagenes";
 
 type R = { error?: string };
 const fechaBogota = (d: Date, opts: Intl.DateTimeFormatOptions = { dateStyle: "long" }) => d.toLocaleString("es-CO", { timeZone: "America/Bogota", ...opts });
@@ -78,6 +80,29 @@ export async function guardarBorrador(id: string, entrada: z.input<typeof esquem
   return {};
 }
 
+/** Reemplaza la selección de capturas (en orden) de un borrador. Cada captura debe ser del mismo centro y paciente del informe. */
+export async function guardarCapturas(id: string, entrada: unknown): Promise<R> {
+  const ctx = await exigirContexto(MEDICOS);
+  const n = normalizarCapturas(entrada);
+  if ("error" in n) return { error: n.error };
+  const org = ctx.organizationId;
+  const inf = await prisma.informe.findFirst({ where: { id, organizationId: org, estado: "BORRADOR" }, select: { pacienteId: true } });
+  if (!inf) return { error: "El informe no existe o ya no es editable" };
+  const ids = n.capturas.flatMap((c) => (c.imagenId ? [c.imagenId] : []));
+  const uids = n.capturas.flatMap((c) => (c.estudioUid ? [c.estudioUid] : []));
+  const [imgs, ests] = await Promise.all([
+    ids.length ? prisma.imagenEstudio.count({ where: { id: { in: ids }, pacienteId: inf.pacienteId, ...filtroImagenes(org, ctx.usuario.id, ctx.rol) } }) : 0,
+    uids.length ? prisma.estudio.count({ where: { studyInstanceUid: { in: uids }, organizationId: org, pacienteId: inf.pacienteId } }) : 0,
+  ]);
+  if (imgs !== new Set(ids).size || ests !== new Set(uids).size) return { error: "Alguna captura no pertenece a este paciente" };
+  await prisma.$transaction([
+    prisma.informeImagen.deleteMany({ where: { informeId: id, organizationId: org } }),
+    prisma.informeImagen.createMany({ data: n.capturas.map((c) => ({ ...c, organizationId: org, informeId: id })) }),
+  ]);
+  revalidatePath(`/informes/${id}`);
+  return {};
+}
+
 /** Compone el PDF completo ANTES de cambiar el estado; si falla, sigue siendo borrador. */
 export async function emitirInforme(id: string): Promise<R> {
   const ctx = await exigirContexto(MEDICOS);
@@ -108,6 +133,7 @@ export async function emitirInforme(id: string): Promise<R> {
   const alertas = calcularAlertas(contexto, alergias, enfermedades).map((a) => a.texto).filter((t) => /^(Embarazo|Implantes|Marcapasos)/.test(t));
   let pdf: Buffer;
   try {
+    const capturas = await cargarCapturasPdf(org, id);
     pdf = await generarPdfInforme({
       membrete: { nombre: config?.nombre || centro.name, direccion: config?.direccion, telefono: config?.telefono, correo: config?.correo, registro: config?.registro, logo: config?.logo },
       paciente: {
@@ -117,7 +143,7 @@ export async function emitirInforme(id: string): Promise<R> {
       },
       orden: orden ? numeroOrden(orden.numero) : null, remitente: orden?.doctorRemitente?.name ?? null,
       estudioFecha: estudio?.fechaEstudio ? fechaBogota(estudio.fechaEstudio) : null,
-      motivo: inf.motivo, tecnica: inf.tecnica, hallazgos: inf.hallazgos, impresion: inf.impresion, recomendaciones: inf.recomendaciones, alertas,
+      motivo: inf.motivo, tecnica: inf.tecnica, hallazgos: inf.hallazgos, impresion: inf.impresion, recomendaciones: inf.recomendaciones, alertas, capturas, colorPrimario: normalizarHex(config?.colorPrimario),
       firmante: { nombre: ctx.usuario.name, tarjeta: perfil?.tarjetaProfesional ?? null },
       emitidoEn: fechaBogota(ahora, { dateStyle: "long", timeStyle: "short" }), version: inf.version, codigo, urlVerificacion: `${baseUrl()}/verificar/${codigo}`,
     });
@@ -172,6 +198,8 @@ export async function corregirInforme(id: string, motivoCorreccion: string): Pro
       motivoCorreccion: m.data, creadoPorId: ctx.usuario.id,
     },
   });
+  const previas = await prisma.informeImagen.findMany({ where: { informeId: base.id, organizationId: base.organizationId } });
+  if (previas.length) await prisma.informeImagen.createMany({ data: previas.map(({ id: _id, informeId: _i, ...c }) => ({ ...c, informeId: nuevo.id })) }); // la corrección hereda las capturas
   await registrarEvento({ organizationId: ctx.organizationId, pacienteId: base.pacienteId, actorId: ctx.usuario.id, tipo: "informe.correccion", detalle: { informeId: nuevo.id, version: nuevo.version, motivo: m.data } });
   revalidatePath("/informes");
   return { id: nuevo.id };

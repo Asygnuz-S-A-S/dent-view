@@ -36,6 +36,7 @@ model PacienteTenant {
   fotoKey         String? // clave S3 de la foto de perfil (tenants/{org}/pacientes/{id}/…); solo se sirve por ruta autenticada
   creadoEn        DateTime              @default(now())
   estudios        Estudio[]
+  imagenes        ImagenEstudio[]
   ordenes         Orden[]
   citas           Cita[]
   condiciones     CondicionDental[]
@@ -75,6 +76,7 @@ model Estudio {
   estado            EstadoEstudio   @default(POR_ASIGNAR)
   creadoEn          DateTime        @default(now())
   actualizadoEn     DateTime        @updatedAt
+  imagenes          ImagenEstudio[]
 
   @@index([organizationId])
 }
@@ -143,6 +145,7 @@ model Orden {
   actualizadoEn     DateTime          @updatedAt
   items             OrdenItem[]
   estudios          Estudio[]
+  imagenes          ImagenEstudio[]
   citas             Cita[]
   facturas          Factura[]
   casosLab          CasoLaboratorio[]
@@ -201,6 +204,7 @@ model Cita {
   estado         EstadoCita      @default(PROGRAMADA)
   notas          String?
   creadoEn       DateTime        @default(now())
+  linksPago      LinkPago[]
 
   @@index([organizationId, inicio])
 }
@@ -289,6 +293,7 @@ enum MedioPago {
   TRANSFERENCIA
   TARJETA
   OTRO
+  PASARELA
 }
 
 // Cuenta de cobro interna (no es factura electrónica DIAN).
@@ -311,6 +316,7 @@ model Factura {
   notas          String?
   items          FacturaItem[]
   pagos          Pago[]
+  linksPago      LinkPago[]
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])
@@ -334,6 +340,10 @@ model Pago {
   fecha           DateTime  @default(now())
   nota            String?
   registradoPorId String?
+  // Pago hecho por pasarela: el link que lo originó (uno a uno) y el id de la transacción en el proveedor.
+  linkPagoId        String?  @unique
+  linkPago          LinkPago? @relation(fields: [linkPagoId], references: [id], onDelete: SetNull)
+  referenciaExterna String?
 
   @@index([facturaId])
 }

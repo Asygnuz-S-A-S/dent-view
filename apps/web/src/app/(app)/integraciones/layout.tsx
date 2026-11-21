@@ -7,7 +7,7 @@ export default async function IntegracionesLayout({ children }: { children: Reac
   await exigirContexto(ADMIN);
   return (
     <div className="space-y-6">
-      <EncabezadoPagina titulo="Integraciones" descripcion="Conecta dent-view con otros sistemas: API con tokens, webhooks y conectores a sistemas de gestión de pacientes." />
+      <EncabezadoPagina titulo="Integraciones" descripcion="Conecta dent-view con otros sistemas: API con tokens, webhooks, conectores a sistemas de gestión de pacientes y pasarelas de pago." />
       <PestanasIntegraciones />
       {children}
     </div>

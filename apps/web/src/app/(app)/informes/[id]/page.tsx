@@ -11,7 +11,10 @@ import { EditorInforme } from "@/components/informes/editor-informe";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import type { CapturaUI } from "@/components/informes/selector-capturas";
 import { registrarAcceso } from "@/lib/bitacora";
+import { seriesDeEstudio } from "@/lib/captura-dicom";
+import { filtroImagenes } from "@/lib/imagenes";
 import { calcularAlertas } from "@/lib/historia-clinica";
 import { ETIQUETA_ESTADO_INFORME, informeEditable, puedeArchivar, puedeCorregir, type EstadoInforme } from "@/lib/informes";
 import { numeroOrden } from "@/lib/ordenes";
@@ -20,6 +23,29 @@ import { listarEnlaces } from "@/lib/resultados";
 import { exigirContexto } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
+
+/** Capturas elegibles (imágenes subidas y series DICOM del paciente) y las ya elegidas, en orden. */
+async function capturasDelInforme(ctx: Awaited<ReturnType<typeof exigirContexto>>, informeId: string, pacienteId: string): Promise<[CapturaUI[], CapturaUI[]]> {
+  const org = ctx.organizationId;
+  const [imagenes, estudios, elegidas] = await Promise.all([
+    prisma.imagenEstudio.findMany({ where: { pacienteId, ...filtroImagenes(org, ctx.usuario.id, ctx.rol) }, orderBy: { creadoEn: "desc" }, select: { id: true, titulo: true, nombreOriginal: true } }),
+    prisma.estudio.findMany({ where: { pacienteId, organizationId: org }, orderBy: { creadoEn: "desc" }, select: { id: true, studyInstanceUid: true, orthancId: true, modalidad: true, descripcion: true } }),
+    prisma.informeImagen.findMany({ where: { informeId, organizationId: org }, orderBy: { orden: "asc" } }),
+  ]);
+  const seriesPorEstudio = await Promise.all(estudios.map((e) => seriesDeEstudio(e.orthancId)));
+  const dicom: CapturaUI[] = estudios.flatMap((e, i) => seriesPorEstudio[i]!.map((s) => ({
+    origen: "DICOM" as const, estudioId: e.id, estudioUid: e.studyInstanceUid, serieUid: s.serieUid, leyenda: "",
+    etiqueta: `${e.modalidad ?? "DICOM"} · ${s.descripcion ?? e.descripcion ?? "serie"} (${s.instancias})`,
+  })));
+  const subidas: CapturaUI[] = imagenes.map((m) => ({ origen: "IMAGEN" as const, imagenId: m.id, leyenda: "", etiqueta: m.titulo || m.nombreOriginal }));
+  const todas = [...subidas, ...dicom];
+  const clave = (c: CapturaUI) => (c.origen === "IMAGEN" ? `i:${c.imagenId}` : `d:${c.estudioUid}:${c.serieUid ?? ""}`);
+  const elegidasUI = elegidas.flatMap((f) => {
+    const base = todas.find((c) => clave(c) === (f.origen === "IMAGEN" ? `i:${f.imagenId}` : `d:${f.estudioUid}:${f.serieUid ?? ""}`));
+    return base ? [{ ...base, leyenda: f.leyenda ?? "" }] : [];
+  });
+  return [todas, elegidasUI];
+}
 
 export default async function DetalleInforme({ params, searchParams }: { params: Promise<{ id: string }>; searchParams: Promise<{ entregar?: string }> }) {
   const ctx = await exigirContexto(["admin_tenant", "recepcion", "especialista", "doctor_remitente"]);
@@ -50,6 +76,8 @@ export default async function DetalleInforme({ params, searchParams }: { params:
     : [null, [], []];
   // Recepción no ve la historia clínica: solo la nota de alertas de la ficha.
   const alertas = medico ? calcularAlertas(contexto, alergias, enfermedades) : !esDoctor && pac?.alertas ? [{ gravedad: "MEDIA" as const, texto: pac.alertas }] : [];
+  const editando = medico && informeEditable(inf.estado);
+  const [disponibles, capturasIniciales] = editando ? await capturasDelInforme(ctx, inf.id, inf.pacienteId) : [[], []];
   const campos = [["Motivo de la remisión", inf.motivo], ["Técnica", inf.tecnica], ["Hallazgos", inf.hallazgos], ["Impresión diagnóstica", inf.impresion], ["Recomendaciones", inf.recomendaciones]] as const;
 
   return (
@@ -94,7 +122,7 @@ export default async function DetalleInforme({ params, searchParams }: { params:
 
       {medico && informeEditable(inf.estado) ? (
         <div className="rounded-xl border bg-card p-4 sm:p-6">
-          <EditorInforme id={inf.id} paciente={pac?.nombre} inicial={{ motivo: inf.motivo ?? "", tecnica: inf.tecnica ?? "", hallazgos: inf.hallazgos, impresion: inf.impresion, recomendaciones: inf.recomendaciones ?? "" }} />
+          <EditorInforme id={inf.id} paciente={pac?.nombre} disponibles={disponibles} capturasIniciales={capturasIniciales} inicial={{ motivo: inf.motivo ?? "", tecnica: inf.tecnica ?? "", hallazgos: inf.hallazgos, impresion: inf.impresion, recomendaciones: inf.recomendaciones ?? "" }} />
         </div>
       ) : (
         <Card>

@@ -14,7 +14,8 @@ export const ETIQUETA_RESPONSABLE: Record<Responsable, string> = { PACIENTE: "Pa
 
 export const MEDIOS_PAGO = ["EFECTIVO", "TRANSFERENCIA", "TARJETA", "OTRO"] as const;
 export type MedioPago = (typeof MEDIOS_PAGO)[number];
-export const ETIQUETA_MEDIO: Record<MedioPago, string> = { EFECTIVO: "Efectivo", TRANSFERENCIA: "Transferencia", TARJETA: "Tarjeta", OTRO: "Otro" };
+// PASARELA lo escribe solo el webhook de pago en línea: no está en MEDIOS_PAGO (selector manual).
+export const ETIQUETA_MEDIO: Record<MedioPago | "PASARELA", string> = { EFECTIVO: "Efectivo", TRANSFERENCIA: "Transferencia", TARJETA: "Tarjeta", OTRO: "Otro", PASARELA: "Pasarela de pago" };
 
 export const numeroFactura = (n: number) => `FC-${String(n).padStart(4, "0")}`;
 

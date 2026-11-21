@@ -1,7 +1,8 @@
 import { headers } from "next/headers";
-import { redirect } from "next/navigation";
+import { notFound, redirect } from "next/navigation";
 import { prisma } from "@dent-view/db";
 import { AppSidebar } from "@/components/app-sidebar";
+import { GuardaModulo } from "@/components/comunes/guarda-modulo";
 import { BuscadorGlobal } from "@/components/comunes/buscador-global";
 import { AvisoInvitaciones } from "@/components/invitaciones/aviso-invitaciones";
 import { BannerSuplantacion } from "@/components/plataforma/banner-suplantacion";
@@ -12,6 +13,8 @@ import { auth } from "@/lib/auth";
 import { ETIQUETA_ROL } from "@/lib/invitaciones";
 import { cssMarca } from "@/lib/marca";
 import { contextoActivo, obtenerSesion } from "@/lib/sesion";
+import { rutaBloqueada } from "@/lib/tipo-centro";
+import { tipoDeCentro } from "@/lib/tipo-centro-servidor";
 
 export default async function AppLayout({ children }: { children: React.ReactNode }) {
   const ctx = await contextoActivo();
@@ -19,6 +22,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
   const superadmin = sesion?.user.role === "admin";
   // Un superadmin sin centro activo entra igual (a /plataforma); cualquier otro sin contexto, a ingresar.
   if (!ctx && !superadmin) redirect("/ingresar");
+  // Guard por tipo de centro (404 si la ruta es de un módulo deshabilitado); x-pathname lo pone proxy.ts.
+  const tipo = ctx ? await tipoDeCentro(ctx.organizationId) : null;
+  if (tipo && rutaBloqueada(tipo, (await headers()).get("x-pathname") ?? "/")) notFound();
   const orgs = ctx ? await auth.api.listOrganizations({ headers: await headers() }) : [];
   const activa = orgs.find((o) => o.id === ctx?.organizationId);
   const marca = ctx
@@ -44,6 +50,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         activa={ctx?.organizationId ?? ""}
         rol={ctx?.rol ?? ""}
         superadmin={superadmin}
+        tipo={tipo}
         marca={{ nombre: marca?.nombre || activa?.name || "Sin centro", logo: marca?.logo ?? null }}
         usuario={{ nombre: sesion!.user.name, correo: sesion!.user.email }}
       />
@@ -59,7 +66,9 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {ctx && <BuscadorGlobal />}
         </header>
         {/* SidebarInset ya es el <main> de la página: aquí solo un div (BUG-01). */}
-        <div id="contenido" className="mx-auto w-full max-w-[96rem] min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</div>
+        <div id="contenido" className="mx-auto w-full max-w-[96rem] min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">
+          {tipo ? <GuardaModulo tipo={tipo}>{children}</GuardaModulo> : children}
+        </div>
       </SidebarInset>
     </SidebarProvider>
     </TooltipProvider>

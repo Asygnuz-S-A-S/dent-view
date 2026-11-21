@@ -24,6 +24,8 @@ model User {
   estudiosRemitidos Estudio[]     @relation("DoctorRemitente")
   ordenesRemitidas  Orden[]       @relation("OrdenDoctor")
   perfilDoctor      PerfilDoctor?
+  seguimientosDoctor SeguimientoDoctor[]
+  contactosDoctor   ContactoDoctor[]
 }
 
 model Session {
@@ -95,6 +97,14 @@ model Organization {
   integraciones Integracion[]
   convenios   Convenio[]
   tarifas     TarifaEspecial[]
+  imagenes    ImagenEstudio[]
+  informeImagenes InformeImagen[]
+  seguimientosDoctor SeguimientoDoctor[]
+  contactosDoctor ContactoDoctor[]
+  configSeguimientoDoctor ConfigSeguimientoDoctor?
+  pasarelasPago PasarelaPago[]
+  linksPago   LinkPago[]
+  eventosPasarela EventoPasarela[]
 }
 
 model Member {
@@ -104,6 +114,8 @@ model Member {
   userId         String
   user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
   role           String
+  // Odontólogo que atiende dentro de una clínica (no cambia el rol de acceso).
+  esOdontologo   Boolean      @default(false)
   createdAt      DateTime     @default(now())
 
   @@unique([organizationId, userId])

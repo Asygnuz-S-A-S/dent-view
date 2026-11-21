@@ -8,6 +8,7 @@ const PESTANAS = [
   { href: "/integraciones/api", etiqueta: "API y tokens" },
   { href: "/integraciones/webhooks", etiqueta: "Webhooks" },
   { href: "/integraciones/conectores", etiqueta: "Conectores" },
+  { href: "/integraciones/pasarelas", etiqueta: "Pasarelas" },
 ];
 
 export function PestanasIntegraciones() {

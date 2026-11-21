@@ -152,6 +152,15 @@ model ConfigCentro {
   recordatorioHoras Int     @default(24)
   // Marca del centro (white-label): color principal en hex (#0e6b8a) aplicado al tema de la app y a sus páginas públicas.
   colorPrimario     String?
+  // Tipo de centro; sin fila de ConfigCentro el consumidor debe asumir CENTRO_RADIOLOGICO.
+  tipoCentro        TipoCentro @default(CENTRO_RADIOLOGICO)
+}
+
+enum TipoCentro {
+  CENTRO_RADIOLOGICO
+  CENTRO_ODONTOLOGICO
+  CLINICA_ODONTOLOGICA
+  ODONTOLOGO_PARTICULAR
 }
 
 // Cada versión es una fila; las versiones emitidas son inmutables y comparten grupoId.
@@ -180,6 +189,7 @@ model Informe {
   creadoPorId      String?
   creadoEn         DateTime  @default(now())
   actualizadoEn    DateTime  @updatedAt
+  capturas         InformeImagen[]
 
   @@unique([grupoId, version])
   @@index([organizationId, estado, creadoEn])

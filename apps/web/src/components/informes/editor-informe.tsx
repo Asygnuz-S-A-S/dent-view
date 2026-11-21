@@ -4,13 +4,14 @@
 import { useRouter } from "next/navigation";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { emitirInforme, guardarBorrador } from "@/app/(app)/informes/actions";
+import { emitirInforme, guardarBorrador, guardarCapturas } from "@/app/(app)/informes/actions";
 import {
   AlertDialog, AlertDialogAction, AlertDialogCancel, AlertDialogContent, AlertDialogDescription,
   AlertDialogFooter, AlertDialogHeader, AlertDialogTitle, AlertDialogTrigger,
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
+import { SelectorCapturas, type CapturaUI } from "@/components/informes/selector-capturas";
 import { Textarea } from "@/components/ui/textarea";
 
 export type DatosInforme = { motivo: string; tecnica: string; hallazgos: string; impresion: string; recomendaciones: string };
@@ -23,20 +24,25 @@ const CAMPOS: { k: keyof DatosInforme; etiqueta: string; filas: number }[] = [
   { k: "recomendaciones", etiqueta: "Recomendaciones", filas: 3 },
 ];
 
-export function EditorInforme({ id, inicial, paciente }: { id: string; inicial: DatosInforme; paciente?: string }) {
+export function EditorInforme({ id, inicial, paciente, disponibles = [], capturasIniciales = [] }: { id: string; inicial: DatosInforme; paciente?: string; disponibles?: CapturaUI[]; capturasIniciales?: CapturaUI[] }) {
   const router = useRouter();
   const [d, setD] = useState(inicial);
+  const [capturas, setCapturas] = useState(capturasIniciales);
   const [pendiente, iniciar] = useTransition();
+  const guardarTodo = async () => {
+    const g = await guardarBorrador(id, d);
+    return g.error ? g : guardarCapturas(id, capturas);
+  };
 
   const guardar = () =>
     iniciar(async () => {
-      const r = await guardarBorrador(id, d);
+      const r = await guardarTodo();
       if (r.error) toast.error(r.error);
       else toast.success("Borrador guardado");
     });
   const emitir = () =>
     iniciar(async () => {
-      const g = await guardarBorrador(id, d);
+      const g = await guardarTodo();
       if (g.error) return void toast.error(g.error);
       const r = await emitirInforme(id);
       if (r.error) return void toast.error(r.error);
@@ -53,6 +59,7 @@ export function EditorInforme({ id, inicial, paciente }: { id: string; inicial: 
           <Textarea id={`inf-${k}`} rows={filas} value={d[k]} onChange={(e) => setD({ ...d, [k]: e.target.value })} />
         </div>
       ))}
+      <SelectorCapturas disponibles={disponibles} value={capturas} onChange={setCapturas} />
       {/* Barra de acciones fija al pie de la tarjeta: firmar siempre está a mano en informes largos. */}
       <div className="sticky bottom-0 -mx-4 -mb-4 flex flex-wrap items-center gap-2 rounded-b-xl border-t bg-card/95 px-4 py-3 backdrop-blur sm:-mx-6 sm:-mb-6 sm:px-6 lg:col-span-2">
         <p className="mr-auto hidden max-w-md text-xs text-muted-foreground md:block">Al emitir se genera el PDF con su firma y el informe queda inmutable; las correcciones crean una nueva versión.</p>

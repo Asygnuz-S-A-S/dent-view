@@ -1,5 +1,5 @@
 import { prisma } from "@dent-view/db";
-import { CalendarClock, CalendarDays, ChevronRight, ClipboardList, FileText, Inbox, Plus, ScanLine } from "lucide-react";
+import { CalendarDays, UserRound, UserRoundSearch, ChevronRight, ClipboardList, FileText, Inbox, Plus, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
@@ -17,6 +17,7 @@ import { horaTexto, utcABogota } from "@/lib/agenda";
 import { fechaCorta, fechaLarga } from "@/lib/fechas";
 import { numeroOrden } from "@/lib/ordenes";
 import { GESTION } from "@/lib/roles";
+import { tipoDeCentro } from "@/lib/tipo-centro-servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -110,8 +111,9 @@ export default async function Inicio() {
   }
 
   const org = ctx.organizationId;
+  const radiologico = (await tipoDeCentro(org)) === "CENTRO_RADIOLOGICO";
   const manana = new Date(hoy.getTime() + DIA);
-  const [estudiosHoy, estudiosMes, porAsignar, ordenes, citasHoy, recientes, topMes, ultimos, doctores, porAgendar, borradores] = await Promise.all([
+  const [estudiosHoy, estudiosMes, porAsignar, ordenes, citasHoy, recientes, topMes, ultimos, doctores, porAgendar, borradores, pacientes] = await Promise.all([
     prisma.estudio.count({ where: { organizationId: org, creadoEn: { gte: hoy } } }),
     prisma.estudio.count({ where: { organizationId: org, creadoEn: { gte: mes } } }),
     prisma.estudio.count({ where: { organizationId: org, estado: "POR_ASIGNAR" } }),
@@ -145,6 +147,7 @@ export default async function Inicio() {
       take: 6,
     }),
     prisma.informe.count({ where: { organizationId: org, estado: "BORRADOR", vigente: true } }),
+    prisma.pacienteTenant.count({ where: { organizationId: org } }),
   ]);
   const solicitadas = ordenes.find((o) => o.estado === "SOLICITADA")?._count ?? 0;
   const pendientesCitas = citasHoy.filter((c) => !["ATENDIDA", "NO_ASISTIO"].includes(c.estado)).length;
@@ -178,7 +181,11 @@ export default async function Inicio() {
 
       <section aria-label="Pendientes de hoy" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi titulo="Citas de hoy" valor={citasHoy.length} nota={citasHoy.length ? `${pendientesCitas} por atender` : "Ver agenda"} href="/agenda" icono={CalendarDays} tono="info" />
-        <Kpi titulo="Órdenes por agendar" valor={solicitadas} nota={solicitadas ? "Solicitadas sin cita" : "Todo agendado"} href="/ordenes?estado=SOLICITADA" icono={CalendarClock} tono="warning" />
+        {radiologico ? (
+          <Kpi titulo="Doctores en riesgo" valor={inactivos.length} nota={inactivos.length ? "Más de 60 días sin remitir" : "Todos activos"} href="/seguimiento-doctores" icono={UserRoundSearch} tono="warning" />
+        ) : (
+          <Kpi titulo="Pacientes" valor={pacientes} nota={solicitadas ? `${solicitadas} órdenes por agendar` : "Ver pacientes"} href="/pacientes" icono={UserRound} tono="warning" />
+        )}
         <Kpi titulo="Estudios por asignar" valor={porAsignar} nota={porAsignar ? "Sin paciente o doctor" : "Todo al día"} href="/estudios?tab=por-asignar" icono={Inbox} tono="violet" />
         <Kpi titulo="Informes en borrador" valor={borradores} nota={borradores ? "Por firmar" : "Nada pendiente"} href="/informes" icono={FileText} tono="success" />
       </section>
@@ -265,8 +272,10 @@ export default async function Inicio() {
             filas={ordenes.map((o) => filaOrden(o.estado, o._count))}
             vacio="Aún no hay órdenes."
           />
-          <Lista titulo="Top doctores del mes" descripcion="Por estudios remitidos" filas={filasTop} vacio="Sin estudios remitidos este mes." />
-          <Lista titulo="Doctores inactivos" descripcion="Más de 60 días sin remitir" filas={inactivos} vacio="Ningún doctor inactivo." />
+          {radiologico && <>
+            <Lista titulo="Top doctores del mes" descripcion="Por estudios remitidos" filas={filasTop} vacio="Sin estudios remitidos este mes." />
+            <Lista titulo="Doctores inactivos" descripcion="Más de 60 días sin remitir" filas={inactivos} vacio="Ningún doctor inactivo." />
+          </>}
         </div>
       </section>
     </div>

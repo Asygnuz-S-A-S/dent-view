@@ -10,7 +10,7 @@ import { crearInvitacion } from "./invitaciones";
  * al usarlo el correo queda verificado (N1/N10). Sin SMTP (respaldo): claveTemporal viene para mostrarla una vez al admin.
  * Las cuentas creadas por un tercero quedan sin verificar y obligan a cambiar la clave en el primer ingreso.
  */
-export async function crearOBuscarUsuario(correo: string, nombre: string, perfil?: Prisma.PerfilDoctorCreateWithoutUserInput) {
+export async function crearOBuscarUsuario(correo: string, nombre: string, perfil?: Prisma.PerfilDoctorCreateWithoutUserInput, membresia?: { organizationId: string; role: string }) {
   const email = correo.trim().toLowerCase();
   const existente = await prisma.user.findUnique({ where: { email } });
   if (existente) return { usuario: existente, claveTemporal: null };
@@ -37,6 +37,8 @@ export async function crearOBuscarUsuario(correo: string, nombre: string, perfil
     },
   });
   if (!smtpConfigurado()) return { usuario, claveTemporal };
+  // La membresía va antes del correo: así el enlace de bienvenida lleva la marca del centro.
+  if (membresia) await asegurarMembresia(membresia.organizationId, usuario.id, membresia.role);
   await auth.api.requestPasswordReset({ body: { email, redirectTo: "/recuperar/nueva" } });
   return { usuario, claveTemporal: null };
 }
@@ -60,7 +62,7 @@ export async function agregarAlCentro(a: Alta) {
   const email = a.correo.trim().toLowerCase();
   const existente = await prisma.user.findUnique({ where: { email }, select: { id: true } });
   if (!existente) {
-    const { usuario, claveTemporal } = await crearOBuscarUsuario(email, a.nombre, a.perfil);
+    const { usuario, claveTemporal } = await crearOBuscarUsuario(email, a.nombre, a.perfil, { organizationId: a.organizationId, role: a.role });
     await asegurarMembresia(a.organizationId, usuario.id, a.role);
     return { resultado: "nueva" as const, claveTemporal };
   }

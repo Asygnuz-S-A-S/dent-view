@@ -8,13 +8,16 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { SelectorTipo } from "@/components/plataforma/selector-tipo";
 import { slugify } from "@/lib/plataforma";
+import { TIPO_POR_DEFECTO, type TipoCentro } from "@/lib/tipo-centro";
 
 export function NuevoCentro() {
   const [abierto, setAbierto] = useState(false);
   const [pendiente, iniciar] = useTransition();
   const [slug, setSlug] = useState("");
   const [slugEditado, setSlugEditado] = useState(false);
+  const [tipo, setTipo] = useState<TipoCentro>(TIPO_POR_DEFECTO);
   const [clave, setClave] = useState<{ correo: string; clave: string | null } | null>(null);
 
   function cambiar(o: boolean) {
@@ -22,6 +25,7 @@ export function NuevoCentro() {
     if (!o) {
       setSlug("");
       setSlugEditado(false);
+      setTipo(TIPO_POR_DEFECTO);
       setClave(null);
     }
   }
@@ -35,6 +39,7 @@ export function NuevoCentro() {
         slug,
         adminNombre: String(f.get("adminNombre")),
         adminCorreo: String(f.get("adminCorreo")),
+        tipoCentro: tipo,
       });
       if (!r.ok) return void toast.error(r.error);
       toast.success("Centro creado");
@@ -89,6 +94,10 @@ export function NuevoCentro() {
                   setSlug(e.target.value);
                 }}
               />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="tipo-centro">Tipo de centro</Label>
+              <SelectorTipo id="tipo-centro" valor={tipo} onCambio={setTipo} className="w-full" />
             </div>
             <div className="grid gap-2">
               <Label htmlFor="adminNombre">Nombre del administrador</Label>

@@ -11,6 +11,7 @@
     "typecheck": "tsc --noEmit",
     "test": "vitest run",
     "seed": "tsx scripts/seed.ts",
+    "correo:preview": "tsx scripts/correo-preview.ts",
     "test:e2e": "playwright test",
     "test:e2e:limpiar": "docker exec -i dent-view-postgres-1 psql -U dentview -d dentview < tests/e2e/limpiar-citas.sql"
   },
@@ -25,6 +26,7 @@
     "cmdk": "^1.1.1",
     "cn": "^0.5.2",
     "date-fns": "^4.4.0",
+    "heic-decode": "^2.1.0",
     "lucide-react": "^1.75.0",
     "next": "16.4.6",
     "next-themes": "^0.4.6",

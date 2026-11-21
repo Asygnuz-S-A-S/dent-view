@@ -1,0 +1,52 @@
+// Imágenes no DICOM (JPG/PNG/WebP/HEIC) cargadas por el centro, y capturas elegidas para el PDF del informe.
+
+model ImagenEstudio {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId     String
+  paciente       PacienteTenant  @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  estudioId      String?
+  estudio        Estudio?        @relation(fields: [estudioId], references: [id], onDelete: SetNull)
+  ordenId        String?
+  orden          Orden?          @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  claveS3        String
+  nombreOriginal String
+  mime           String
+  bytes          Int
+  ancho          Int?
+  alto           Int?
+  titulo         String?
+  subidoPorId    String?
+  creadoEn       DateTime        @default(now())
+  informes       InformeImagen[]
+
+  @@index([organizationId, pacienteId])
+  @@index([estudioId])
+  @@index([ordenId])
+}
+
+enum OrigenCaptura {
+  IMAGEN
+  DICOM
+}
+
+// Capturas que van en el PDF de un informe, en orden. IMAGEN usa imagenId; DICOM usa estudioUid (+ serieUid opcional).
+model InformeImagen {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  informeId      String
+  informe        Informe        @relation(fields: [informeId], references: [id], onDelete: Cascade)
+  origen         OrigenCaptura
+  imagenId       String?
+  imagen         ImagenEstudio? @relation(fields: [imagenId], references: [id], onDelete: Cascade)
+  estudioUid     String?
+  serieUid       String?
+  orden          Int            @default(0)
+  leyenda        String?
+
+  @@index([informeId, orden])
+  @@index([organizationId])
+  @@index([imagenId])
+}

@@ -3,11 +3,14 @@ import { prisma } from "@dent-view/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionesFactura } from "@/components/facturacion/acciones-factura";
+import { LinksPago } from "@/components/facturacion/links-pago";
 import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { aCargoDe, nombresDoctores } from "@/lib/facturacion-datos";
 import { ETIQUETA_MEDIO, numeroFactura, saldo, totalPagado } from "@/lib/facturacion";
+import { estadoEfectivoLink, linkActivo } from "@/lib/pagos/decision";
+import { ADAPTADORES } from "@/lib/pagos/registro";
 import { numeroOrden } from "@/lib/ordenes";
 import { cop } from "@/lib/precios";
 import { GESTION } from "@/lib/roles";
@@ -29,6 +32,12 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
   const doctores = await nombresDoctores(ctx.organizationId, [f.responsableId]);
   const pacienteNombre = f.paciente?.nombre.toLowerCase() ?? "—";
   const pendiente = saldo(f.total, f.pagos);
+  const [pasarelas, links] = await Promise.all([
+    prisma.pasarelaPago.findMany({ where: { organizationId: ctx.organizationId, activa: true }, select: { id: true, proveedor: true, modo: true } }),
+    prisma.linkPago.findMany({ where: { facturaId: f.id, organizationId: ctx.organizationId }, include: { pasarela: { select: { proveedor: true } } }, orderBy: { creadoEn: "desc" } }),
+  ]);
+  // Lo ya comprometido en links activos no se puede volver a cobrar: evita pagar dos veces la misma deuda.
+  const disponible = pendiente - links.filter((l) => linkActivo(l)).reduce((t, l) => t + l.monto, 0);
 
   return (
     <div className="space-y-6">
@@ -85,6 +94,14 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
           </Table>
         </CardContent>
       </Card>
+
+      <LinksPago
+        facturaId={f.id}
+        puedeGenerar={f.estado === "ABIERTA" && disponible > 0 && pasarelas.some((p) => p.modo === "SANDBOX" || !ADAPTADORES[p.proveedor].bloqueadoProduccion)}
+        disponible={disponible}
+        pasarelas={pasarelas.filter((p) => p.modo === "SANDBOX" || !ADAPTADORES[p.proveedor].bloqueadoProduccion).map((p) => ({ id: p.id, nombre: `${ADAPTADORES[p.proveedor].nombre} (${p.modo === "SANDBOX" ? "Sandbox" : "Producción"})` }))}
+        links={links.map((l) => ({ id: l.id, estado: estadoEfectivoLink(l), monto: l.monto, urlPago: l.urlPago, expira: l.expiraEn ? fecha(l.expiraEn) : null, creado: fecha(l.creadoEn), proveedor: ADAPTADORES[l.pasarela.proveedor].nombre }))}
+      />
 
       <Card className="py-0">
         <CardHeader className="pt-6"><CardTitle>Pagos</CardTitle></CardHeader>

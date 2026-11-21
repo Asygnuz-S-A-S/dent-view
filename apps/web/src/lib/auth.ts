@@ -4,6 +4,8 @@ import { APIError, createAuthMiddleware, getSessionFromCtx } from "better-auth/a
 import { prismaAdapter } from "better-auth/adapters/prisma";
 import { admin, organization, twoFactor } from "better-auth/plugins";
 import { conectores } from "./conectores";
+import { marcaDeUsuario } from "./correo/marca";
+import { correoEnlaceClave } from "./correo/vistas";
 import { ac, roles } from "./permisos";
 
 // Endpoints del plugin organization que la app NO usa (tiene sus propias server actions con reglas):
@@ -30,23 +32,6 @@ const ENDPOINTS_BLOQUEADOS = new Set([
   "/organization/list-user-invitations",
 ]);
 
-/** Correo con el enlace para fijar la contraseña: bienvenida si la cuenta la creó un tercero, recuperación si no. */
-export function correoEnlaceClave(usuario: { name: string; email: string; debeCambiarClave?: boolean | null }, url: string) {
-  const bienvenida = !!usuario.debeCambiarClave;
-  return {
-    para: usuario.email,
-    asunto: bienvenida ? "Tu cuenta en dent-view" : "Recupera tu contraseña de dent-view",
-    cuerpo: [
-      `Hola, ${usuario.name}:`,
-      bienvenida
-        ? "Se creó una cuenta para ti en dent-view. Para activarla, fija tu contraseña en este enlace:"
-        : "Recibimos una solicitud para cambiar tu contraseña. Fíjala en este enlace:",
-      url,
-      "El enlace sirve una sola vez y vence en 24 horas. Si no esperabas este correo, ignóralo.",
-    ].join("\n\n"),
-  };
-}
-
 export const auth = betterAuth({
   appName: "dent-view",
   database: prismaAdapter(prisma, { provider: "postgresql" }),
@@ -62,7 +47,7 @@ export const auth = betterAuth({
     revokeSessionsOnPasswordReset: true,
     // Sin await: ni la demora del SMTP ni un fallo cambian la respuesta (no revela si el correo existe).
     sendResetPassword: async ({ user, url }) => {
-      conectores.CORREO.enviar(correoEnlaceClave(user, url)).catch((e) =>
+      marcaDeUsuario(user.id).then((marca) => conectores.CORREO.enviar({ ...correoEnlaceClave(user, url), marca })).catch((e) =>
         console.error("No se pudo enviar el correo de contraseña:", e instanceof Error ? e.message : e),
       );
     },

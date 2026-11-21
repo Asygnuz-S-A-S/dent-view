@@ -10,6 +10,7 @@ import { AlertasClinicas } from "@/components/pacientes/alertas-clinicas";
 import { Consentimientos } from "@/components/pacientes/consentimientos";
 import { Antecedentes, ContactoPersona } from "@/components/pacientes/historia-clinica";
 import { EquipoTratante } from "@/components/pacientes/equipo-tratante";
+import { GaleriaImagenes } from "@/components/estudios/galeria-imagenes";
 import { FotoPaciente } from "@/components/pacientes/foto-paciente";
 import { HojaDeVida } from "@/components/pacientes/hoja-de-vida";
 import { CasoDialog } from "@/components/laboratorio/caso-dialog";
@@ -24,6 +25,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { registrarAcceso } from "@/lib/bitacora";
+import { filtroImagenes } from "@/lib/imagenes";
 import { estadoVigente } from "@/lib/consentimientos";
 import { calcularAlertas, esMenor } from "@/lib/historia-clinica";
 import { calcularEdad } from "@/lib/pacientes";
@@ -152,6 +154,11 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
   const org = ctx.organizationId;
   const puedeGestionar = (GESTION as readonly string[]).includes(ctx.rol);
   await registrarAcceso(ctx, p.id, "ficha");
+  // Imágenes no DICOM del paciente (el doctor remitente solo ve las de sus órdenes/estudios); suben las clínicas, no el doctor.
+  const imagenes = await prisma.imagenEstudio.findMany({ where: { pacienteId: p.id, ...filtroImagenes(ctx.organizationId, ctx.usuario.id, ctx.rol) }, orderBy: { creadoEn: "desc" }, select: { id: true, titulo: true, nombreOriginal: true, mime: true, bytes: true } });
+  const galeria = (
+    <GaleriaImagenes pacienteId={p.id} imagenes={imagenes} puedeEditar={!esDoctor} ordenes={p.ordenes.map((o) => ({ id: o.id, etiqueta: numeroOrden(o.numero) }))} estudios={p.estudios.map((e) => ({ id: e.id, etiqueta: `${e.modalidad ?? "Estudio"} · ${fecha(e.fechaEstudio ?? e.creadoEn)}` }))} />
+  );
 
   // Equipo tratante: derivado de órdenes y estudios (ya acotados al doctor si es doctor) + lo registrado a mano.
   const [relaciones, miembrosDoctor] = await Promise.all([
@@ -222,7 +229,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
             <TabsTrigger value="ordenes">Órdenes ({p.ordenes.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="resumen"><Card><CardHeader><CardTitle>Tu participación</CardTitle></CardHeader><CardContent>{equipo}</CardContent></Card></TabsContent>
-          <TabsContent value="estudios"><TablaEstudios estudios={p.estudios} /></TabsContent>
+          <TabsContent value="estudios" className="space-y-6"><TablaEstudios estudios={p.estudios} />{galeria}</TabsContent>
           <TabsContent value="ordenes"><TablaOrdenes ordenes={p.ordenes} pacienteId={p.id} puedeGestionar={false} /></TabsContent>
         </Tabs>
       </div>
@@ -328,7 +335,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
           </Card>
         </TabsContent>
 
-        <TabsContent value="estudios"><TablaEstudios estudios={p.estudios} /></TabsContent>
+        <TabsContent value="estudios" className="space-y-6"><TablaEstudios estudios={p.estudios} />{galeria}</TabsContent>
 
         <TabsContent value="ordenes"><TablaOrdenes ordenes={p.ordenes} pacienteId={p.id} puedeGestionar={puedeGestionar} /></TabsContent>
 

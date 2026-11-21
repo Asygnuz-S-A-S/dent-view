@@ -2,7 +2,7 @@
 
 import {
   Building2, CalendarDays, Check, ChevronsUpDown, ClipboardList, House, LogOut, ScanLine, Settings2, ShieldCheck, HardDriveUpload, Plug,
-  Stethoscope, Tags, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock,
+  Stethoscope, Tags, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, UserRoundSearch,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -29,6 +29,7 @@ import {
 } from "@/components/ui/sidebar";
 import { SelectorTema } from "@/components/comunes/selector-tema";
 import { authClient } from "@/lib/auth-client";
+import { etiquetaModulo, moduloDeRuta, moduloHabilitado, type Modulo, type TipoCentro } from "@/lib/tipo-centro";
 
 const TODOS = ["admin_tenant", "recepcion", "especialista", "doctor_remitente"];
 const NAV = [
@@ -42,6 +43,7 @@ const NAV = [
       { href: "/estudios", label: "Estudios", icon: ScanLine, roles: TODOS },
       { href: "/informes", label: "Informes", icon: FileText, roles: TODOS },
       { href: "/seguimiento", label: "Seguimiento", icon: PhoneCall, roles: ["admin_tenant", "recepcion", "especialista"] },
+      { href: "/seguimiento-doctores", label: "Seguimiento de doctores", icon: UserRoundSearch, roles: ["admin_tenant", "recepcion"] },
       { href: "/doctores", label: "Doctores remitentes", icon: Stethoscope, roles: ["admin_tenant", "recepcion"] },
       { href: "/laboratorio", label: "Laboratorio", icon: FlaskConical, roles: ["admin_tenant", "recepcion", "especialista"] },
     ],
@@ -87,12 +89,14 @@ type Props = {
   activa: string;
   rol: string;
   superadmin: boolean;
+  /** Tipo del centro activo (null sin centro): filtra los módulos del menú. */
+  tipo: TipoCentro | null;
   usuario: { nombre: string; correo: string };
   /** Marca del centro activo: nombre comercial y logo (data URL). */
   marca: { nombre: string; logo: string | null };
 };
 
-export function AppSidebar({ orgs, activa, rol, superadmin, usuario, marca }: Props) {
+export function AppSidebar({ orgs, activa, rol, superadmin, tipo, usuario, marca }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const activo = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -142,13 +146,15 @@ export function AppSidebar({ orgs, activa, rol, superadmin, usuario, marca }: Pr
 
       <SidebarContent>
         {NAV.map(({ grupo, items }) => {
-          const visibles = items.filter((i) => i.roles.includes(rol));
+          const visibles = items.filter((i) => i.roles.includes(rol) && (!tipo || moduloHabilitado(tipo, moduloDeRuta(i.href) as Modulo)));
           if (!visibles.length) return null;
           return (
             <SidebarGroup key={grupo}>
               <SidebarGroupLabel>{grupo}</SidebarGroupLabel>
               <SidebarMenu>
-                {visibles.map(({ href, label, icon: Icono }) => (
+                {visibles.map(({ href, label: base, icon: Icono }) => {
+                  const label = tipo ? etiquetaModulo(tipo, moduloDeRuta(href) as Modulo, base) : base;
+                  return (
                   <SidebarMenuItem key={href}>
                     <SidebarMenuButton asChild tooltip={label} isActive={activo(href)} className={ACTIVO}>
                       <Link href={href}>
@@ -157,7 +163,8 @@ export function AppSidebar({ orgs, activa, rol, superadmin, usuario, marca }: Pr
                       </Link>
                     </SidebarMenuButton>
                   </SidebarMenuItem>
-                ))}
+                  );
+                })}
               </SidebarMenu>
             </SidebarGroup>
           );

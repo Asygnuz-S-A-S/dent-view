@@ -1,0 +1,82 @@
+// Pasarelas de pago por centro: el dinero va a la cuenta del centro; aquí solo se guardan llaves CIFRADAS (lib/cifrado.ts).
+// Montos en pesos enteros (Int), igual que Factura/Pago.
+
+enum ProveedorPasarela {
+  WOMPI
+  EPAYCO
+  PAYU
+  MERCADOPAGO
+  BOLD
+}
+
+enum ModoPasarela {
+  SANDBOX
+  PRODUCCION
+}
+
+enum EstadoLinkPago {
+  CREADO
+  PENDIENTE
+  APROBADO
+  RECHAZADO
+  EXPIRADO
+  ANULADO
+}
+
+model PasarelaPago {
+  id                   String            @id @default(cuid())
+  organizationId       String
+  organization         Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  proveedor            ProveedorPasarela
+  modo                 ModoPasarela      @default(SANDBOX)
+  llavesCifradas       String
+  webhookSecretCifrado String?
+  activa               Boolean           @default(true)
+  creadoEn             DateTime          @default(now())
+  links                LinkPago[]
+
+  @@unique([organizationId, proveedor])
+}
+
+model LinkPago {
+  id           String         @id @default(cuid())
+  organizationId String
+  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pasarelaId   String
+  pasarela     PasarelaPago   @relation(fields: [pasarelaId], references: [id], onDelete: Restrict)
+  facturaId    String? // cuenta de cobro (Factura) que se paga
+  factura      Factura?       @relation(fields: [facturaId], references: [id], onDelete: SetNull)
+  citaId       String?
+  cita         Cita?          @relation(fields: [citaId], references: [id], onDelete: SetNull)
+  referencia   String         @unique
+  monto        Int
+  moneda       String         @default("COP")
+  estado       EstadoLinkPago @default(CREADO)
+  urlPago      String?
+  idExterno    String?
+  expiraEn     DateTime?
+  creadoPorId  String?
+  creadoEn     DateTime       @default(now())
+  pagadoEn     DateTime?
+  pago         Pago?
+
+  @@index([organizationId, estado])
+  @@index([pasarelaId])
+  @@index([facturaId])
+  @@index([citaId])
+}
+
+// Idempotencia de webhooks: un evento externo se procesa una sola vez.
+model EventoPasarela {
+  id              String            @id @default(cuid())
+  organizationId  String
+  organization    Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  proveedor       ProveedorPasarela
+  idEventoExterno String
+  payload         Json? // resumen (estado, referencia, monto), no el cuerpo completo
+  recibidoEn      DateTime          @default(now())
+  procesadoEn     DateTime?
+
+  @@unique([proveedor, idEventoExterno])
+  @@index([organizationId, recibidoEn])
+}

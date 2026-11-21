@@ -1,0 +1,70 @@
+// Seguimiento de doctores remitentes: el cliente a retener de un centro de imágenes es el doctor.
+
+enum EstadoSeguimientoDoctor {
+  PENDIENTE
+  CONTACTADO
+  PROGRAMADO
+  RECUPERADO
+  DESCARTADO
+}
+
+enum MotivoSeguimientoDoctor {
+  SIN_REMISIONES
+  CAIDA_FRECUENCIA
+  NUEVO
+  OTRO
+}
+
+enum CanalContactoDoctor {
+  LLAMADA
+  VISITA
+  CORREO
+  WHATSAPP
+}
+
+// Umbrales por centro (una fila por organización; sin fila rigen los defaults).
+model ConfigSeguimientoDoctor {
+  organizationId      String       @id
+  organization        Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  umbralRiesgoFactor  Float        @default(2)
+  diasInactivo        Int          @default(60)
+  diasInactivoCritico Int          @default(90)
+}
+
+model SeguimientoDoctor {
+  id             String                  @id @default(cuid())
+  organizationId String
+  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  doctorId       String
+  doctor         User                    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  estado         EstadoSeguimientoDoctor @default(PENDIENTE)
+  motivo         MotivoSeguimientoDoctor
+  responsableId  String?
+  proximoContacto DateTime?
+  nota           String?
+  creadoEn       DateTime                @default(now())
+  cerradoEn      DateTime?
+  contactos      ContactoDoctor[]
+
+  @@index([organizationId, estado])
+  @@index([organizationId, doctorId])
+}
+
+// Bitácora de gestiones con el doctor (con o sin seguimiento abierto).
+model ContactoDoctor {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  doctorId       String
+  doctor         User                @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  seguimientoId  String?
+  seguimiento    SeguimientoDoctor?  @relation(fields: [seguimientoId], references: [id], onDelete: SetNull)
+  canal          CanalContactoDoctor
+  resultado      String?
+  nota           String?
+  fecha          DateTime            @default(now())
+  registradoPorId String?
+
+  @@index([organizationId, doctorId, fecha])
+  @@index([seguimientoId])
+}

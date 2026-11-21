@@ -2,6 +2,8 @@
 // Cola de mensajes: encolar (decide si/por dónde) y despachar (envía con reintentos). Nada de red en la petición del usuario.
 import { prisma } from "@dent-view/db";
 import { conectores } from "./conectores";
+import { marcaDeCentro } from "./correo/marca";
+import { vistaMensaje } from "./correo/vistas";
 import {
   decidirEnvio, esperaMinutos, PLANTILLAS_DEFECTO, renderPlantilla, TIPOS_SENSIBLES, type Canal, type TipoMensaje,
 } from "./notificaciones";
@@ -64,7 +66,10 @@ export async function despachar(opts: { limite?: number; organizationId?: string
       }
       const { asunto, cuerpo } = await componer(m);
       // N6: el PDF clínico nunca viaja adjunto; el paciente lo descarga con enlace + código.
-      const r = await conectores[m.canal as Canal].enviar({ para: m.destinatario ?? "", asunto, cuerpo });
+      const codigo = typeof ctx.codigo === "string" ? ctx.codigo : null;
+      const r = await conectores[m.canal as Canal].enviar({
+        para: m.destinatario ?? "", asunto, cuerpo, marca: await marcaDeCentro(m.organizationId), vista: vistaMensaje(m.tipo, cuerpo, codigo),
+      });
       await prisma.mensaje.update({ where: { id: m.id }, data: { estado: "ENVIADO", asunto, cuerpo: TIPOS_SENSIBLES.includes(m.tipo) ? "(contenido con credenciales de acceso omitido)" : cuerpo, ...(TIPOS_SENSIBLES.includes(m.tipo) && { contexto: {} }), proveedor: r.proveedor, simulado: r.simulado, enviadoEn: new Date(), error: null } });
       enviados++;
     } catch (err) {
