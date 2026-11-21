@@ -1,4 +1,4 @@
-import { describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it } from "vitest";
 import { debeActivarMfa, validarClaveNueva } from "./perfil";
 
 describe("validarClaveNueva", () => {
@@ -22,5 +22,14 @@ describe("debeActivarMfa", () => {
   it("no lo exige si ya está activo ni en una suplantación", () => {
     expect(debeActivarMfa({ role: "admin", twoFactorEnabled: true }, null, false)).toBe(false);
     expect(debeActivarMfa({ role: null, twoFactorEnabled: false }, "admin_tenant", true)).toBe(false);
+  });
+  describe("MFA_EXENTOS", () => {
+    afterEach(() => { delete process.env.MFA_EXENTOS; });
+    it("exime al admin del centro listado, pero nunca al superadmin", () => {
+      process.env.MFA_EXENTOS = "demo@x.com, otro@x.com";
+      expect(debeActivarMfa({ role: null, twoFactorEnabled: false, email: "DEMO@x.com" }, "admin_tenant", false)).toBe(false);
+      expect(debeActivarMfa({ role: null, twoFactorEnabled: false, email: "no@x.com" }, "admin_tenant", false)).toBe(true);
+      expect(debeActivarMfa({ role: "admin", twoFactorEnabled: false, email: "demo@x.com" }, null, false)).toBe(true);
+    });
   });
 });

@@ -14,10 +14,13 @@ export function validarClaveNueva(nueva: string, confirmacion: string): string |
  * Una suplantación ("Entrar al centro") no lo exige: el superadmin ya pasó su propio MFA.
  */
 export function debeActivarMfa(
-  usuario: { role?: string | null; twoFactorEnabled?: boolean | null },
+  usuario: { role?: string | null; twoFactorEnabled?: boolean | null; email?: string | null },
   rolCentro: string | null,
   suplantado: boolean,
 ) {
   if (suplantado || usuario.twoFactorEnabled) return false;
+  // shortcut: excepción temporal por correo (MFA_EXENTOS, separados por coma) para demos; nunca aplica al superadmin. Quitar al salir a producción real.
+  const exentos = (process.env.MFA_EXENTOS ?? "").toLowerCase().split(",").map((e) => e.trim()).filter(Boolean);
+  if (usuario.role !== "admin" && usuario.email && exentos.includes(usuario.email.toLowerCase())) return false;
   return usuario.role === "admin" || rolCentro === "admin_tenant";
 }
