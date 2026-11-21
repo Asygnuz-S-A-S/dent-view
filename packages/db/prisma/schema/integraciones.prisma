@@ -1,0 +1,105 @@
+// Integraciones: API pública con tokens por centro, webhooks de salida y conectores a sistemas de gestión.
+
+// Token de la API pública. Solo se guarda el hash; el valor completo se muestra una única vez al crearlo.
+model TokenApi {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  prefijo        String // primeros caracteres visibles para identificarlo (dvk_xxxxxxxx)
+  tokenHash      String       @unique
+  permisos       String[] // ver src/lib/api-token.ts (PERMISOS)
+  vence          DateTime?
+  revocadoEn     DateTime?
+  ultimoUso      DateTime?
+  creadoPorId    String?
+  creadoEn       DateTime     @default(now())
+
+  @@index([organizationId])
+}
+
+// Respuestas guardadas por clave de idempotencia (cabecera Idempotency-Key) para que un reintento no duplique.
+model ClaveIdempotencia {
+  id             String   @id @default(cuid())
+  organizationId String
+  tokenId        String
+  clave          String
+  metodoRuta     String
+  estadoHttp     Int
+  respuesta      Json
+  creadoEn       DateTime @default(now())
+
+  @@unique([organizationId, clave])
+  @@index([creadoEn])
+}
+
+// Suscripción de webhook de salida. El secreto va cifrado (hace falta en claro para firmar con HMAC).
+model Webhook {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  url            String
+  secretoCifrado String
+  eventos        String[] // p. ej. estudio.recibido, orden.creada; "*" = todos
+  activo         Boolean           @default(true)
+  creadoPorId    String?
+  creadoEn       DateTime          @default(now())
+  entregas       WebhookEntrega[]
+
+  @@index([organizationId])
+}
+
+model WebhookEntrega {
+  id              String    @id @default(cuid())
+  webhookId       String
+  webhook         Webhook   @relation(fields: [webhookId], references: [id], onDelete: Cascade)
+  organizationId  String
+  evento          String
+  payload         Json
+  estado          String    @default("PENDIENTE") // PENDIENTE | ENTREGADO | FALLIDO
+  intentos        Int       @default(0)
+  proximoIntento  DateTime  @default(now())
+  codigoRespuesta Int?
+  error           String?
+  creadoEn        DateTime  @default(now())
+  entregadoEn     DateTime?
+
+  @@index([estado, proximoIntento])
+  @@index([webhookId, creadoEn])
+}
+
+// Conexión de un centro con un sistema externo de gestión de pacientes (Dentalink, etc.).
+model Integracion {
+  id                 String       @id @default(cuid())
+  organizationId     String
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  proveedor          String // clave del adaptador registrado en src/lib/conectores/
+  nombre             String
+  credencialesCifradas String // JSON cifrado (AES-256-GCM) con token/API key del proveedor
+  config             Json?
+  activa             Boolean      @default(true)
+  secretoEntrada     String? // hash del secreto del webhook de entrada (el proveedor nos avisa de cambios)
+  ultimaSync         DateTime?
+  estadoSync         String? // OK | ERROR
+  errorSync          String?
+  creadoPorId        String?
+  creadoEn           DateTime     @default(now())
+  vinculos           VinculoExterno[]
+
+  @@index([organizationId])
+}
+
+// Equivalencia entre un registro nuestro y el del sistema externo.
+model VinculoExterno {
+  id            String      @id @default(cuid())
+  integracionId String
+  integracion   Integracion @relation(fields: [integracionId], references: [id], onDelete: Cascade)
+  entidad       String // paciente | cita | orden
+  idInterno     String
+  idExterno     String
+  creadoEn      DateTime    @default(now())
+
+  @@unique([integracionId, entidad, idExterno])
+  @@index([integracionId, entidad, idInterno])
+}

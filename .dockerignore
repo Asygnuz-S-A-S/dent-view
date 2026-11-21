@@ -1,0 +1,8 @@
+**/node_modules
+**/.next
+.git
+infra
+!infra/postgres/rol-app.sql
+viewer
+packages/db/src/generated
+.env*

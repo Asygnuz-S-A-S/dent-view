@@ -1,0 +1,368 @@
+// Modelos de dominio de dent-view. Los modelos de Better Auth (User, Organization, Member…) van en auth.prisma.
+// Organization = tenant (centro de imágenes).
+
+// Persona = solo clave de identidad (tipo + número de documento). Los datos del paciente viven en PacienteTenant;
+// las columnas de nombre/contacto se conservan por compatibilidad pero ya no se leen ni se editan.
+model Persona {
+  id              String           @id @default(cuid())
+  tipoDocumento   String           @default("CC")
+  numeroDocumento String
+  nombre          String           @default("")
+  fechaNacimiento DateTime?
+  celular         String?
+  correo          String?
+  direccion       String?
+  creadoEn        DateTime         @default(now())
+  pacientes       PacienteTenant[]
+
+  @@unique([tipoDocumento, numeroDocumento])
+}
+
+// Registro del paciente dentro de un centro: cada tenant es dueño de sus datos.
+model PacienteTenant {
+  id              String                @id @default(cuid())
+  organizationId  String
+  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  personaId       String
+  persona         Persona               @relation(fields: [personaId], references: [id])
+  // Datos propios del centro: nunca se comparten con otros centros.
+  nombre          String
+  fechaNacimiento DateTime?
+  celular         String?
+  correo          String?
+  direccion       String?
+  alertas         String? // alergias, embarazo, condiciones relevantes para el estudio
+  notas           String?
+  creadoEn        DateTime              @default(now())
+  estudios        Estudio[]
+  ordenes         Orden[]
+  citas           Cita[]
+  condiciones     CondicionDental[]
+  eventos         Evento[]
+  planItems       PlanTratamientoItem[]
+  notasClinicas   NotaClinica[]
+  facturas        Factura[]
+  casosLab        CasoLaboratorio[]
+
+  @@unique([organizationId, personaId])
+  @@index([organizationId])
+}
+
+enum EstadoEstudio {
+  POR_ASIGNAR
+  ASIGNADO
+  PUBLICADO
+}
+
+model Estudio {
+  id                String          @id @default(cuid())
+  organizationId    String
+  organization      Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId        String?
+  paciente          PacienteTenant? @relation(fields: [pacienteId], references: [id])
+  doctorRemitenteId String?
+  doctorRemitente   User?           @relation("DoctorRemitente", fields: [doctorRemitenteId], references: [id])
+  studyInstanceUid  String          @unique
+  orthancId         String          @unique
+  modalidad         String?
+  descripcion       String?
+  fechaEstudio      DateTime?
+  ordenId           String?
+  orden             Orden?          @relation(fields: [ordenId], references: [id])
+  superficieKey     String? // clave S3 de la malla PLY extraída (escaneo facial Carestream)
+  estado            EstadoEstudio   @default(POR_ASIGNAR)
+  creadoEn          DateTime        @default(now())
+  actualizadoEn     DateTime        @updatedAt
+
+  @@index([organizationId])
+}
+
+// Perfil profesional global del doctor (uno por usuario, compartido entre centros).
+model PerfilDoctor {
+  userId             String  @id
+  user               User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  tarjetaProfesional String?
+  especialidad       String?
+  telefono           String?
+  consultorio        String?
+}
+
+// Catálogo de servicios y precios del centro. Valores en pesos colombianos (COP).
+model Servicio {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categoria      String // ESTUDIO_2D | TOMOGRAFIA | PAQUETE | ESCANEO | OTRO
+  nombre         String
+  descripcion    String?
+  precioImpreso  Int?
+  precioDigital  Int?
+  descuento      Int              @default(0)
+  activo         Boolean          @default(true)
+  creadoEn       DateTime         @default(now())
+  items          OrdenItem[]
+  tarifas        TarifaEspecial[]
+
+  @@index([organizationId])
+}
+
+enum EstadoOrden {
+  SOLICITADA
+  AGENDADA
+  TOMADA
+  INFORMADA
+  ENTREGADA
+  CANCELADA
+}
+
+enum Entrega {
+  IMPRESA
+  DIGITAL
+}
+
+// Orden de remisión (la ficha que llena el paciente/doctor).
+model Orden {
+  id                String            @id @default(cuid())
+  organizationId    String
+  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero            Int // consecutivo por centro
+  pacienteId        String
+  paciente          PacienteTenant    @relation(fields: [pacienteId], references: [id])
+  doctorRemitenteId String?
+  doctorRemitente   User?             @relation("OrdenDoctor", fields: [doctorRemitenteId], references: [id])
+  estado            EstadoOrden       @default(SOLICITADA)
+  entrega           Entrega           @default(DIGITAL)
+  convenioId        String?
+  convenio          Convenio?         @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  observaciones     String?
+  embarazo          Boolean           @default(false)
+  creadoPorId       String?
+  creadoEn          DateTime          @default(now())
+  actualizadoEn     DateTime          @updatedAt
+  items             OrdenItem[]
+  estudios          Estudio[]
+  citas             Cita[]
+  facturas          Factura[]
+  casosLab          CasoLaboratorio[]
+
+  @@unique([organizationId, numero])
+  @@index([organizationId, estado])
+}
+
+model OrdenItem {
+  id         String    @id @default(cuid())
+  ordenId    String
+  orden      Orden     @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  servicioId String?
+  servicio   Servicio? @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  nombre     String // copia del nombre al momento de la orden
+  opciones   String? // FOV, zona, dientes (FDI), adicionales
+  precio     Int // precio congelado al crear la orden
+  descuento  Int       @default(0)
+}
+
+// Sala o equipo donde se toman los estudios (p. ej. "CS 9600", "Panorámico").
+model Sala {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  color          String       @default("teal")
+  activa         Boolean      @default(true)
+  citas          Cita[]
+
+  @@index([organizationId])
+}
+
+enum EstadoCita {
+  PROGRAMADA
+  CONFIRMADA
+  LLEGO
+  EN_ATENCION
+  ATENDIDA
+  NO_ASISTIO
+  CANCELADA
+}
+
+model Cita {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salaId         String
+  sala           Sala            @relation(fields: [salaId], references: [id])
+  pacienteId     String?
+  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id])
+  ordenId        String?
+  orden          Orden?          @relation(fields: [ordenId], references: [id])
+  inicio         DateTime        @db.Timestamptz(3)
+  fin            DateTime        @db.Timestamptz(3)
+  estado         EstadoCita      @default(PROGRAMADA)
+  notas          String?
+  creadoEn       DateTime        @default(now())
+
+  @@index([organizationId, inicio])
+}
+
+// Odontograma: una condición por diente (FDI) y superficie opcional.
+model CondicionDental {
+  id         String         @id @default(cuid())
+  pacienteId String
+  paciente   PacienteTenant @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  diente     Int
+  superficie String? // M, D, O, V, L
+  condicion  String // caries, restauracion, corona, ausente, implante, endodoncia
+  notas      String?
+  creadoEn   DateTime       @default(now())
+
+  @@index([pacienteId])
+}
+
+// Hoja de vida del paciente y auditoría: solo se inserta, nunca se edita ni borra.
+model Evento {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId     String?
+  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id])
+  actorId        String?
+  tipo           String // p. ej. paciente.creado, orden.creada, estudio.asignado, cita.estado
+  detalle        Json?
+  creadoEn       DateTime        @default(now())
+
+  @@index([organizationId, creadoEn])
+  @@index([pacienteId, creadoEn])
+}
+
+// --- Módulos adaptados de OpenDentist (MIT) ---
+
+enum EstadoPlan {
+  PLANEADO
+  ACEPTADO
+  REALIZADO
+  RECHAZADO
+}
+
+model PlanTratamientoItem {
+  id          String         @id @default(cuid())
+  pacienteId  String
+  paciente    PacienteTenant @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  diente      Int?
+  superficie  String?
+  descripcion String
+  valor       Int            @default(0)
+  estado      EstadoPlan     @default(PLANEADO)
+  notas       String?
+  posicion    Int            @default(0)
+  creadoEn    DateTime       @default(now())
+
+  @@index([pacienteId])
+}
+
+model NotaClinica {
+  id         String         @id @default(cuid())
+  pacienteId String
+  paciente   PacienteTenant @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  autorId    String?
+  fecha      DateTime       @default(now())
+  texto      String
+  creadoEn   DateTime       @default(now())
+
+  @@index([pacienteId, fecha])
+}
+
+enum EstadoFactura {
+  ABIERTA
+  PAGADA
+  ANULADA
+}
+
+enum Responsable {
+  PACIENTE
+  DOCTOR
+  CONVENIO
+}
+
+enum MedioPago {
+  EFECTIVO
+  TRANSFERENCIA
+  TARJETA
+  OTRO
+}
+
+// Cuenta de cobro interna (no es factura electrónica DIAN).
+model Factura {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero         Int // consecutivo por centro
+  pacienteId     String?
+  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id])
+  ordenId        String?
+  orden          Orden?          @relation(fields: [ordenId], references: [id])
+  responsable    Responsable     @default(PACIENTE)
+  responsableId  String? // userId del doctor cuando responsable = DOCTOR
+  convenio       String? // nombre del convenio cuando responsable = CONVENIO
+  estado         EstadoFactura   @default(ABIERTA)
+  total          Int
+  fecha          DateTime        @default(now())
+  vence          DateTime?
+  notas          String?
+  items          FacturaItem[]
+  pagos          Pago[]
+
+  @@unique([organizationId, numero])
+  @@index([organizationId, estado])
+}
+
+model FacturaItem {
+  id            String  @id @default(cuid())
+  facturaId     String
+  factura       Factura @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  descripcion   String
+  cantidad      Int     @default(1)
+  valorUnitario Int
+}
+
+model Pago {
+  id              String    @id @default(cuid())
+  facturaId       String
+  factura         Factura   @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  valor           Int
+  medio           MedioPago @default(EFECTIVO)
+  fecha           DateTime  @default(now())
+  nota            String?
+  registradoPorId String?
+
+  @@index([facturaId])
+}
+
+enum EstadoLab {
+  PENDIENTE
+  ENVIADO
+  RECIBIDO
+  ENTREGADO
+  CANCELADO
+}
+
+// Trabajos de laboratorio: modelos impresos en resina 3D, guías, etc.
+model CasoLaboratorio {
+  id              String         @id @default(cuid())
+  organizationId  String
+  organization    Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId      String
+  paciente        PacienteTenant @relation(fields: [pacienteId], references: [id])
+  ordenId         String?
+  orden           Orden?         @relation(fields: [ordenId], references: [id])
+  laboratorio     String
+  tipo            String
+  dientes         String?
+  valor           Int            @default(0)
+  estado          EstadoLab      @default(PENDIENTE)
+  enviado         DateTime?
+  entregaEsperada DateTime?
+  recibido        DateTime?
+  notas           String?
+  creadoEn        DateTime       @default(now())
+
+  @@index([organizationId, estado])
+}

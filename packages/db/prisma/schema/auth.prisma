@@ -1,0 +1,141 @@
+// Modelos de Better Auth (email+password + plugin organization). Organization = tenant.
+
+model User {
+  id                String        @id
+  name              String
+  email             String        @unique
+  emailVerified     Boolean       @default(false)
+  image             String?
+  // Plugin admin de Better Auth: role "admin" = superadmin de la plataforma.
+  role              String?
+  banned            Boolean?
+  banReason         String?
+  banExpires        DateTime?
+  // Cuenta creada por un tercero con clave temporal: obliga a cambiarla en el primer ingreso.
+  debeCambiarClave  Boolean       @default(false)
+  twoFactorEnabled  Boolean?      @default(false)
+  twoFactors        TwoFactor[]
+  createdAt         DateTime      @default(now())
+  updatedAt         DateTime      @updatedAt
+  sessions          Session[]
+  accounts          Account[]
+  members           Member[]
+  invitations       Invitation[]
+  estudiosRemitidos Estudio[]     @relation("DoctorRemitente")
+  ordenesRemitidas  Orden[]       @relation("OrdenDoctor")
+  perfilDoctor      PerfilDoctor?
+}
+
+model Session {
+  id                   String   @id
+  expiresAt            DateTime
+  token                String   @unique
+  createdAt            DateTime @default(now())
+  updatedAt            DateTime @updatedAt
+  ipAddress            String?
+  userAgent            String?
+  userId               String
+  user                 User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  activeOrganizationId String?
+  impersonatedBy       String?
+
+  @@index([userId])
+}
+
+model Account {
+  id                    String    @id
+  accountId             String
+  providerId            String
+  userId                String
+  user                  User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  accessToken           String?
+  refreshToken          String?
+  idToken               String?
+  accessTokenExpiresAt  DateTime?
+  refreshTokenExpiresAt DateTime?
+  scope                 String?
+  password              String?
+  createdAt             DateTime  @default(now())
+  updatedAt             DateTime  @updatedAt
+
+  @@index([userId])
+}
+
+model Verification {
+  id         String   @id
+  identifier String
+  value      String
+  expiresAt  DateTime
+  createdAt  DateTime @default(now())
+  updatedAt  DateTime @updatedAt
+
+  @@index([identifier])
+}
+
+model Organization {
+  id          String            @id
+  name        String
+  slug        String            @unique
+  logo        String?
+  createdAt   DateTime          @default(now())
+  metadata    String?
+  members     Member[]
+  invitations Invitation[]
+  pacientes   PacienteTenant[]
+  estudios    Estudio[]
+  servicios   Servicio[]
+  ordenes     Orden[]
+  salas       Sala[]
+  citas       Cita[]
+  eventos     Evento[]
+  facturas    Factura[]
+  casosLab    CasoLaboratorio[]
+  tokensApi   TokenApi[]
+  webhooks    Webhook[]
+  integraciones Integracion[]
+  convenios   Convenio[]
+  tarifas     TarifaEspecial[]
+}
+
+model Member {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  userId         String
+  user           User         @relation(fields: [userId], references: [id], onDelete: Cascade)
+  role           String
+  createdAt      DateTime     @default(now())
+
+  @@unique([organizationId, userId])
+  @@index([userId])
+}
+
+model Invitation {
+  id             String       @id
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  email          String
+  role           String?
+  status         String       @default("pending")
+  expiresAt      DateTime
+  createdAt      DateTime     @default(now())
+  inviterId      String
+  inviter        User         @relation(fields: [inviterId], references: [id], onDelete: Cascade)
+
+  @@index([organizationId])
+}
+
+// Plugin twoFactor de Better Auth (TOTP + códigos de respaldo).
+model TwoFactor {
+  id                      String    @id
+  secret                  String
+  backupCodes             String
+  userId                  String
+  user                    User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  verified                Boolean?  @default(true)
+  failedVerificationCount Int?      @default(0)
+  lockedUntil             DateTime?
+
+  @@index([secret])
+  @@index([userId])
+}

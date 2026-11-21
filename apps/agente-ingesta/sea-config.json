@@ -1,0 +1,5 @@
+{
+  "main": "dist/agente-ingesta.cjs",
+  "output": "dist/agente-ingesta.blob",
+  "disableExperimentalSEAWarning": true
+}

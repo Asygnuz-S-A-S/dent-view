@@ -1,0 +1,36 @@
+// Convenios del centro y tarifas especiales (por convenio o por doctor remitente). Valores en COP.
+model Convenio {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre           String
+  nit              String?
+  contacto         String?
+  descuentoGeneral Int? // porcentaje 0-100 sobre el precio final del catálogo
+  activo           Boolean          @default(true)
+  vigenteDesde     DateTime?        @db.Date
+  vigenteHasta     DateTime?        @db.Date
+  creadoEn         DateTime         @default(now())
+  tarifas          TarifaEspecial[]
+  ordenes          Orden[]
+
+  @@index([organizationId])
+}
+
+// Exactamente uno de convenioId / doctorId está presente (lo garantiza la capa de acciones).
+model TarifaEspecial {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  convenioId     String?
+  convenio       Convenio?    @relation(fields: [convenioId], references: [id], onDelete: Cascade)
+  doctorId       String? // userId del doctor remitente (miembro del centro)
+  precioImpreso  Int?
+  precioDigital  Int?
+
+  @@unique([convenioId, servicioId])
+  @@unique([doctorId, servicioId])
+  @@index([organizationId])
+}

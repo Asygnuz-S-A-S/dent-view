@@ -1,0 +1,26 @@
+// Entrega de resultados al paciente (y, por reenvío suyo, a su doctor) mediante enlace + código temporal.
+// Solo se guardan hashes del token y del código; el valor en claro se entrega una vez.
+
+model EnlaceEntrega {
+  id                 String    @id @default(cuid())
+  organizationId     String
+  pacienteId         String
+  informeId          String?
+  estudioUids        String[] // StudyInstanceUID que el enlace puede ver en el visor
+  destinatarioTipo   String // PACIENTE | DOCTOR
+  destinatarioNombre String?
+  destinatarioCorreo String?
+  origenId           String? // enlace del paciente desde el que se compartió con un doctor
+  tokenHash          String    @unique
+  codigoHash         String
+  intentosFallidos   Int       @default(0)
+  venceEn            DateTime
+  revocadoEn         DateTime?
+  accesos            Int       @default(0)
+  ultimoAccesoEn     DateTime?
+  creadoPorId        String? // personal que lo generó (null si lo creó el paciente)
+  creadoEn           DateTime  @default(now())
+
+  @@index([organizationId, pacienteId])
+  @@index([informeId])
+}

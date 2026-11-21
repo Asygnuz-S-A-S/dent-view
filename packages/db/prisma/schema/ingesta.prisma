@@ -1,0 +1,13 @@
+// Estaciones de ingesta: el PC del centro (agente local) sube estudios con un token propio de la sede.
+model EstacionIngesta {
+  id             String    @id @default(cuid())
+  organizationId String
+  nombre         String
+  tokenHash      String    @unique // solo el hash; el token se muestra una vez al crearla
+  activa         Boolean   @default(true)
+  ultimoContacto DateTime?
+  creadoPorId    String?
+  creadoEn       DateTime  @default(now())
+
+  @@index([organizationId])
+}

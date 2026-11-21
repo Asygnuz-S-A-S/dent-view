@@ -1,0 +1,40 @@
+# Rutas y cabeceras comunes; las importan Caddyfile (local) y Caddyfile.produccion.
+(rutas) {
+	header {
+		X-Content-Type-Options "nosniff"
+		Referrer-Policy "strict-origin-when-cross-origin"
+		Permissions-Policy "camera=(), microphone=(), geolocation=(), payment=()"
+		-X-Powered-By
+		-Server
+	}
+
+	handle /visor/* {
+		# OHIF necesita WebAssembly y workers desde blob para decodificar imágenes.
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline' 'unsafe-eval' 'wasm-unsafe-eval' blob:; worker-src 'self' blob:; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self' blob: data:; frame-ancestors 'self'; object-src 'none'; base-uri 'self'"
+		# La config del visor se edita a menudo; sin esto el navegador la cachea por heurística y sirve una versión vieja.
+		# Lo mismo con el HTML de entrada (apunta a bundles con hash nuevo en cada compilación): siempre se revalida.
+		# Los archivos con hash en el nombre (app.bundle.<hash>.js, wasm, fuentes) sí pueden cachearse.
+		@sinhash not path_regexp ^/visor/.*\.[0-9a-f]{12,}\.(js|css|wasm|woff2|png|svg)(\.gz)?$
+		header @sinhash Cache-Control "no-cache"
+		reverse_proxy visor:8080
+	}
+
+	handle /dicom-web/* {
+		# N13: respuestas con datos de pacientes: nunca en caché.
+		header Cache-Control "private, no-store"
+		forward_auth web:3000 {
+			uri /api/visor/autorizar
+		}
+		reverse_proxy orthanc:8042
+	}
+
+	handle {
+		# B1: tope de cuerpo en la API (el visor y DICOM-web suben archivos grandes y quedan fuera).
+		@api path /api/*
+		request_body @api {
+			max_size 2MB
+		}
+		header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
+		reverse_proxy web:3000
+	}
+}

@@ -1,0 +1,29 @@
+node_modules/
+.next/
+dist/
+.env
+.env.*
+!.env.example
+*.dcm
+muestras/
+infra/data/
+packages/db/src/generated/
+
+# E2E
+apps/web/tests/e2e/.auth/
+apps/web/test-results/
+apps/web/playwright-report/
+
+# Archivos de trabajo y generados
+.tmp/
+*.tsbuildinfo
+
+# Capturas de QA: muestran pantallas con estudios reales de pacientes (incluida una malla facial). No se publican;
+# los informes en docs/qa/*.md sí, y las capturas se regeneran con las pruebas E2E.
+docs/qa/evidencias/
+
+# Datos clínicos: nunca al repositorio
+*.dcm
+*.dicom
+*.ply
+*.stl

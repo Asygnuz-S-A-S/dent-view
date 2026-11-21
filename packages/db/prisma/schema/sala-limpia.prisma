@@ -1,0 +1,276 @@
+// Implementación independiente (sala limpia) a partir de docs/sala-limpia/*.md
+// Modelos de historia clínica, consentimientos, informes, seguimiento y notificaciones.
+// Sin relaciones Prisma: cada tabla guarda organizationId/pacienteId como texto indexado y la app valida la pertenencia al centro.
+
+// --- 05 Historia clínica ---
+
+model ContextoMedico {
+  pacienteId           String    @id
+  organizationId       String
+  embarazo             Boolean   @default(false)
+  semanasEmbarazo      Int?
+  lactancia            Boolean   @default(false)
+  anticoagulantes      Boolean   @default(false)
+  anticoagulanteNombre String?
+  inr                  Float?
+  inrFecha             DateTime? @db.Date
+  reaccionAnestesia    Boolean   @default(false)
+  detalleAnestesia     String?
+  implantesMetalicos   Boolean   @default(false)
+  marcapasos           Boolean   @default(false)
+  claustrofobia        Boolean   @default(false)
+  estudiosRecientes    String?
+  actualizadoEn        DateTime  @default(now())
+  actualizadoPorId     String?
+
+  @@index([organizationId])
+}
+
+model AlergiaPaciente {
+  id             String    @id @default(cuid())
+  organizationId String
+  pacienteId     String
+  nombre         String
+  gravedad       String // BAJA | MEDIA | ALTA | CRITICA
+  reaccion       String?
+  notas          String?
+  activo         Boolean   @default(true)
+  creadoEn       DateTime  @default(now())
+  archivadoEn    DateTime?
+
+  @@index([pacienteId, activo])
+}
+
+model MedicacionPaciente {
+  id             String    @id @default(cuid())
+  organizationId String
+  pacienteId     String
+  nombre         String
+  notas          String?
+  activo         Boolean   @default(true)
+  creadoEn       DateTime  @default(now())
+  archivadoEn    DateTime?
+
+  @@index([pacienteId, activo])
+}
+
+model EnfermedadPaciente {
+  id             String    @id @default(cuid())
+  organizationId String
+  pacienteId     String
+  nombre         String
+  critica        Boolean   @default(false)
+  notas          String?
+  activo         Boolean   @default(true)
+  creadoEn       DateTime  @default(now())
+  archivadoEn    DateTime?
+
+  @@index([pacienteId, activo])
+}
+
+model ContactoEmergencia {
+  pacienteId      String   @id
+  organizationId  String
+  nombre          String
+  parentesco      String?
+  telefono        String
+  correo          String?
+  esRepresentante Boolean  @default(false)
+  activo          Boolean  @default(true)
+  actualizadoEn   DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+model RepresentanteLegal {
+  pacienteId      String   @id
+  organizationId  String
+  nombre          String
+  parentesco      String
+  tipoDocumento   String   @default("CC")
+  numeroDocumento String?
+  telefono        String
+  correo          String?
+  direccion       String?
+  notas           String?
+  activo          Boolean  @default(true)
+  actualizadoEn   DateTime @updatedAt
+
+  @@index([organizationId])
+}
+
+// --- 02 Consentimientos y protección de datos ---
+
+// Solo se agregan filas: el estado vigente es la más reciente por (paciente, finalidad).
+model Autorizacion {
+  id              String    @id @default(cuid())
+  organizationId  String
+  pacienteId      String
+  tipo            String    @default("DATOS") // DATOS | PROCEDIMIENTO
+  finalidad       String // normalizada
+  otorgada        Boolean
+  textoMostrado   String?
+  version         String?
+  ordenId         String?
+  otorgadaEn      DateTime?
+  revocadaEn      DateTime?
+  registradoPorId String?
+  creadoEn        DateTime  @default(now())
+
+  @@index([pacienteId, finalidad, creadoEn])
+  @@index([organizationId])
+}
+
+model SolicitudTitular {
+  id                String    @id @default(cuid())
+  organizationId    String
+  pacienteId        String?
+  solicitanteNombre String
+  solicitanteCorreo String
+  tipo              String // CONSULTA | ACTUALIZACION | SUPRESION | REVOCATORIA | RECLAMO
+  estado            String    @default("RECIBIDA") // RECIBIDA | EN_TRAMITE | COMPLETADA | RECHAZADA
+  notas             String?
+  recibidaEn        DateTime  @default(now())
+  venceEn           DateTime
+  resueltaEn        DateTime?
+  registradoPorId   String?
+
+  @@index([organizationId, estado, venceEn])
+}
+
+// --- 01 Informes radiológicos ---
+
+// Configuración del centro: membrete y ajustes de recordatorios.
+model ConfigCentro {
+  organizationId    String  @id
+  nombre            String?
+  direccion         String?
+  telefono          String?
+  correo            String?
+  registro          String?
+  logo              String? // data URL (PNG/JPEG pequeño)
+  recordatorioHoras Int     @default(24)
+  // Marca del centro (white-label): color principal en hex (#0e6b8a) aplicado al tema de la app y a sus páginas públicas.
+  colorPrimario     String?
+}
+
+// Cada versión es una fila; las versiones emitidas son inmutables y comparten grupoId.
+model Informe {
+  id               String    @id @default(cuid())
+  organizationId   String
+  grupoId          String
+  version          Int       @default(1)
+  vigente          Boolean   @default(true)
+  estado           String    @default("BORRADOR") // BORRADOR | EMITIDO | ARCHIVADO
+  pacienteId       String
+  ordenId          String?
+  estudioId        String?
+  motivo           String?
+  tecnica          String?
+  hallazgos        String    @default("")
+  impresion        String    @default("")
+  recomendaciones  String?
+  firmanteId       String?
+  firmanteNombre   String?
+  firmanteTarjeta  String?
+  codigo           String?   @unique
+  pdf              Bytes?
+  motivoCorreccion String?
+  emitidoEn        DateTime?
+  creadoPorId      String?
+  creadoEn         DateTime  @default(now())
+  actualizadoEn    DateTime  @updatedAt
+
+  @@unique([grupoId, version])
+  @@index([organizationId, estado, creadoEn])
+  @@index([pacienteId])
+}
+
+// --- 03 Seguimiento ---
+
+model PreferenciaContacto {
+  pacienteId      String   @id
+  organizationId  String
+  noContactar     Boolean  @default(false)
+  correo          Boolean  @default(true)
+  sms             Boolean  @default(true)
+  whatsapp        Boolean  @default(true)
+  tiposRechazados String[]
+
+  @@index([organizationId])
+}
+
+model Seguimiento {
+  id              String    @id @default(cuid())
+  organizationId  String
+  pacienteId      String
+  motivo          String // CONTROL | ENTREGA_PENDIENTE | ESTUDIO_SIN_TOMAR | REPETICION | OTRO
+  prioridad       String    @default("NORMAL") // BAJA | NORMAL | ALTA
+  estado          String    @default("PENDIENTE") // PENDIENTE | SIN_RESPUESTA | AGENDADO | DECLINO | COMPLETADO | CANCELADO
+  mesObjetivo     DateTime  @db.Date
+  nota            String?
+  ordenId         String?
+  citaId          String?
+  intentos        Int       @default(0)
+  ultimoIntentoEn DateTime?
+  completadoEn    DateTime?
+  creadoPorId     String?
+  creadoEn        DateTime  @default(now())
+
+  @@index([organizationId, estado, mesObjetivo])
+  @@index([pacienteId])
+}
+
+model IntentoContacto {
+  id             String   @id @default(cuid())
+  organizationId String
+  seguimientoId  String
+  canal          String // TELEFONO | WHATSAPP | SMS | CORREO
+  resultado      String // SIN_RESPUESTA | BUZON | AGENDO | DECLINO | NUMERO_EQUIVOCADO
+  nota           String?
+  creadoPorId    String?
+  creadoEn       DateTime @default(now())
+
+  @@index([seguimientoId])
+}
+
+// --- 04 Notificaciones ---
+
+model Mensaje {
+  id             String    @id @default(cuid())
+  organizationId String
+  pacienteId     String?
+  tipo           String // CITA_CREADA | CITA_RECORDATORIO | INFORME_PACIENTE | INFORME_REMITENTE | SEGUIMIENTO
+  canal          String    @default("CORREO")
+  destinatario   String?
+  asunto         String?
+  cuerpo         String?
+  estado         String    @default("EN_COLA") // EN_COLA | ENVIADO | FALLIDO | OMITIDO
+  motivo         String? // por qué se omitió
+  intentos       Int       @default(0)
+  maxIntentos    Int       @default(5)
+  proximoIntento DateTime  @default(now())
+  proveedor      String?
+  simulado       Boolean   @default(false)
+  error          String?
+  claveUnica     String?
+  contexto       Json?
+  creadoEn       DateTime  @default(now())
+  enviadoEn      DateTime?
+
+  @@unique([organizationId, claveUnica])
+  @@index([estado, proximoIntento])
+  @@index([organizationId, creadoEn])
+}
+
+model PlantillaMensaje {
+  id             String  @id @default(cuid())
+  organizationId String
+  tipo           String
+  canal          String  @default("CORREO")
+  asunto         String
+  cuerpo         String
+  activa         Boolean @default(true)
+
+  @@unique([organizationId, tipo, canal])
+}

@@ -1,0 +1,140 @@
+name: dent-view
+
+services:
+  postgres:
+    image: postgres:17
+    environment:
+      POSTGRES_USER: dentview
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: dentview
+      ORTHANC_DB: ${ORTHANC_DB}
+      APP_DB_PASSWORD: ${APP_DB_PASSWORD}
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+      - ./postgres/init-orthanc.sh:/docker-entrypoint-initdb.d/init-orthanc.sh:ro
+      # Rol de la app sin superusuario (dentview_app). Fuera de initdb.d para que no se ejecute dos veces.
+      - ./postgres/init-rol-app.sh:/docker-entrypoint-initdb.d/init-rol-app.sh:ro
+      - ./postgres/rol-app.sql:/etc/dentview/rol-app.sql:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U dentview -d dentview"]
+      interval: 5s
+      retries: 10
+
+  minio:
+    # minio/minio ya no se publica en Docker Hub ni Quay; bitnamilegacy es una copia congelada (solo desarrollo).
+    image: bitnamilegacy/minio:2025.7.23
+    environment:
+      MINIO_ROOT_USER: ${S3_ACCESS_KEY}
+      MINIO_ROOT_PASSWORD: ${S3_SECRET_KEY}
+    volumes:
+      - miniodata:/bitnami/minio/data
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:9000/minio/health/live"]
+      interval: 5s
+      retries: 10
+
+  minio-init:
+    image: bitnamilegacy/minio:2025.7.23
+    depends_on:
+      minio:
+        condition: service_healthy
+    entrypoint: >
+      /bin/sh -c "
+      until mc alias set local http://minio:9000 $${S3_ACCESS_KEY} $${S3_SECRET_KEY}; do sleep 2; done &&
+      mc mb --ignore-existing local/$${S3_BUCKET_ORTHANC} local/$${S3_BUCKET_ESTUDIOS}"
+    environment:
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_ORTHANC: ${S3_BUCKET_ORTHANC}
+      S3_BUCKET_ESTUDIOS: ${S3_BUCKET_ESTUDIOS}
+    restart: "no"
+
+  orthanc:
+    image: orthancteam/orthanc:26.11.1
+    depends_on:
+      postgres:
+        condition: service_healthy
+      minio-init:
+        condition: service_completed_successfully
+    # Sin ports: solo red interna (Caddy y worker).
+    environment:
+      ORTHANC__AUTHENTICATION_ENABLED: "false"
+      ORTHANC__STABLE_AGE: "5"
+      DICOM_WEB_PLUGIN_ENABLED: "true"
+      POSTGRESQL_PLUGIN_ENABLED: "true"
+      ORTHANC__POSTGRESQL__HOST: postgres
+      ORTHANC__POSTGRESQL__DATABASE: ${ORTHANC_DB}
+      ORTHANC__POSTGRESQL__USERNAME: dentview
+      ORTHANC__POSTGRESQL__PASSWORD: ${POSTGRES_PASSWORD}
+      AWS_S3_STORAGE_PLUGIN_ENABLED: "true"
+      ORTHANC__AWS_S3_STORAGE__BUCKET_NAME: ${S3_BUCKET_ORTHANC}
+      ORTHANC__AWS_S3_STORAGE__REGION: us-east-1
+      ORTHANC__AWS_S3_STORAGE__ENDPOINT: ${S3_ENDPOINT}
+      ORTHANC__AWS_S3_STORAGE__ACCESS_KEY: ${S3_ACCESS_KEY}
+      ORTHANC__AWS_S3_STORAGE__SECRET_KEY: ${S3_SECRET_KEY}
+      ORTHANC__AWS_S3_STORAGE__VIRTUAL_ADDRESSING: "false"
+
+  visor:
+    # Dockerfile oficial de OHIF (submódulo v3.13.14), compilado bajo /visor/.
+    build:
+      context: ../viewer/ohif
+      args:
+        PUBLIC_URL: /visor/
+    environment:
+      PORT: "8080" # nginx sin privilegios
+    volumes:
+      - ../viewer/config/dent-view.js:/usr/share/nginx/html/visor/app-config.js:ro
+
+  web:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    env_file: .env
+    depends_on:
+      postgres:
+        condition: service_healthy
+
+  worker:
+    build:
+      context: ..
+      dockerfile: apps/worker/Dockerfile
+    # Solo lo que el worker usa (sin MIGRATE_DATABASE_URL ni POSTGRES_PASSWORD: el worker no migra ni es dueño de la BD).
+    environment:
+      DATABASE_URL: ${DATABASE_URL}
+      ORTHANC_URL: ${ORTHANC_URL}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      S3_BUCKET_ESTUDIOS: ${S3_BUCKET_ESTUDIOS}
+      INGESTA_TENANT_SLUG: ${INGESTA_TENANT_SLUG}
+      BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET} # respaldo de CIFRADO_SECRETO para descifrar secretos de webhooks y conectores
+      CIFRADO_SECRETO: ${CIFRADO_SECRETO:-}
+      WEBHOOKS_PERMITIR_LOCAL: ${WEBHOOKS_PERMITIR_LOCAL:-}
+    depends_on:
+      - orthanc
+      - web # web aplica las migraciones al iniciar
+
+  mailpit:
+    # Buzón SMTP de desarrollo: captura todo el correo (SMTP interno mailpit:1025, UI en http://127.0.0.1:8025).
+    image: axllent/mailpit:v1.27.10
+    ports:
+      - "127.0.0.1:8025:8025"
+
+  caddy:
+    image: caddy:2
+    ports:
+      - "127.0.0.1:8080:8080"
+      - "127.0.0.1:8443:8443" # HTTPS local con CA interna (tls internal)
+    volumes:
+      - ./Caddyfile:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.rutas:/etc/caddy/Caddyfile.rutas:ro
+      - caddydata:/data # CA interna y certificados: persisten entre reinicios
+    depends_on:
+      - web
+      - visor
+      - orthanc
+
+volumes:
+  pgdata:
+  miniodata:
+  caddydata:

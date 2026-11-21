@@ -1,0 +1,1269 @@
+diff --git a/extensions/default/src/ViewerLayout/HeaderPatientInfo/HeaderPatientInfo.tsx b/extensions/default/src/ViewerLayout/HeaderPatientInfo/HeaderPatientInfo.tsx
+index 5f8cdd9..4cc58df 100644
+--- a/extensions/default/src/ViewerLayout/HeaderPatientInfo/HeaderPatientInfo.tsx
++++ b/extensions/default/src/ViewerLayout/HeaderPatientInfo/HeaderPatientInfo.tsx
+@@ -1,6 +1,7 @@
+ import React, { useState, useEffect } from 'react';
+ import usePatientInfo from '../../hooks/usePatientInfo';
+ import { Icons } from '@ohif/ui-next';
++import { useTranslation } from 'react-i18next';
+ 
+ export enum PatientInfoVisibility {
+   VISIBLE = 'visible',
+@@ -22,6 +23,7 @@ function HeaderPatientInfo({ servicesManager, appConfig }: withAppTypes) {
+     appConfig.showPatientInfo === PatientInfoVisibility.VISIBLE_READONLY;
+   const [expanded, setExpanded] = useState(initialExpandedState);
+   const { patientInfo, isMixedPatients } = usePatientInfo(servicesManager);
++  const { t } = useTranslation('Header');
+ 
+   useEffect(() => {
+     if (isMixedPatients && expanded) {
+@@ -62,7 +64,7 @@ function HeaderPatientInfo({ servicesManager, appConfig }: withAppTypes) {
+           </>
+         ) : (
+           <div className="text-primary self-center text-[13px]">
+-            {isMixedPatients ? 'Multiple Patients' : 'Patient'}
++            {isMixedPatients ? t('Multiple Patients') : t('Patient')}
+           </div>
+         )}
+       </div>
+diff --git a/extensions/default/src/customizations/aboutModalCustomization.tsx b/extensions/default/src/customizations/aboutModalCustomization.tsx
+index 93a00e2..0f38724 100644
+--- a/extensions/default/src/customizations/aboutModalCustomization.tsx
++++ b/extensions/default/src/customizations/aboutModalCustomization.tsx
+@@ -14,8 +14,9 @@ function AboutModalDefault() {
+ 
+   return (
+     <AboutModal className="w-[400px]">
+-      <AboutModal.ProductName>OHIF Viewer</AboutModal.ProductName>
+-      <AboutModal.ProductVersion>{main}</AboutModal.ProductVersion>
++      {/* dent-view: marca propia; OHIF (MIT) queda acreditado con su versión y repositorio */}
++      <AboutModal.ProductName>dent-view</AboutModal.ProductName>
++      <AboutModal.ProductBeta>{t('Based on', { name: `OHIF Viewer ${main}` })}</AboutModal.ProductBeta>
+       {beta && <AboutModal.ProductBeta>{beta}</AboutModal.ProductBeta>}
+ 
+       <AboutModal.Body>
+diff --git a/platform/app/public/html-templates/index.html b/platform/app/public/html-templates/index.html
+index 5977752..e49fe92 100644
+--- a/platform/app/public/html-templates/index.html
++++ b/platform/app/public/html-templates/index.html
+@@ -1,5 +1,5 @@
+ <!doctype html>
+-<html lang="en">
++<html lang="es">
+   <head>
+     <!--
+       Content-Security-Policy is delivered via hosting headers (netlify.toml
+@@ -24,7 +24,7 @@
+     />
+     <meta
+       name="application-name"
+-      content="OHIF Viewer"
++      content="dent-view"
+     />
+     <meta
+       name="apple-mobile-web-app-capable"
+@@ -204,7 +204,7 @@
+       src="<%= PUBLIC_URL %>init-service-worker.js"
+     ></script>
+ 
+-    <title>OHIF Viewer</title>
++    <title>dent-view · Visor</title>
+ 
+     <script>
+       function browserImportFunction(moduleId) {
+diff --git a/platform/app/public/manifest.json b/platform/app/public/manifest.json
+index c5224ff..e760dd3 100644
+--- a/platform/app/public/manifest.json
++++ b/platform/app/public/manifest.json
+@@ -1,7 +1,7 @@
+ {
+-  "name": "OHIF Viewer",
++  "name": "dent-view · Visor",
+   "short_name": "Viewer",
+-  "description": "OHIF Viewer",
++  "description": "Visor DICOM de dent-view (basado en OHIF Viewer)",
+   "dir": "auto",
+   "lang": "en-US",
+   "orientation": "any",
+diff --git a/platform/app/src/routes/index.tsx b/platform/app/src/routes/index.tsx
+index d1354f9..1143223 100644
+--- a/platform/app/src/routes/index.tsx
++++ b/platform/app/src/routes/index.tsx
+@@ -15,17 +15,25 @@ import NotFound from './NotFound';
+ import buildModeRoutes from './buildModeRoutes';
+ import PrivateRoute from './PrivateRoute';
+ import PropTypes from 'prop-types';
++import { useTranslation } from 'react-i18next';
+ import { routerBasename } from '../utils/publicUrl';
+ import { useAppConfig } from '@state';
+ import { history } from '../utils/history';
+ 
+-const NotFoundServer = ({
+-  message = 'Unable to query for studies at this time. Check your data source configuration or network connection',
+-}) => {
++// dent-view: el enlace de marca (whiteLabeling) también sirve para volver a la app desde las pantallas de error.
++const BackToApp = () => {
++  const [appConfig] = useAppConfig();
++  const logo = appConfig.whiteLabeling?.createLogoComponentFn?.(React, {});
++  return logo ? <div className="mt-4 flex justify-center">{logo}</div> : null;
++};
++
++const NotFoundServer = ({ message }) => {
++  const { t } = useTranslation('Common');
+   return (
+     <div className="text-foreground absolute flex h-full w-full items-center justify-center">
+-      <div>
+-        <h4>{message}</h4>
++      <div className="text-center">
++        <h4>{message ?? t('ServerNotAvailable')}</h4>
++        <BackToApp />
+       </div>
+     </div>
+   );
+@@ -38,13 +46,13 @@ NotFoundServer.propTypes = {
+ const NotFoundStudy = () => {
+   const [appConfig] = useAppConfig();
+   const { showStudyList } = appConfig;
++  const { t } = useTranslation('Common');
+ 
+   return (
+     <div className="text-foreground absolute flex h-full w-full items-center justify-center">
+-      <div>
+-        <h4 data-cy="study-not-found-message">
+-          One or more of the requested studies are not available at this time.
+-        </h4>
++      <div className="text-center">
++        <h4 data-cy="study-not-found-message">{t('StudyNotAvailable')}</h4>
++        <BackToApp />
+         {showStudyList && (
+           <p
+             className="mt-2"
+diff --git a/platform/i18n/src/index.js b/platform/i18n/src/index.js
+index 50c29e6..a7c7fff 100644
+--- a/platform/i18n/src/index.js
++++ b/platform/i18n/src/index.js
+@@ -44,10 +44,17 @@ const locizeOptions = {
+ 
+ const envUseLocize = !!process.env.USE_LOCIZE;
+ const envApiKeyAvailable = !!process.env.LOCIZE_API_KEY;
+-const DEFAULT_LANGUAGE = 'en-US';
++// dent-view: idioma por defecto desde app-config.js (`window.config.defaultLanguage`, se carga antes del bundle).
++// Con él, i18next no mira el idioma del navegador: usa ?lng=, la elección guardada o este idioma, y en-US para claves faltantes.
++const CONFIG_LANGUAGE = (typeof window !== 'undefined' && window.config?.defaultLanguage) || null;
++const DEFAULT_LANGUAGE = CONFIG_LANGUAGE || 'en-US';
++const FALLBACK_LANGUAGES = CONFIG_LANGUAGE ? [CONFIG_LANGUAGE, 'en-US'] : DEFAULT_LANGUAGE;
++const DEFAULT_DETECTION = CONFIG_LANGUAGE
++  ? { ...detectionOptions, order: ['querystring', 'cookie', 'localStorage'] }
++  : detectionOptions;
+ 
+ function initI18n(
+-  detection = detectionOptions,
++  detection = DEFAULT_DETECTION,
+   useLocize = envUseLocize,
+   apiKeyAvailable = envApiKeyAvailable
+ ) {
+@@ -77,7 +84,7 @@ function initI18n(
+       // init i18next
+       // for all options read: https://www.i18next.com/overview/configuration-options
+       .init({
+-        fallbackLng: DEFAULT_LANGUAGE,
++        fallbackLng: FALLBACK_LANGUAGES,
+         saveMissing: apiKeyAvailable,
+         debug: debugMode,
+         keySeparator: false,
+@@ -113,7 +120,7 @@ function initI18n(
+       // init i18next
+       // for all options read: https://www.i18next.com/overview/configuration-options
+       .init({
+-        fallbackLng: DEFAULT_LANGUAGE,
++        fallbackLng: FALLBACK_LANGUAGES,
+         resources: locales,
+         debug: debugMode,
+         keySeparator: false,
+diff --git a/platform/i18n/src/locales/en-US/AboutModal.json b/platform/i18n/src/locales/en-US/AboutModal.json
+index fa32db2..ba5f0bc 100644
+--- a/platform/i18n/src/locales/en-US/AboutModal.json
++++ b/platform/i18n/src/locales/en-US/AboutModal.json
+@@ -16,5 +16,6 @@
+   "Value": "Value",
+   "Version information": "Version Information",
+   "Version number": "Version number",
+-  "Visit the forum": "Visit the forum"
++  "Visit the forum": "Visit the forum",
++  "Based on": "Based on {{name}}"
+ }
+diff --git a/platform/i18n/src/locales/en-US/Common.json b/platform/i18n/src/locales/en-US/Common.json
+index 5f6a773..214f016 100644
+--- a/platform/i18n/src/locales/en-US/Common.json
++++ b/platform/i18n/src/locales/en-US/Common.json
+@@ -25,5 +25,7 @@
+   "Back": "Back",
+   "Foreground": "Foreground",
+   "SELECT A FOREGROUND": "SELECT A FOREGROUND",
+-  "SELECT A SEGMENTATION": "SELECT A SEGMENTATION"
++  "SELECT A SEGMENTATION": "SELECT A SEGMENTATION",
++  "StudyNotAvailable": "One or more of the requested studies are not available at this time.",
++  "ServerNotAvailable": "Unable to query for studies at this time. Check your data source configuration or network connection"
+ }
+diff --git a/platform/i18n/src/locales/en-US/Header.json b/platform/i18n/src/locales/en-US/Header.json
+index cfc956f..2f627bd 100644
+--- a/platform/i18n/src/locales/en-US/Header.json
++++ b/platform/i18n/src/locales/en-US/Header.json
+@@ -6,5 +6,7 @@
+   "Options": "Options",
+   "Preferences": "Preferences",
+   "Study list": "Study list",
+-  "Logout": "Logout"
++  "Logout": "Logout",
++  "Patient": "Patient",
++  "Multiple Patients": "Multiple Patients"
+ }
+diff --git a/platform/i18n/src/locales/es/AboutModal.json b/platform/i18n/src/locales/es/AboutModal.json
+index 22153c9..1e6f49f 100644
+--- a/platform/i18n/src/locales/es/AboutModal.json
++++ b/platform/i18n/src/locales/es/AboutModal.json
+@@ -1,8 +1,13 @@
+ {
+-  "About OHIF Viewer": "Sobre OHIF Viewer",
++  "About OHIF Viewer": "Acerca de dent-view",
+   "Browser": "Navegador",
+   "Build number": "Número de compilación",
+-  "Last master commits": "Últimos Master Commits",
++  "Commit hash": "Hash del commit",
++  "Commit Hash": "Hash del commit",
++  "Current Browser & OS": "Navegador y sistema operativo",
++  "Data citation": "Cita de los datos",
++  "Important links": "Enlaces importantes",
++  "Last master commits": "Últimos commits de master",
+   "More details": "Más detalles",
+   "Name": "Nombre",
+   "OS": "SO",
+@@ -10,5 +15,7 @@
+   "Repository URL": "URL del repositorio",
+   "Value": "Valor",
+   "Version information": "Información de la versión",
+-  "Visit the forum": "Visita el foro"
++  "Version number": "Número de versión",
++  "Visit the forum": "Visite el foro",
++  "Based on": "Basado en {{name}}"
+ }
+diff --git a/platform/i18n/src/locales/es/AppearanceModal.json b/platform/i18n/src/locales/es/AppearanceModal.json
+new file mode 100644
+index 0000000..756b6d0
+--- /dev/null
++++ b/platform/i18n/src/locales/es/AppearanceModal.json
+@@ -0,0 +1,12 @@
++{
++  "Appearance": "Apariencia",
++  "Theme": "Tema",
++  "Default Theme": "Tonal: azul (predeterminado)",
++  "Custom": "Personalizado",
++  "Custom Theme": "Tema personalizado",
++  "Hide": "Ocultar",
++  "Apply": "Aplicar",
++  "Clear": "Limpiar",
++  "No valid theme tokens found": "No se encontraron tokens de tema válidos. Se esperan líneas como --primary: 220 90% 60%",
++  "Paste your custom theme color tokens here": "Pegue aquí los tokens de color de su tema personalizado"
++}
+diff --git a/platform/i18n/src/locales/es/Buttons.json b/platform/i18n/src/locales/es/Buttons.json
+index ce1a1a9..6831555 100644
+--- a/platform/i18n/src/locales/es/Buttons.json
++++ b/platform/i18n/src/locales/es/Buttons.json
+@@ -1,12 +1,15 @@
+ {
+   "Acquired": "Adquirido",
+   "Angle": "Ángulo",
++  "Annotation": "Anotación",
+   "Axial": "Axial",
+   "Bidirectional": "Bidireccional",
+-  "Brush": "Cepillo",
+-  "CINE": "CINE",
++  "Brush": "Pincel",
++  "Cine": "Cine",
+   "Cancel": "Cancelar",
++  "Capture": "Capturar",
+   "Circle": "Círculo",
++  "Sphere": "Esfera",
+   "Clear": "Limpiar",
+   "Coronal": "Coronal",
+   "Crosshairs": "Punto de mira",
+@@ -14,30 +17,148 @@
+   "Ellipse": "Elipse",
+   "Elliptical": "Elíptico",
+   "Flip H": "Voltear H",
++  "Flip Horizontally": "Voltear horizontalmente",
+   "Flip V": "Voltear V",
+   "Freehand": "Mano alzada",
+-  "Invert": "Negativo",
++  "Grid Layout": "Disposición en cuadrícula",
++  "Invert": "Invertir",
+   "Layout": "$t(Common:Layout)",
+   "Length": "Longitud",
+-  "Levels": "W/L",
++  "Levels": "Ventana/Nivel",
+   "Magnify": "Lupa",
+   "Manual": "Manual",
+-  "Measurements": "Medidas",
++  "Measurements": "Mediciones",
+   "More": "$t(Common:More)",
++  "More Tools": "Más herramientas",
+   "Next": "$t(Common:Next)",
+   "Pan": "Mover",
+   "Play": "$t(Common:Play)",
+   "Previous": "$t(Common:Previous)",
+-  "Probe": "Probar",
++  "Probe": "Sonda",
+   "ROI Window": "Ventana ROI",
+   "Rectangle": "Rectángulo",
++  "Reference Lines": "Líneas de referencia",
+   "Reset": "$t(Common:Reset)",
+-  "Reset to defaults": "$t(Common:Reset) por defecto",
+-  "Rotate Right": "Girar ->",
++  "Reset to defaults": "Restablecer valores predeterminados",
++  "Rotate Right": "Rotar a la derecha",
+   "Sagittal": "Sagital",
+   "Save": "Guardar",
+-  "Stack Scroll": "Scroll",
++  "Stack Scroll": "Desplazar cortes",
++  "Stack Image Sync": "Sincronizar imágenes de la pila",
+   "Stop": "$t(Common:Stop)",
+   "Themes": "Temas",
+-  "Zoom": "Ampliar"
++  "Zoom": "Zoom",
++  "Adjust window/level presets and customize image contrast settings": "Ajustar los preajustes de ventana/nivel y el contraste de la imagen",
++  "Zoom-in": "Acercar",
++  "Cobb Angle": "Ángulo de Cobb",
++  "Calibration": "Calibración",
++  "Dicom Tag Browser": "Explorador de etiquetas DICOM",
++  "Magnify Probe": "Lupa",
++  "Ultrasound Directional": "Direccional de ecografía",
++  "Window Level Region": "Ventana/Nivel por región",
++  "Image Overlay": "Superposición de imagen",
++  "Image Slice Sync": "Sincronizar cortes",
++  "Freehand ROI": "ROI a mano alzada",
++  "Spline ROI": "ROI spline",
++  "Livewire tool": "Herramienta Livewire",
++  "Livewire Contour": "Contorno Livewire",
++  "Segment Label Display": "Mostrar etiquetas de segmentos",
++  "Data Overlay": "Superposición de datos",
++  "Configure data overlay options and manage foreground/background display sets": "Configurar la superposición de datos y las series de primer plano y fondo",
++  "Orientation": "Orientación",
++  "Change viewport orientation between axial, sagittal, coronal and reformat planes": "Cambiar la orientación del visor entre los planos axial, sagital, coronal y reformateado",
++  "Status": "Estado",
++  "Navigation": "Navegación",
++  "Navigate between segments/measurements and manage their visibility": "Navegar entre segmentos/mediciones y gestionar su visibilidad",
++  "Tracking Status": "Estado de seguimiento",
++  "View and manage tracking status of measurements and annotations": "Ver y gestionar el seguimiento de mediciones y anotaciones",
++  "Advanced Window Level": "Ventana/Nivel avanzado",
++  "Advanced window/level settings with manual controls and presets": "Ajustes avanzados de ventana/nivel con controles manuales y preajustes",
++  "Threshold": "Umbral",
++  "Image threshold settings": "Ajustes de umbral de la imagen",
++  "Opacity": "Opacidad",
++  "Image opacity settings": "Ajustes de opacidad de la imagen",
++  "Colorbar": "Barra de color",
++  "Enable position synchronization on stack viewports": "Activar la sincronización de posición en los visores de pila",
++  "Show Reference Lines": "Mostrar líneas de referencia",
++  "Toggle Image Overlay": "Mostrar/ocultar superposición de imagen",
++  "Calibration Line": "Línea de calibración",
++  "Ellipse ROI": "ROI elíptica",
++  "Rectangle ROI": "ROI rectangular",
++  "Circle Tool": "Círculo",
++  "Click to show or hide segment labels when hovering with your mouse.": "Haga clic para mostrar u ocultar las etiquetas de los segmentos al pasar el mouse.",
++  "Arrow Annotate": "Anotación con flecha",
++  "Bidirectional Tool": "Bidireccional",
++  "Bone": "Hueso",
++  "Brain": "Cerebro",
++  "Dismiss Aspect": "Descartar aspecto",
++  "Ellipse Tool": "Elipse",
++  "Flip Horizontal": "Voltear horizontal",
++  "Invert Colors": "Invertir colores",
++  "Keep Aspect": "Mantener aspecto",
++  "Length Tool": "Longitud",
++  "Liver": "Hígado",
++  "Lung": "Pulmón",
++  "More Measure Tools": "Más herramientas de medición",
++  "Reset View": "Restablecer vista",
++  "Rotate +90": "Rotar +90",
++  "Soft tissue": "Tejido blando",
++  "W/L Presets": "Preajustes de ventana/nivel",
++  "Window Level": "Ventana/Nivel",
++  "Point": "Punto",
++  "Point Tool": "Punto",
++  "Polygon": "Polígono",
++  "Polygon Tool": "Polígono",
++  "Box": "Caja",
++  "Box Tool": "Caja",
++  "Freehand Polygon": "Polígono a mano alzada",
++  "Freehand Polygon Tool": "Polígono a mano alzada",
++  "Freehand Line": "Línea a mano alzada",
++  "Freehand Line Tool": "Línea a mano alzada",
++  "Line": "Línea",
++  "Line Tool": "Línea",
++  "3D Rotate": "Rotar 3D",
++  "Shape": "Forma",
++  "MPR": "MPR",
++  "Rectangle ROI Threshold": "Umbral en ROI rectangular",
++  "Select the PT Axial to enable this tool": "Seleccione el PT axial para activar esta herramienta",
++  "Create new segmentation to enable this tool.": "Cree una segmentación nueva para activar esta herramienta.",
++  "Freehand Segmentation": "Segmentación a mano alzada",
++  "Spline Contour Segmentation Tool": "Segmentación por contorno spline",
++  "Sculptor Tool": "Escultor",
++  "Interpolate Contours": "Interpolar contornos",
++  "Marker Mode": "Modo de marcadores",
++  "Include": "Incluir",
++  "Exclude": "Excluir",
++  "Clear Markers": "Borrar marcadores",
++  "Radius (mm)": "Radio (mm)",
++  "Dynamic": "Dinámico",
++  "Range": "Rango",
++  "Spline Type": "Tipo de spline",
++  "Catmull Rom Spline": "Spline Catmull-Rom",
++  "Linear Spline": "Spline lineal",
++  "B-Spline": "B-spline",
++  "Simplified Spline": "Spline simplificada",
++  "Dynamic Cursor Size": "Tamaño de cursor dinámico",
++  "No segmentations available": "No hay segmentaciones disponibles",
++  "Threshold Tool": "Umbral",
++  "Threshold Tools": "Herramientas de umbral",
++  "Select a 3D viewport to enable this tool": "Seleccione un visor 3D para activar esta herramienta",
++  "Not available on the current viewport": "No disponible en el visor actual",
++  "Select an MPR viewport to enable this tool": "Seleccione un visor MPR para activar esta herramienta",
++  "Interpolate Labelmap": "Interpolar mapa de etiquetas",
++  "Segment Bidirectional": "Bidireccional del segmento",
++  "Tool not available for this modality": "Herramienta no disponible para esta modalidad",
++  "One Click Segment": "Segmentar con un clic",
++  "Click to Segment": "Clic para segmentar",
++  "Click-to-segment lesions with no configuration. Hover for visual feedback—click when a plus sign appears to segment the lesion.": "Segmente lesiones con un clic y sin configuración. Pase el mouse para ver la vista previa y haga clic cuando aparezca el signo más.",
++  "PET only. Click-to-segment lesions with no configuration. Hover for visual feedback—click when a plus sign appears to segment the lesion.": "Solo PET. Segmente lesiones con un clic y sin configuración. Pase el mouse para ver la vista previa y haga clic cuando aparezca el signo más.",
++  "Labelmap Assist": "Asistente de mapa de etiquetas",
++  "Marker Guided Labelmap": "Mapa de etiquetas guiado por marcadores",
++  "Eraser": "Borrador",
++  "Shapes": "Formas",
++  "Create new segmentation to enable shapes tool.": "Cree una segmentación nueva para activar la herramienta de formas.",
++  "US Pleura B-line Annotation": "Anotación de líneas B pleurales (ecografía)",
++  "Arrow Annotate Tool": "Anotación con flecha",
++  "CINE": "CINE"
+ }
+diff --git a/platform/i18n/src/locales/es/CaptureViewportModal.json b/platform/i18n/src/locales/es/CaptureViewportModal.json
+new file mode 100644
+index 0000000..32945dd
+--- /dev/null
++++ b/platform/i18n/src/locales/es/CaptureViewportModal.json
+@@ -0,0 +1,13 @@
++{
++  "Copy to Clipboard": "Copiar imagen",
++  "File name": "Nombre del archivo",
++  "Image size": "Tamaño de la imagen",
++  "Image size in pixels": "Tamaño de la imagen en píxeles",
++  "Include annotations": "Incluir anotaciones",
++  "Include warning message": "Incluir mensaje de advertencia",
++  "Width": "Ancho",
++  "Height": "Alto",
++  "Save Image": "Guardar imagen",
++  "Image copied to clipboard": "Imagen copiada al portapapeles",
++  "Failed to copy image to clipboard": "No se pudo copiar la imagen al portapapeles"
++}
+diff --git a/platform/i18n/src/locales/es/CineDialog.json b/platform/i18n/src/locales/es/CineDialog.json
+index a9cbf4f..008d2ac 100644
+--- a/platform/i18n/src/locales/es/CineDialog.json
++++ b/platform/i18n/src/locales/es/CineDialog.json
+@@ -1,6 +1,6 @@
+ {
+   "Next image": "$t(Common:Image) $t(Common:Next)",
+-  "Play / Stop": "$t(Common:Play) / Stop",
++  "Play / Stop": "Reproducir / Detener",
+   "Previous image": "$t(Common:Image) $t(Common:Previous)",
+   "Skip to first image": "Ir a la primera $t(Common:Image)",
+   "Skip to last image": "Ir a la última $t(Common:Image)",
+diff --git a/platform/i18n/src/locales/es/Colormaps.json b/platform/i18n/src/locales/es/Colormaps.json
+new file mode 100644
+index 0000000..83b13d2
+--- /dev/null
++++ b/platform/i18n/src/locales/es/Colormaps.json
+@@ -0,0 +1,15 @@
++{
++  "Grayscale": "Escala de grises",
++  "X Ray": "Rayos X",
++  "Isodose": "Isodosis",
++  "hsv": "HSV",
++  "hot_iron": "Hierro caliente",
++  "red_hot": "Rojo caliente",
++  "s_pet": "PET",
++  "perfusion": "Perfusión",
++  "rainbow_2": "Arcoíris 2",
++  "suv": "SUV",
++  "ge_256": "GE 256",
++  "ge": "GE",
++  "siemens": "Siemens"
++}
+diff --git a/platform/i18n/src/locales/es/Common.json b/platform/i18n/src/locales/es/Common.json
+index 65481c8..795a4d9 100644
+--- a/platform/i18n/src/locales/es/Common.json
++++ b/platform/i18n/src/locales/es/Common.json
+@@ -1,15 +1,31 @@
+ {
++  "Back to": "Volver a {{location}}",
++  "Close": "Cerrar",
+   "Image": "Imagen",
+-  "Layout": "Formato",
+-  "Measurements": "Medidas",
++  "Layout": "Disposición",
++  "LOAD": "CARGAR",
++  "Measurements": "Mediciones",
++  "mm": "mm",
+   "More": "Más",
+   "Next": "Siguiente",
+-  "Play": "Play",
++  "No": "No",
++  "NoStudyDate": "Sin fecha de estudio",
++  "Play": "Reproducir",
+   "Previous": "Anterior",
+-  "Reset": "Restaurar",
++  "Reset": "Restablecer",
+   "RowsPerPage": "filas por página",
+-  "Series": "Secuencia",
++  "Series": "Serie",
+   "Show": "Mostrar",
+   "Stop": "Detener",
+-  "StudyDate": "Fecha de estudo"
++  "StudyDate": "Fecha del estudio",
++  "Yes": "Sí",
++  "Cancel": "Cancelar",
++  "Save": "Guardar",
++  "localDateFormat": "DD/MM/YYYY",
++  "Back": "Atrás",
++  "Foreground": "Primer plano",
++  "SELECT A FOREGROUND": "SELECCIONE UN PRIMER PLANO",
++  "SELECT A SEGMENTATION": "SELECCIONE UNA SEGMENTACIÓN",
++  "StudyNotAvailable": "Uno o más de los estudios solicitados no están disponibles en este momento. Verifique que el estudio exista y que tenga acceso a él.",
++  "ServerNotAvailable": "No se pudieron consultar los estudios en este momento. Revise la conexión de red o la configuración de la fuente de datos."
+ }
+diff --git a/platform/i18n/src/locales/es/DataSourceConfiguration.json b/platform/i18n/src/locales/es/DataSourceConfiguration.json
+new file mode 100644
+index 0000000..b63a108
+--- /dev/null
++++ b/platform/i18n/src/locales/es/DataSourceConfiguration.json
+@@ -0,0 +1,24 @@
++{
++  "Configure Data Source": "Configurar fuente de datos",
++  "Data set": "Conjunto de datos",
++  "DICOM store": "Almacén DICOM",
++  "Location": "Ubicación",
++  "Project": "Proyecto",
++  "Error fetching Data set list": "Error al obtener los conjuntos de datos",
++  "Error fetching DICOM store list": "Error al obtener los almacenes DICOM",
++  "Error fetching Location list": "Error al obtener las ubicaciones",
++  "Error fetching Project list": "Error al obtener los proyectos",
++  "No Project available": "No hay proyectos disponibles",
++  "No Location available": "No hay ubicaciones disponibles",
++  "No Data set available": "No hay conjuntos de datos disponibles",
++  "No DICOM store available": "No hay almacenes DICOM disponibles",
++  "Select": "Seleccionar",
++  "Search Data set list": "Buscar conjuntos de datos",
++  "Search DICOM store list": "Buscar almacenes DICOM",
++  "Search Location list": "Buscar ubicaciones",
++  "Search Project list": "Buscar proyectos",
++  "Select Data set": "Seleccione un conjunto de datos",
++  "Select DICOM store": "Seleccione un almacén DICOM",
++  "Select Location": "Seleccione una ubicación",
++  "Select Project": "Seleccione un proyecto"
++}
+diff --git a/platform/i18n/src/locales/es/DataTable.json b/platform/i18n/src/locales/es/DataTable.json
+new file mode 100644
+index 0000000..7a68c62
+--- /dev/null
++++ b/platform/i18n/src/locales/es/DataTable.json
+@@ -0,0 +1,4 @@
++{
++  "No results.": "Sin resultados.",
++  "Not enough room to display this column": "No hay espacio suficiente para mostrar esta columna"
++}
+diff --git a/platform/i18n/src/locales/es/DatePicker.json b/platform/i18n/src/locales/es/DatePicker.json
+index 2c89998..84861fd 100644
+--- a/platform/i18n/src/locales/es/DatePicker.json
++++ b/platform/i18n/src/locales/es/DatePicker.json
+@@ -1,5 +1,13 @@
+ {
+   "Clear dates": "Borrar fechas",
++  "Close": "$t(Common:Close)",
+   "End Date": "Fecha fin",
+-  "Start Date": "Fecha inicio"
++  "Last 7 days": "Últimos 7 días",
++  "Last 30 days": "Últimos 30 días",
++  "Start Date": "Fecha inicio",
++  "Today": "Hoy",
++  "Previous Month": "Mes anterior",
++  "Next Month": "Mes siguiente",
++  "Select Month": "Seleccionar mes",
++  "Select Year": "Seleccionar año"
+ }
+diff --git a/platform/i18n/src/locales/es/EncapsulatedDocument.json b/platform/i18n/src/locales/es/EncapsulatedDocument.json
+new file mode 100644
+index 0000000..81e88ad
+--- /dev/null
++++ b/platform/i18n/src/locales/es/EncapsulatedDocument.json
+@@ -0,0 +1,8 @@
++{
++  "Loading document...": "Cargando documento...",
++  "This document type cannot be displayed": "Este tipo de documento no se puede mostrar",
++  "Document content does not match its declared type": "El contenido del documento no coincide con su tipo declarado",
++  "Unable to retrieve this document": "No se pudo obtener este documento",
++  "No viewer installed for {{mimeType}}": "No hay un visor instalado para {{mimeType}}",
++  "Encapsulated document": "Documento encapsulado"
++}
+diff --git a/platform/i18n/src/locales/es/ErrorBoundary.json b/platform/i18n/src/locales/es/ErrorBoundary.json
+new file mode 100644
+index 0000000..f860b6f
+--- /dev/null
++++ b/platform/i18n/src/locales/es/ErrorBoundary.json
+@@ -0,0 +1,8 @@
++{
++  "Context": "Contexto",
++  "Error Message": "Mensaje de error",
++  "Something went wrong": "Algo salió mal",
++  "in": "en",
++  "Sorry, something went wrong there. Try again.": "Lo sentimos, algo salió mal. Inténtelo de nuevo.",
++  "Stack Trace": "Traza de la pila"
++}
+diff --git a/platform/i18n/src/locales/es/Header.json b/platform/i18n/src/locales/es/Header.json
+index 8a4308c..525922a 100644
+--- a/platform/i18n/src/locales/es/Header.json
++++ b/platform/i18n/src/locales/es/Header.json
+@@ -1,8 +1,12 @@
+ {
+   "About": "Acerca de",
++  "Appearance": "Apariencia",
+   "Back to Viewer": "Volver al visor",
+   "INVESTIGATIONAL USE ONLY": "SOLO USO PARA INVESTIGACIÓN",
+   "Options": "Opciones",
+   "Preferences": "Preferencias",
+-  "Study list": "Lista de estudios"
++  "Study list": "Lista de estudios",
++  "Logout": "Cerrar sesión",
++  "Patient": "Paciente",
++  "Multiple Patients": "Varios pacientes"
+ }
+diff --git a/platform/i18n/src/locales/es/HotkeysValidators.json b/platform/i18n/src/locales/es/HotkeysValidators.json
+new file mode 100644
+index 0000000..f15f00f
+--- /dev/null
++++ b/platform/i18n/src/locales/es/HotkeysValidators.json
+@@ -0,0 +1,6 @@
++{
++  "Field can't be empty": "El campo no puede estar vacío",
++  "Hotkey is already in use": "\"{{action}}\" ya usa el atajo \"{{pressedKeys}}\".",
++  "It's not possible to define only modifier keys (ctrl, alt and shift) as a shortcut": "No se puede definir un atajo solo con teclas modificadoras (ctrl, alt y shift)",
++  "Shortcut combination is not allowed": "La combinación de atajo {{pressedKeys}} no está permitida"
++}
+diff --git a/platform/i18n/src/locales/es/Hps.json b/platform/i18n/src/locales/es/Hps.json
+new file mode 100644
+index 0000000..eaf0f19
+--- /dev/null
++++ b/platform/i18n/src/locales/es/Hps.json
+@@ -0,0 +1,14 @@
++{
++  "MPR": "MPR",
++  "3D four up": "3D en cuatro paneles",
++  "Frame View": "Vista de cuadros",
++  "Frame view for the active series": "Vista de cuadros de la serie activa",
++  "3D main": "3D principal",
++  "mpr": "MPR",
++  "3D only": "Solo 3D",
++  "3D primary": "3D primario",
++  "Axial Primary": "Axial primario",
++  "Compare Two Studies": "Comparar dos estudios",
++  "Compare two studies in various layouts": "Comparar dos estudios en varias disposiciones",
++  "Mammography Breast Screening": "Tamizaje mamográfico"
++}
+diff --git a/platform/i18n/src/locales/es/MeasurementTable.json b/platform/i18n/src/locales/es/MeasurementTable.json
+index a67bada..e1ae576 100644
+--- a/platform/i18n/src/locales/es/MeasurementTable.json
++++ b/platform/i18n/src/locales/es/MeasurementTable.json
+@@ -1,11 +1,29 @@
+ {
+   "Criteria nonconformities": "Criterios disconformes",
+-  "Delete": "Borrar",
++  "Delete": "Eliminar",
+   "Description": "Descripción",
+   "MAX": "Máximo",
++  "Measurements": "Mediciones",
++  "No, do not ask again": "No, no volver a preguntar",
+   "NonTargets": "No objetivos",
+-  "Relabel": "Re-etiquetar",
++  "Relabel": "Cambiar etiqueta",
+   "Targets": "Objetivos",
++  "Rename": "Renombrar",
++  "Duplicate": "Duplicar",
++  "Change Color": "Cambiar color",
++  "Lock": "Bloquear",
++  "Unlock": "Desbloquear",
++  "Hide": "Ocultar",
++  "Show": "Mostrar",
++  "Create SR": "Crear SR",
++  "empty": "(vacío)",
++  "Track measurements for this series?": "¿Hacer seguimiento de las mediciones de esta serie?",
++  "Do you want to add this measurement to the existing report?": "¿Desea agregar esta medición al informe existente?",
++  "You have existing tracked measurements. What would you like to do with your existing tracked measurements?": "Ya tiene mediciones en seguimiento. ¿Qué desea hacer con ellas?",
++  "Measurements cannot span across multiple studies. Do you want to save your tracked measurements?": "Las mediciones no pueden abarcar varios estudios. ¿Desea guardar las mediciones en seguimiento?",
++  "Do you want to continue tracking measurements for this study?": "¿Desea seguir haciendo seguimiento de las mediciones de este estudio?",
++  "Do you want to open this Segmentation?": "¿Desea abrir esta segmentación?",
++  "There are unsaved measurements. Do you want to save it?": "Hay mediciones sin guardar. ¿Desea guardarlas?",
+   "Export": "Exportar",
+-  "Create Report": "Crear reporte"
++  "Create Report": "Crear informe"
+ }
+diff --git a/platform/i18n/src/locales/es/Messages.json b/platform/i18n/src/locales/es/Messages.json
+new file mode 100644
+index 0000000..69b2a38
+--- /dev/null
++++ b/platform/i18n/src/locales/es/Messages.json
+@@ -0,0 +1,18 @@
++{
++  "1": "No se encontraron instancias válidas en la serie.",
++  "2": "A la serie le falta información de posición.",
++  "3": "La serie no es un volumen 3D reconstruible.",
++  "4": "Las series multicuadro no tienen información de medida de píxel.",
++  "5": "Las series multicuadro no tienen información de orientación.",
++  "6": "Las series multicuadro no tienen información de posición.",
++  "7": "A la serie le faltan cuadros.",
++  "8": "La serie tiene espaciado irregular.",
++  "9": "La serie tiene dimensiones inconsistentes entre cuadros.",
++  "10": "La serie tiene cuadros con un número inconsistente de componentes.",
++  "11": "La serie tiene cuadros con orientaciones inconsistentes.",
++  "12": "La serie tiene información de posición inconsistente.",
++  "13": "Serie no compatible.",
++  "14": "El SOP Class UID {{ sopClassUid }} no es compatible.",
++  "15": "A la serie le falta el SOP Class UID. Revise el archivo.",
++  "Display Set Messages": "Mensajes de la serie"
++}
+diff --git a/platform/i18n/src/locales/es/Modes.json b/platform/i18n/src/locales/es/Modes.json
+new file mode 100644
+index 0000000..f4fe481
+--- /dev/null
++++ b/platform/i18n/src/locales/es/Modes.json
+@@ -0,0 +1,9 @@
++{
++  "Basic Dev Viewer": "Visor básico de desarrollo",
++  "Basic Test Mode": "Modo básico de prueba",
++  "Basic Viewer": "Visor básico",
++  "Microscopy": "Microscopía",
++  "Segmentation": "Segmentación",
++  "Total Metabolic Tumor Volume": "Volumen tumoral metabólico total",
++  "US Pleura B-line Annotations": "Anotaciones de líneas B pleurales (ecografía)"
++}
+diff --git a/platform/i18n/src/locales/es/Onboarding.json b/platform/i18n/src/locales/es/Onboarding.json
+new file mode 100644
+index 0000000..0617a71
+--- /dev/null
++++ b/platform/i18n/src/locales/es/Onboarding.json
+@@ -0,0 +1,27 @@
++{
++  "Scrolling Through Images": "Desplazarse por las imágenes",
++  "You can scroll through the images using the mouse wheel or scrollbar.": "Puede recorrer las imágenes con la rueda del mouse o la barra de desplazamiento.",
++  "Zooming In and Out": "Acercar y alejar",
++  "You can zoom the images using the right click.": "Puede ampliar las imágenes con el clic derecho.",
++  "Panning the Image": "Mover la imagen",
++  "You can pan the images using the middle click.": "Puede mover las imágenes con el clic central.",
++  "Adjusting Window Level": "Ajustar ventana/nivel",
++  "You can modify the window level using the left click.": "Puede modificar la ventana/nivel con el clic izquierdo.",
++  "Using the Measurement Tools": "Usar las herramientas de medición",
++  "You can measure the length of a region using the Length tool.": "Puede medir la longitud de una región con la herramienta Longitud.",
++  "Drawing Length Annotations": "Dibujar mediciones de longitud",
++  "Use the length tool on the viewport to measure the length of a region.": "Use la herramienta Longitud en el visor para medir la longitud de una región.",
++  "Tracking Measurements in the Panel": "Seguimiento de mediciones en el panel",
++  "Click yes to track the measurements in the measurement panel.": "Haga clic en Sí para seguir las mediciones en el panel de mediciones.",
++  "Opening the Measurements Panel": "Abrir el panel de mediciones",
++  "Click the measurements button to open the measurements panel.": "Haga clic en el botón de mediciones para abrir el panel de mediciones.",
++  "Scrolling Away from a Measurement": "Alejarse de una medición",
++  "Scroll the images using the mouse wheel away from the measurement.": "Desplace las imágenes con la rueda del mouse para alejarse de la medición.",
++  "Jumping to Measurements in the Panel": "Ir a las mediciones desde el panel",
++  "Click the measurement in the measurement panel to jump to it.": "Haga clic en la medición en el panel de mediciones para ir a ella.",
++  "Changing Layout": "Cambiar la disposición",
++  "You can change the layout of the viewer using the layout button.": "Puede cambiar la disposición del visor con el botón de disposición.",
++  "Selecting the MPR Layout": "Seleccionar la disposición MPR",
++  "Select the MPR layout to view the images in MPR mode.": "Seleccione la disposición MPR para ver las imágenes en modo MPR.",
++  "Skip all": "Omitir todo"
++}
+diff --git a/platform/i18n/src/locales/es/PanelSUV.json b/platform/i18n/src/locales/es/PanelSUV.json
+new file mode 100644
+index 0000000..8706fff
+--- /dev/null
++++ b/platform/i18n/src/locales/es/PanelSUV.json
+@@ -0,0 +1,10 @@
++{
++  "Patient Information": "Información del paciente",
++  "Patient Sex": "Sexo del paciente",
++  "Weight": "Peso",
++  "Total Dose": "Dosis total",
++  "Half Life": "Vida media",
++  "Injection Time": "Hora de inyección",
++  "Acquisition Time": "Hora de adquisición",
++  "Reload Data": "Recargar datos"
++}
+diff --git a/platform/i18n/src/locales/es/ROIThresholdConfiguration.json b/platform/i18n/src/locales/es/ROIThresholdConfiguration.json
+new file mode 100644
+index 0000000..d809e25
+--- /dev/null
++++ b/platform/i18n/src/locales/es/ROIThresholdConfiguration.json
+@@ -0,0 +1,11 @@
++{
++  "Max": "Máx.",
++  "Range": "Rango",
++  "Start": "Inicio",
++  "End": "Fin",
++  "Percentage of Max SUV": "Porcentaje del SUV máximo",
++  "Lower & Upper Ranges": "Rangos inferior y superior",
++  "Run": "Ejecutar",
++  "Threshold Tools": "Herramientas de umbral",
++  "ThresholdRange": "Rango de umbral"
++}
+diff --git a/platform/i18n/src/locales/es/SegmentationPanel.json b/platform/i18n/src/locales/es/SegmentationPanel.json
+new file mode 100644
+index 0000000..0643462
+--- /dev/null
++++ b/platform/i18n/src/locales/es/SegmentationPanel.json
+@@ -0,0 +1,69 @@
++{
++  "Active": "Activa",
++  "Add new segmentation": "Agregar segmentación nueva",
++  "Add segment": "Agregar segmento",
++  "Add segmentation": "Agregar segmentación",
++  "Contour": "Contorno",
++  "Contour tools": "Herramientas de contorno",
++  "Contour Segmentations": "Segmentaciones de contorno",
++  "Delete": "Eliminar",
++  "Display inactive segmentations": "Mostrar segmentaciones inactivas",
++  "Add Segment": "Agregar segmento",
++  "Download DICOM RTSS": "Descargar DICOM RTSS",
++  "Export DICOM SEG": "Exportar DICOM SEG",
++  "Download DICOM SEG": "Descargar DICOM SEG",
++  "Download DICOM RTSTRUCT": "Descargar DICOM RTSTRUCT",
++  "Fill": "Relleno",
++  "Inactive segmentations": "Segmentaciones inactivas",
++  "Labelmap": "Mapa de etiquetas",
++  "Labelmap tools": "Herramientas de mapa de etiquetas",
++  "Labelmap Segmentations": "Segmentaciones de mapa de etiquetas",
++  "Opacity": "Opacidad",
++  "Border": "Borde",
++  "Show": "Mostrar",
++  "Fill & Outline": "Relleno y contorno",
++  "Outline Only": "Solo contorno",
++  "Fill Only": "Solo relleno",
++  "Outline": "Contorno",
++  "Rename": "Renombrar",
++  "Segmentation": "Segmentación",
++  "Segmentations": "Segmentaciones",
++  "Segmentation not supported": "Segmentación no compatible",
++  "Size": "Tamaño",
++  "Preview edits before creating": "Previsualizar cambios antes de crear",
++  "Use center as segment index": "Usar el centro como índice del segmento",
++  "Hover on segment border to activate": "Pase el mouse por el borde del segmento para activarlo",
++  "Show segment name on hover": "Mostrar el nombre del segmento al pasar el mouse",
++  "Create New Segmentation": "Crear segmentación nueva",
++  "Manage Current Segmentation": "Gestionar la segmentación actual",
++  "Remove from Viewport": "Quitar del visor",
++  "Download & Export": "Descargar y exportar",
++  "Download": "Descargar",
++  "Export": "Exportar",
++  "CSV Report": "Informe CSV",
++  "DICOM SEG": "DICOM SEG",
++  "DICOM RTSS": "DICOM RTSS",
++  "Fill contour holes": "Rellenar huecos del contorno",
++  "Fill Holes": "Rellenar huecos",
++  "Remove Small Contours": "Quitar contornos pequeños",
++  "Area Threshold": "Umbral de área",
++  "Create New Segment from Holes": "Crear segmento nuevo a partir de los huecos",
++  "Create New Segment": "Crear segmento nuevo",
++  "Smooth all edges": "Suavizar todos los bordes",
++  "Smooth Edges": "Suavizar bordes",
++  "Remove extra points": "Quitar puntos sobrantes",
++  "Remove Points": "Quitar puntos",
++  "Merge": "Unir",
++  "Intersect": "Intersecar",
++  "Subtract": "Restar",
++  "Select a segment": "Seleccione un segmento",
++  "Select a segmentation": "Seleccione una segmentación",
++  "Create a new segment": "Crear un segmento nuevo",
++  "New segment name": "Nombre del segmento nuevo",
++  "No segmentations available": "No hay segmentaciones disponibles",
++  "Not available on the current viewport": "No disponible en el visor actual",
++  "Add segment to enable this tool": "Agregue un segmento para activar esta herramienta",
++  "Segment Bidirectional": "Bidireccional del segmento",
++  "Draw a segment before using bidirectional measurement": "Dibuje un segmento antes de usar la medición bidireccional",
++  "No description": "Sin descripción"
++}
+diff --git a/platform/i18n/src/locales/es/StudyBrowser.json b/platform/i18n/src/locales/es/StudyBrowser.json
+index 72f6def..6586652 100644
+--- a/platform/i18n/src/locales/es/StudyBrowser.json
++++ b/platform/i18n/src/locales/es/StudyBrowser.json
+@@ -2,5 +2,12 @@
+   "Primary": "Primario",
+   "Recent": "Reciente",
+   "All": "Todos",
++  "Tracked Series": "Series en seguimiento",
++  "Tag Browser": "Explorador de etiquetas",
++  "Add as Layer": "Agregar como capa",
++  "Series Number": "Número de serie",
++  "Series Date": "Fecha de la serie",
++  "Thumbnail Double Click": "Doble clic en la miniatura",
++  "The selected display sets could not be added to the viewport.": "No se pudieron agregar las series seleccionadas al visor.",
+   "Studies": "Estudios"
+ }
+diff --git a/platform/i18n/src/locales/es/StudyItem.json b/platform/i18n/src/locales/es/StudyItem.json
+new file mode 100644
+index 0000000..861e9b7
+--- /dev/null
++++ b/platform/i18n/src/locales/es/StudyItem.json
+@@ -0,0 +1,3 @@
++{
++  "Tracked series": "{{trackedSeries}} series en seguimiento"
++}
+diff --git a/platform/i18n/src/locales/es/StudyList.json b/platform/i18n/src/locales/es/StudyList.json
+index 8ff58c1..b7400a2 100644
+--- a/platform/i18n/src/locales/es/StudyList.json
++++ b/platform/i18n/src/locales/es/StudyList.json
+@@ -1,18 +1,21 @@
+ {
+-  "AccessionNumber": "Num. Adhesión",
++  "AccessionNumber": "N.º de acceso",
+   "ClearFilters": "Limpiar filtros",
+   "Description": "Descripción",
+   "Empty": "vacío",
+   "Filter list to 100 studies or less to enable sorting": "Filtre la lista a 100 estudios o menos para habilitar la clasificación",
+   "Instances": "Instancias",
+-  "MRN": "MRN",
+   "Modality": "Modalidad",
+-  "PatientName": "Nombre paciente",
+-  "Previous": "< Anterior",
+-  "Page": "Página",
++  "MRN": "MRN",
+   "Next": "Siguiente >",
+-  "Results per page": "Resultados por página",
++  "No studies available": "No hay estudios disponibles",
+   "Number of studies": "Estudios",
++  "Page": "Página",
++  "PatientName": "Nombre del paciente",
++  "Previous": "< Anterior",
++  "Results per page": "Resultados por página",
++  "Studies": "Estudios",
+   "StudyDate": "Fecha del estudio",
+-  "StudyList": "Lista de Estudios"
++  "StudyList": "Lista de estudios",
++  "Upload": "Subir"
+ }
+diff --git a/platform/i18n/src/locales/es/ThumbnailTracked.json b/platform/i18n/src/locales/es/ThumbnailTracked.json
+new file mode 100644
+index 0000000..d1f6bd7
+--- /dev/null
++++ b/platform/i18n/src/locales/es/ThumbnailTracked.json
+@@ -0,0 +1,5 @@
++{
++  "Series is tracked": "La serie está en seguimiento",
++  "Series is untracked": "La serie no está en seguimiento",
++  "Viewport": "Visor"
++}
+diff --git a/platform/i18n/src/locales/es/ToolbarLayoutSelector.json b/platform/i18n/src/locales/es/ToolbarLayoutSelector.json
+new file mode 100644
+index 0000000..fbdb1a5
+--- /dev/null
++++ b/platform/i18n/src/locales/es/ToolbarLayoutSelector.json
+@@ -0,0 +1,9 @@
++{
++  "Change layout": "Cambiar disposición",
++  "Common": "Comunes",
++  "Advanced": "Avanzadas",
++  "Custom": "Personalizada",
++  "Hover to select": "Pase el mouse para seleccionar",
++  "rows and columns": "filas y columnas",
++  "Click to apply": "Haga clic para aplicar"
++}
+diff --git a/platform/i18n/src/locales/es/Tools.json b/platform/i18n/src/locales/es/Tools.json
+new file mode 100644
+index 0000000..19cb702
+--- /dev/null
++++ b/platform/i18n/src/locales/es/Tools.json
+@@ -0,0 +1,13 @@
++{
++  "Segmentation": "Segmentación",
++  "Segment": "Segmento",
++  "Download High Quality Image": "Descargar imagen en alta calidad",
++  "Edit Segment Label": "Editar etiqueta del segmento",
++  "Enter new label": "Escriba la nueva etiqueta",
++  "Segment Color": "Color del segmento",
++  "Edit Measurement Label": "Editar etiqueta de la medición",
++  "Edit Arrow Text": "Editar texto de la flecha",
++  "Enter new text": "Escriba el nuevo texto",
++  "Download Image": "Descargar imagen",
++  "Image cannot be downloaded": "No se puede descargar la imagen"
++}
+diff --git a/platform/i18n/src/locales/es/TooltipClipboard.json b/platform/i18n/src/locales/es/TooltipClipboard.json
+new file mode 100644
+index 0000000..2d94f66
+--- /dev/null
++++ b/platform/i18n/src/locales/es/TooltipClipboard.json
+@@ -0,0 +1,4 @@
++{
++  "Copied": "Copiado",
++  "Failed to copy": "No se pudo copiar"
++}
+diff --git a/platform/i18n/src/locales/es/TrackedCornerstoneViewport.json b/platform/i18n/src/locales/es/TrackedCornerstoneViewport.json
+new file mode 100644
+index 0000000..9c571c6
+--- /dev/null
++++ b/platform/i18n/src/locales/es/TrackedCornerstoneViewport.json
+@@ -0,0 +1,4 @@
++{
++  "Series is tracked and can be viewed in the measurement panel": "La serie está en seguimiento y se puede ver en el panel de mediciones",
++  "Measurements for untracked series will not be shown in the measurements panel": "Las mediciones de series sin seguimiento no se mostrarán en el panel de mediciones"
++}
+diff --git a/platform/i18n/src/locales/es/USAnnotationPanel.json b/platform/i18n/src/locales/es/USAnnotationPanel.json
+new file mode 100644
+index 0000000..34f9c11
+--- /dev/null
++++ b/platform/i18n/src/locales/es/USAnnotationPanel.json
+@@ -0,0 +1,17 @@
++{
++  "Workflow": "Flujo de trabajo",
++  "Depth guide toggle": "Mostrar/ocultar guía de profundidad",
++  "Show pleura percentage": "Mostrar porcentaje de pleura",
++  "Sector Annotations": "Anotaciones por sector",
++  "Pleura line": "Línea pleural",
++  "B-line": "Línea B",
++  "B-line annotation": "Anotación de línea B",
++  "Pleura annotation": "Anotación pleural",
++  "Show Overlay": "Mostrar superposición",
++  "Annotated Frames": "Cuadros anotados",
++  "Frame": "Cuadro",
++  "Pleura lines": "Líneas pleurales",
++  "B-lines": "Líneas B",
++  "JSON": "JSON",
++  "Annotations": "Anotaciones"
++}
+diff --git a/platform/i18n/src/locales/es/UserPreferencesModal.json b/platform/i18n/src/locales/es/UserPreferencesModal.json
+index f0a9fe8..ace0e9d 100644
+--- a/platform/i18n/src/locales/es/UserPreferencesModal.json
++++ b/platform/i18n/src/locales/es/UserPreferencesModal.json
+@@ -1,6 +1,84 @@
+ {
+   "Cancel": "$t(Buttons:Cancel)",
++  "No hotkeys found": "No hay atajos de teclado configurados en esta aplicación.",
+   "Reset to defaults": "$t(Buttons:Reset to defaults)",
++  "ResetDefaultMessage": "Preferencias restablecidas a los valores predeterminados. <br /> Debe <strong>Guardar</strong> para aplicar el cambio.",
+   "Save": "$t(Buttons:Save)",
+-  "User preferences": "Preferencias de Usuario"
++  "SaveMessage": "Preferencias guardadas",
++  "User preferences": "Preferencias de usuario",
++  "Language": "Idioma",
++  "Select language": "Seleccionar idioma",
++  "Hotkeys": "Atajos de teclado",
++  "Zoom": "Zoom",
++  "Zoom In": "Acercar",
++  "Zoom Out": "Alejar",
++  "Zoom to Fit": "Ajustar a la ventana",
++  "Rotate Right": "Rotar a la derecha",
++  "Rotate Left": "Rotar a la izquierda",
++  "Flip Horizontally": "Voltear horizontalmente",
++  "Flip Vertically": "Voltear verticalmente",
++  "Cine": "Cine",
++  "Invert": "Invertir",
++  "Next Image Viewport": "Visor de imagen siguiente",
++  "Previous Image Viewport": "Visor de imagen anterior",
++  "Previous Series": "Serie anterior",
++  "Next Series": "Serie siguiente",
++  "Next Stage": "Etapa siguiente",
++  "Previous Stage": "Etapa anterior",
++  "Next Image": "Imagen siguiente",
++  "Previous Image": "Imagen anterior",
++  "First Image": "Primera imagen",
++  "Last Image": "Última imagen",
++  "Reset": "Restablecer",
++  "Cancel Measurement": "Cancelar medición",
++  "W/L Preset 1": "Preajuste V/N 1",
++  "W/L Preset 2": "Preajuste V/N 2",
++  "W/L Preset 3": "Preajuste V/N 3",
++  "W/L Preset 4": "Preajuste V/N 4",
++  "Delete Annotation": "Eliminar anotación",
++  "Accept Preview": "Aceptar vista previa",
++  "Reject Preview": "Rechazar vista previa",
++  "Undo": "Deshacer",
++  "Redo": "Rehacer",
++  "Interpolate Scroll": "Desplazamiento interpolado",
++  "Increase Brush Size": "Aumentar tamaño del pincel",
++  "Decrease Brush Size": "Reducir tamaño del pincel",
++  "Eraser": "Borrador",
++  "Brush": "Pincel",
++  "Add New Segment": "Agregar segmento nuevo",
++  "Press keys": "Presione las teclas...",
++  "LanguageName.en-US": "Inglés (EE. UU.)",
++  "LanguageName.fr": "Francés",
++  "HotkeyKeys.ctrl": "Ctrl",
++  "HotkeyKeys.shift": "Mayús",
++  "HotkeyKeys.alt": "Alt",
++  "HotkeyKeys.option": "Opción",
++  "HotkeyKeys.meta": "Cmd",
++  "HotkeyKeys.enter": "Intro",
++  "HotkeyKeys.esc": "Esc",
++  "HotkeyKeys.space": "Espacio",
++  "HotkeyKeys.tab": "Tab",
++  "HotkeyKeys.backspace": "Retroceso",
++  "HotkeyKeys.delete": "Supr",
++  "HotkeyKeys.insert": "Insert",
++  "HotkeyKeys.home": "Inicio",
++  "HotkeyKeys.end": "Fin",
++  "HotkeyKeys.pageup": "Re Pág",
++  "HotkeyKeys.pagedown": "Av Pág",
++  "HotkeyKeys.up": "Flecha arriba",
++  "HotkeyKeys.down": "Flecha abajo",
++  "HotkeyKeys.left": "Flecha izquierda",
++  "HotkeyKeys.right": "Flecha derecha",
++  "HotkeyKeys.capslock": "Bloq Mayús",
++  "HotkeyKeys.plus": "Más",
++  "HotkeyKeys.minus": "Menos",
++  "HotkeyKeys.comma": "Coma",
++  "HotkeyKeys.period": "Punto",
++  "HotkeyKeys.slash": "Barra",
++  "HotkeyKeys.backslash": "Barra invertida",
++  "HotkeyKeys.semicolon": "Punto y coma",
++  "HotkeyKeys.quote": "Comilla",
++  "HotkeyKeys.backquote": "Acento grave",
++  "HotkeyKeys.bracketleft": "Corchete izquierdo",
++  "HotkeyKeys.bracketright": "Corchete derecho"
+ }
+diff --git a/platform/i18n/src/locales/es/ViewportDownloadForm.json b/platform/i18n/src/locales/es/ViewportDownloadForm.json
+index 95dfb83..6ca5d4d 100644
+--- a/platform/i18n/src/locales/es/ViewportDownloadForm.json
++++ b/platform/i18n/src/locales/es/ViewportDownloadForm.json
+@@ -1,14 +1,14 @@
+ {
+-  "emptyFilenameError": "El nombre del fichero no puede ser vacío.",
+-  "fileType": "Tipo de fichero",
+-  "filename": "Nombre del fichero",
+-  "formTitle": "Por favor especifica las dimensiones, nombre del fichero, y el tipo deseado para el fichero generado.",
+-  "imageHeight": "Altura de la imagen (px)",
+-  "imagePreview": "Preview de la imagen",
+-  "imageWidth": "Anchura de la imagen (px)",
+-  "keepAspectRatio": "Mantener el ratio de aspecto",
+-  "loadingPreview": "Cargando el preview de la imagen...",
+-  "minHeightError": "La altura mínima es 100px.",
+-  "minWidthError": "La anchura mínima es 100px.",
++  "emptyFilenameError": "El nombre del archivo no puede estar vacío.",
++  "fileType": "Tipo de archivo",
++  "filename": "Nombre del archivo",
++  "formTitle": "Especifique las dimensiones, el nombre y el tipo del archivo que se va a generar.",
++  "imageHeight": "Alto de la imagen (px)",
++  "imagePreview": "Vista previa de la imagen",
++  "imageWidth": "Ancho de la imagen (px)",
++  "keepAspectRatio": "Mantener la proporción",
++  "loadingPreview": "Cargando la vista previa de la imagen...",
++  "minHeightError": "El alto mínimo es 100 px.",
++  "minWidthError": "El ancho mínimo es 100 px.",
+   "showAnnotations": "Mostrar las anotaciones"
+ }
+diff --git a/platform/i18n/src/locales/es/WindowLevelActionMenu.json b/platform/i18n/src/locales/es/WindowLevelActionMenu.json
+new file mode 100644
+index 0000000..c1b0f43
+--- /dev/null
++++ b/platform/i18n/src/locales/es/WindowLevelActionMenu.json
+@@ -0,0 +1,19 @@
++{
++  "Back to Display Options": "Volver a opciones de visualización",
++  "Modality Presets": "Preajustes por modalidad",
++  "Modality Window Presets": "Preajustes de ventana por modalidad",
++  "Display Color bar": "Mostrar barra de color",
++  "Color LUT": "LUT de color",
++  "Preview in viewport": "Vista previa en el visor",
++  "Grayscale": "Escala de grises",
++  "Rendering Options": "Opciones de renderizado",
++  "Rendering Presets": "Preajustes de renderizado",
++  "Search all": "Buscar en todo",
++  "Quality": "Calidad",
++  "Lighting": "Iluminación",
++  "Shade": "Sombreado",
++  "Ambient": "Ambiente",
++  "Diffuse": "Difusa",
++  "Specular": "Especular",
++  "Shift": "Desplazamiento"
++}
+diff --git a/platform/i18n/src/locales/es/index.js b/platform/i18n/src/locales/es/index.js
+index b501e85..6817220 100644
+--- a/platform/i18n/src/locales/es/index.js
++++ b/platform/i18n/src/locales/es/index.js
+@@ -1,31 +1,77 @@
+ import AboutModal from './AboutModal.json';
++import AppearanceModal from './AppearanceModal.json';
+ import Buttons from './Buttons.json';
+ import CineDialog from './CineDialog.json';
+ import Common from './Common.json';
++import DataSourceConfiguration from './DataSourceConfiguration.json';
++import DataTable from './DataTable.json';
+ import DatePicker from './DatePicker.json';
++import ErrorBoundary from './ErrorBoundary.json';
+ import Header from './Header.json';
++import HotkeysValidators from './HotkeysValidators.json';
+ import MeasurementTable from './MeasurementTable.json';
+ import DataRow from './DataRow.json';
++import Modes from './Modes.json';
++import SegmentationPanel from './SegmentationPanel.json';
+ import SidePanel from './SidePanel.json';
+ import StudyBrowser from './StudyBrowser.json';
++import StudyItem from './StudyItem.json';
+ import StudyList from './StudyList.json';
++import TooltipClipboard from './TooltipClipboard.json';
++import ThumbnailTracked from './ThumbnailTracked.json';
++import TrackedCornerstoneViewport from './TrackedCornerstoneViewport.json';
+ import UserPreferencesModal from './UserPreferencesModal.json';
+ import ViewportDownloadForm from './ViewportDownloadForm.json';
++import Messages from './Messages.json';
++import WindowLevelActionMenu from './WindowLevelActionMenu.json';
++import CaptureViewportModal from './CaptureViewportModal.json';
++import Hps from './Hps.json';
++import ToolbarLayoutSelector from './ToolbarLayoutSelector.json';
++import Tools from './Tools.json';
++import Onboarding from './Onboarding.json';
++import Colormaps from './Colormaps.json';
++import PanelSUV from './PanelSUV.json';
++import ROIThresholdConfiguration from './ROIThresholdConfiguration.json';
++import USAnnotationPanel from './USAnnotationPanel.json';
++import EncapsulatedDocument from './EncapsulatedDocument.json';
+ 
+ export default {
+   es: {
+     AboutModal,
++    AppearanceModal,
+     Buttons,
+     CineDialog,
+     Common,
++    DataSourceConfiguration,
++    DataTable,
+     DatePicker,
++    ErrorBoundary,
+     Header,
++    HotkeysValidators,
+     MeasurementTable,
+     DataRow,
++    Modes,
++    SegmentationPanel,
+     SidePanel,
+     StudyBrowser,
++    StudyItem,
+     StudyList,
++    TooltipClipboard,
++    ThumbnailTracked,
++    TrackedCornerstoneViewport,
+     UserPreferencesModal,
+     ViewportDownloadForm,
++    Messages,
++    WindowLevelActionMenu,
++    CaptureViewportModal,
++    Hps,
++    ToolbarLayoutSelector,
++    Tools,
++    Onboarding,
++    Colormaps,
++    PanelSUV,
++    ROIThresholdConfiguration,
++    USAnnotationPanel,
++    EncapsulatedDocument,
+   },
+ };

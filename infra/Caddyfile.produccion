@@ -1,0 +1,18 @@
+# Plantilla de producción: copiar como Caddyfile y cambiar dominio y correo.
+# TLS automático (Let's Encrypt/ZeroSSL): requiere DNS apuntando al servidor y puertos 80 y 443 publicados.
+{
+	email operaciones@ejemplo.com
+}
+
+import Caddyfile.rutas
+
+# Todo HTTP pasa a HTTPS.
+http://dentview.ejemplo.com {
+	redir https://{host}{uri} permanent
+}
+
+dentview.ejemplo.com {
+	# HSTS: el navegador no vuelve a intentar HTTP en un año (agregar "preload" solo tras validar todos los subdominios).
+	header Strict-Transport-Security "max-age=31536000; includeSubDomains"
+	import rutas
+}
