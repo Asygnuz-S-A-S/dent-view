@@ -36,11 +36,14 @@ const ALTO = 28; // px por franja de 15 min
 const FRANJAS = Array.from({ length: (FIN_DIA_MIN - INICIO_DIA_MIN) / PASO_MIN }, (_, i) => INICIO_DIA_MIN + i * PASO_MIN);
 const sumarDias = (f: string, n: number) => new Date(Date.parse(`${f}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-export function AgendaDia({ fecha, hoy, salas, citas, pacientes, ordenes, alertasPacientes, ordenInicial }: {
-  fecha: string; hoy: string; salas: Sala[]; citas: Cita[]; pacientes: PacienteOpcion[]; ordenes: OrdenOpcion[];
+export function AgendaDia({ fecha, hoy, salas: todasSalas, salaFiltro, citas, pacientes, ordenes, alertasPacientes, ordenInicial }: {
+  fecha: string; hoy: string; salas: Sala[]; salaFiltro: string; citas: Cita[]; pacientes: PacienteOpcion[]; ordenes: OrdenOpcion[];
   alertasPacientes: Record<string, string>; ordenInicial: string | null;
 }) {
   const router = useRouter();
+  // El filtro `?sala=` solo recorta las columnas; el diálogo de cita sigue ofreciendo todas las salas.
+  const salas = salaFiltro ? todasSalas.filter((s) => s.id === salaFiltro) : todasSalas;
+  const sufijo = salaFiltro ? `&sala=${salaFiltro}` : "";
   const orden0 = ordenInicial ? ordenes.find((o) => o.id === ordenInicial) : undefined;
   const [borrador, setBorrador] = useState<Borrador | null>(
     orden0 && salas[0] ? { salaId: salas[0].id, inicioMin: 9 * 60, pacienteId: orden0.pacienteId, ordenId: orden0.id, duracion: 30, notas: "", estado: "PROGRAMADA" } : null,
@@ -68,16 +71,16 @@ export function AgendaDia({ fecha, hoy, salas, citas, pacientes, ordenes, alerta
     return () => clearInterval(t);
   }, []);
 
-  const ir = (f: string) => router.push(`/agenda?fecha=${f}`);
+  const ir = (f: string) => router.push(`/agenda?fecha=${f}${sufijo}`);
   const titulo = fechaLargaDeIso(fecha);
   const lineaAhora = fecha === hoy && ahora !== null && ahora >= INICIO_DIA_MIN && ahora <= FIN_DIA_MIN;
 
   return (
     <>
       <div className="flex flex-wrap items-center gap-2">
-        <Button asChild variant="outline" size="icon" aria-label="Día anterior"><Link href={`/agenda?fecha=${sumarDias(fecha, -1)}`}><ChevronLeft /></Link></Button>
-        <Button asChild variant="outline"><Link href={`/agenda?fecha=${hoy}`}>Hoy</Link></Button>
-        <Button asChild variant="outline" size="icon" aria-label="Día siguiente"><Link href={`/agenda?fecha=${sumarDias(fecha, 1)}`}><ChevronRight /></Link></Button>
+        <Button asChild variant="outline" size="icon" aria-label="Día anterior"><Link href={`/agenda?fecha=${sumarDias(fecha, -1)}${sufijo}`}><ChevronLeft /></Link></Button>
+        <Button asChild variant="outline"><Link href={`/agenda?fecha=${hoy}${sufijo}`}>Hoy</Link></Button>
+        <Button asChild variant="outline" size="icon" aria-label="Día siguiente"><Link href={`/agenda?fecha=${sumarDias(fecha, 1)}${sufijo}`}><ChevronRight /></Link></Button>
         <Popover open={calAbierto} onOpenChange={setCalAbierto}>
           <PopoverTrigger asChild>
             <Button variant="outline" aria-label="Elegir fecha"><CalendarIcon /> <span className="first-letter:uppercase">{titulo}</span></Button>
@@ -185,7 +188,7 @@ export function AgendaDia({ fecha, hoy, salas, citas, pacientes, ordenes, alerta
           key={borrador.id ?? `${borrador.salaId}-${borrador.inicioMin}`}
           inicial={borrador}
           fecha={fecha}
-          salas={salas}
+          salas={todasSalas}
           pacientes={pacientes}
           ordenes={ordenes}
           alertas={alertasPacientes}

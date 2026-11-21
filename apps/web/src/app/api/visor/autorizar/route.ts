@@ -23,6 +23,17 @@ export async function GET(req: Request) {
           where: { organizationId_userId: { organizationId: estudio.organizationId, userId: sesion.user.id } },
         })
       : null;
+  // Doctor remitente ajeno al estudio: lo ve solo si el centro se lo compartió (enlace DOCTOR activo a su correo).
+  const compartido =
+    sesion && estudio && uid && estudio.pacienteId && miembro?.role === "doctor_remitente"
+      ? !!(await prisma.enlaceEntrega.findFirst({
+          where: {
+            organizationId: estudio.organizationId, pacienteId: estudio.pacienteId, destinatarioTipo: "DOCTOR", revocadoEn: null,
+            venceEn: { gt: new Date() }, estudioUids: { has: uid }, destinatarioCorreo: { equals: sesion.user.email, mode: "insensitive" },
+          },
+          select: { id: true },
+        }))
+      : false;
   // Sin sesión, la cookie de resultados (enlace + código) da acceso de solo lectura a los estudios de ese enlace.
   const enlace = sesion ? null : await enlaceDeCookie();
   const status = decidirAccesoVisor({
@@ -31,6 +42,7 @@ export async function GET(req: Request) {
     uid,
     estudio,
     rol: miembro?.role ?? null,
+    compartido,
     // N3: el estudio debe seguir siendo del paciente y centro del enlace (pudo reasignarse después de entregarlo).
     enlace: enlace && {
       estudioUids: estudio && estudio.organizationId === enlace.organizationId && estudio.pacienteId === enlace.pacienteId ? enlace.estudioUids : [],

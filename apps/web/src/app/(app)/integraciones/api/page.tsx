@@ -14,7 +14,7 @@ import { exigirContexto } from "@/lib/sesion";
 
 export const dynamic = "force-dynamic";
 
-const VARIANTE = { ACTIVO: "default", VENCIDO: "secondary", REVOCADO: "destructive" } as const;
+const VARIANTE = { ACTIVO: "success", VENCIDO: "warning", REVOCADO: "danger" } as const;
 const ETIQUETA = { ACTIVO: "Activo", VENCIDO: "Vencido", REVOCADO: "Revocado" } as const;
 
 export default async function Pagina() {

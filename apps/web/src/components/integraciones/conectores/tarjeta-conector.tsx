@@ -86,7 +86,7 @@ export function TarjetaConector({ adaptador, integracion }: Props) {
           <dl className="grid grid-cols-2 gap-x-4 gap-y-2 text-sm">
             <dt className="text-muted-foreground">Credenciales</dt><dd>Configuradas ✓</dd>
             <dt className="text-muted-foreground">Estado</dt>
-            <dd>{integracion.estadoSync === "OK" ? <Badge>Correcta</Badge> : integracion.estadoSync === "ERROR" ? <Badge variant="destructive">Con error</Badge> : <Badge variant="outline">Sin sincronizar</Badge>}</dd>
+            <dd>{integracion.estadoSync === "OK" ? <Badge variant="success">Correcta</Badge> : integracion.estadoSync === "ERROR" ? <Badge variant="danger">Con error</Badge> : <Badge variant="outline">Sin sincronizar</Badge>}</dd>
             <dt className="text-muted-foreground">Última sincronización</dt><dd>{fechaHoraCompleta(integracion.ultimaSync ? new Date(integracion.ultimaSync) : null)}</dd>
             <dt className="text-muted-foreground">Registros vinculados</dt><dd>{integracion.vinculados}</dd>
           </dl>

@@ -59,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
           {ctx && <BuscadorGlobal />}
         </header>
         {/* SidebarInset ya es el <main> de la página: aquí solo un div (BUG-01). */}
-        <div id="contenido" className="mx-auto w-full max-w-7xl min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</div>
+        <div id="contenido" className="mx-auto w-full max-w-[96rem] min-w-0 flex-1 px-4 py-6 md:px-8 md:py-8">{children}</div>
       </SidebarInset>
     </SidebarProvider>
     </TooltipProvider>

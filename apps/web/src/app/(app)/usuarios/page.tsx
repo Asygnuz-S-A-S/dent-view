@@ -55,7 +55,7 @@ export default async function Usuarios() {
                       <span className="block truncate text-xs font-normal text-muted-foreground lg:hidden">{m.user.email}</span>
                     </TableCell>
                     <TableCell className="hidden text-muted-foreground lg:table-cell">{m.user.email}</TableCell>
-                    <TableCell><Badge variant="secondary">{ROLES_USUARIO.find((r) => r.valor === m.role)?.etiqueta ?? m.role}</Badge></TableCell>
+                    <TableCell><Badge variant="violet">{ROLES_USUARIO.find((r) => r.valor === m.role)?.etiqueta ?? m.role}</Badge></TableCell>
                     <TableCell className="hidden lg:table-cell">{fechaCorta(m.createdAt)}</TableCell>
                     <TableCell className="pr-4 md:pr-6">
                       <div className="flex justify-end">

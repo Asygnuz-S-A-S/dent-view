@@ -57,12 +57,12 @@ export default async function Seguimiento() {
             <TableBody>
               {lista.map((s) => (
                 <TableRow key={s.id}>
-                  <TableCell className="max-w-[12rem] whitespace-normal pl-4 md:pl-6 font-medium">{personas.get(s.pacienteId)?.nombre}{s.prioridad === "ALTA" && <Badge className="ml-2" variant="destructive">Alta</Badge>}
+                  <TableCell className="max-w-[12rem] whitespace-normal pl-4 md:pl-6 font-medium">{personas.get(s.pacienteId)?.nombre}{s.prioridad === "ALTA" && <Badge className="ml-2" variant="danger">Alta</Badge>}
                     <span className="block text-xs font-normal text-muted-foreground lg:hidden">{ETIQUETA_MOTIVO[s.motivo as Motivo]} · {ETIQUETA_ESTADO_SEG[s.estado as EstadoSeg]}</span>
                     <span className={`block text-xs font-normal lg:hidden ${s.mesObjetivo < mesActual ? "text-destructive" : "text-muted-foreground"}`}>{mesTexto(s.mesObjetivo)}</span></TableCell>
                   <TableCell className="hidden lg:table-cell">{ETIQUETA_MOTIVO[s.motivo as Motivo]}</TableCell>
                   <TableCell className={`hidden lg:table-cell ${s.mesObjetivo < mesActual ? "font-medium text-destructive" : ""}`}>{mesTexto(s.mesObjetivo)}</TableCell>
-                  <TableCell className="hidden lg:table-cell"><Badge variant="secondary">{ETIQUETA_ESTADO_SEG[s.estado as EstadoSeg]}</Badge></TableCell>
+                  <TableCell className="hidden lg:table-cell"><Badge variant="info">{ETIQUETA_ESTADO_SEG[s.estado as EstadoSeg]}</Badge></TableCell>
                   <TableCell className="hidden lg:table-cell">{s.intentos}</TableCell>
                   <TableCell className="whitespace-normal pr-4 md:pr-6"><AccionesSeguimiento id={s.id} telefono={personas.get(s.pacienteId)?.celular ?? null} /></TableCell>
                 </TableRow>

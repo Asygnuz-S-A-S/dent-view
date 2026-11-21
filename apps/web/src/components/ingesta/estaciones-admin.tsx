@@ -20,8 +20,8 @@ type Estacion = {
 };
 
 const ESTADO = {
-  EN_LINEA: { texto: "En línea", variant: "default" },
-  SIN_CONTACTO: { texto: "Sin contacto reciente", variant: "secondary" },
+  EN_LINEA: { texto: "En línea", variant: "success" },
+  SIN_CONTACTO: { texto: "Sin contacto reciente", variant: "warning" },
   INACTIVA: { texto: "Desactivada", variant: "outline" },
 } as const;
 

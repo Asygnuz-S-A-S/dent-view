@@ -76,7 +76,7 @@ export default async function Doctores({ searchParams }: { searchParams: Promise
                       <TableCell className="max-w-[14rem] whitespace-normal pl-4 md:pl-6">
                         <div className="flex items-center gap-2 font-medium">
                           {m.user.name}
-                          {estaInactivo(ultima, m.createdAt) && <Badge variant="outline">Inactivo</Badge>}
+                          {estaInactivo(ultima, m.createdAt) && <Badge variant="warning">Inactivo</Badge>}
                         </div>
                         <div className="truncate text-xs text-muted-foreground">{m.user.email}</div>
                       </TableCell>

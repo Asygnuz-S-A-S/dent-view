@@ -1,7 +1,8 @@
 // Adaptado de OpenDentist (MIT, © 2026 Clawnify) — https://github.com/clawnify/OpenDentist
+import { Banknote, HandCoins, Wallet } from "lucide-react";
 import { Graficos } from "@/components/reportes/graficos";
 import { Button } from "@/components/ui/button";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
+import { Kpi } from "@/components/comunes/kpi";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { cop } from "@/lib/precios";
@@ -18,9 +19,9 @@ export default async function Reportes({ searchParams }: { searchParams: Promise
   const rango = rangoReporte(sp.desde, sp.hasta);
   const d = await datosReporte(ctx.organizationId, rango);
   const kpis = [
-    { t: "Producción", v: d.produccion, n: "Órdenes no canceladas del rango" },
-    { t: "Cobros", v: d.cobros, n: "Pagos recibidos en el rango" },
-    { t: "Cartera total", v: d.cartera, n: "Saldo abierto a hoy" },
+    { t: "Producción", v: d.produccion, n: "Órdenes no canceladas del rango", i: Banknote, tono: "primary" as const },
+    { t: "Cobros", v: d.cobros, n: "Pagos recibidos en el rango", i: HandCoins, tono: "success" as const },
+    { t: "Cartera total", v: d.cartera, n: "Saldo abierto a hoy", i: Wallet, tono: "warning" as const, href: "/cartera" },
   ];
 
   return (
@@ -38,15 +39,7 @@ export default async function Reportes({ searchParams }: { searchParams: Promise
       </div>
 
       <div className="grid gap-4 sm:grid-cols-3">
-        {kpis.map((k) => (
-          <Card key={k.t}>
-            <CardHeader><CardTitle className="text-sm font-medium text-muted-foreground">{k.t}</CardTitle></CardHeader>
-            <CardContent>
-              <p className="text-2xl font-semibold">{cop(k.v)}</p>
-              <p className="text-xs text-muted-foreground">{k.n}</p>
-            </CardContent>
-          </Card>
-        ))}
+        {kpis.map((k) => <Kpi key={k.t} titulo={k.t} valor={cop(k.v)} nota={k.n} icono={k.i} tono={k.tono} href={k.href} />)}
       </div>
 
       <Graficos d={d} />

@@ -16,7 +16,7 @@ export type EntregaFila = {
   error: string | null; creadoEn: Date; proximoIntento: Date; payload: unknown;
 };
 
-const VARIANTE = { ENTREGADO: "default", PENDIENTE: "secondary", FALLIDO: "destructive" } as const;
+const VARIANTE = { ENTREGADO: "success", PENDIENTE: "warning", FALLIDO: "danger" } as const;
 const TEXTO = { ENTREGADO: "Entregado", PENDIENTE: "Pendiente", FALLIDO: "Fallido" } as const;
 
 export function EntregasWebhooks({ entregas }: { entregas: EntregaFila[] }) {

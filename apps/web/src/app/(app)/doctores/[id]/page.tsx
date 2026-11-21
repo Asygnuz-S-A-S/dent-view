@@ -102,7 +102,7 @@ export default async function DetalleDoctor({ params }: { params: Promise<{ id: 
                     <TableCell>{fecha(e.fechaEstudio ?? e.creadoEn)}</TableCell>
                     <TableCell><Badge variant="outline">{e.modalidad ?? "—"}</Badge></TableCell>
                     <TableCell className="pr-6 text-right">
-                      <Button asChild size="sm"><a href={`/visor/viewer?StudyInstanceUIDs=${encodeURIComponent(e.studyInstanceUid)}`}><Eye /> Abrir visor</a></Button>
+                      <Button asChild size="sm"><a href={`/visor/viewer?StudyInstanceUIDs=${encodeURIComponent(e.studyInstanceUid)}`} target="_blank" rel="noopener"><Eye /> Abrir visor</a></Button>
                     </TableCell>
                   </TableRow>
                 ))}

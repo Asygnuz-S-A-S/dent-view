@@ -2,19 +2,19 @@ import { prisma } from "@dent-view/db";
 import { CalendarDays, CalendarPlus, Eye, Receipt, TriangleAlert } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { BadgeCita, BadgeOrden } from "@/components/comunes/estado-badge";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 import { AlertasClinicas } from "@/components/pacientes/alertas-clinicas";
 import { CrearInformeBoton } from "@/components/informes/crear-informe-boton";
 import { EstudiosOrden } from "@/components/estudios/estudios-orden";
 import { AccionesOrden } from "@/components/ordenes/acciones-orden";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
-import { ETIQUETA_ESTADO_CITA, utcABogota, type EstadoCita } from "@/lib/agenda";
+import { utcABogota } from "@/lib/agenda";
 import { fechaCorta, fechaHora } from "@/lib/fechas";
-import { ETIQUETA_ESTADO_ORDEN, numeroOrden, VARIANTE_ESTADO_ORDEN } from "@/lib/ordenes";
+import { numeroOrden } from "@/lib/ordenes";
 import { cop, totalOrden } from "@/lib/precios";
 import { calcularAlertas } from "@/lib/historia-clinica";
 import { CLINICOS, GESTION, MEDICOS } from "@/lib/roles";
@@ -65,7 +65,7 @@ export default async function DetalleOrden({ params }: { params: Promise<{ id: s
     <div className="space-y-6">
       <EncabezadoPagina
         titulo={`Orden ${numeroOrden(orden.numero)}`}
-        insignia={<Badge variant={VARIANTE_ESTADO_ORDEN[orden.estado]}>{ETIQUETA_ESTADO_ORDEN[orden.estado]}</Badge>}
+        insignia={<BadgeOrden estado={orden.estado} />}
         acciones={<>
           {informe && <Button asChild variant="outline"><Link href={`/informes/${informe.id}`}><Eye /> Ver informe (v{informe.version})</Link></Button>}
           {verClinica && !informe && ["TOMADA", "INFORMADA", "ENTREGADA"].includes(orden.estado) && <CrearInformeBoton ordenId={orden.id} />}
@@ -172,7 +172,7 @@ export default async function DetalleOrden({ params }: { params: Promise<{ id: s
                       <Link href={`/agenda?fecha=${fecha}`} className="underline-offset-4 hover:underline">
                         {fechaHora(c.inicio)} · {c.sala.nombre}
                       </Link>
-                      <Badge variant="outline">{ETIQUETA_ESTADO_CITA[c.estado as EstadoCita]}</Badge>
+                      <BadgeCita estado={c.estado} />
                     </li>
                   );
                 })}

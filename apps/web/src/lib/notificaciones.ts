@@ -3,14 +3,15 @@
 
 export const CANALES = ["CORREO", "SMS", "WHATSAPP"] as const;
 export type Canal = (typeof CANALES)[number];
-export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO"] as const;
+export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO"] as const;
 /** Mensajes con credenciales de acceso: una vez enviados no se conserva su contenido. */
-export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO"];
+export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO"];
 export type TipoMensaje = (typeof TIPOS_MENSAJE)[number];
 export const ETIQUETA_TIPO_MENSAJE: Record<TipoMensaje, string> = {
   CITA_CREADA: "Cita agendada", CITA_RECORDATORIO: "Recordatorio de cita", INFORME_PACIENTE: "Informe listo (paciente)",
   INFORME_REMITENTE: "Informe listo (doctor remitente)", SEGUIMIENTO: "Seguimiento",
   ENTREGA_ENLACE: "Entrega de resultados (enlace)", ENTREGA_CODIGO: "Entrega de resultados (código)",
+  ESTUDIO_ENLACE: "Estudio compartido (enlace)", ESTUDIO_CODIGO: "Estudio compartido (código)",
 };
 
 export type Preferencia = { noContactar: boolean; correo: boolean; sms: boolean; whatsapp: boolean; tiposRechazados: string[] } | null;
@@ -74,6 +75,15 @@ export const PLANTILLAS_DEFECTO: Record<TipoMensaje, { asunto: string; cuerpo: s
   ENTREGA_ENLACE: {
     asunto: "Resultados del estudio de {{paciente}} en {{centro}}",
     cuerpo: "Hola {{destinatario}}, {{centro}} le comparte los resultados del estudio de {{paciente}}.\nÁbralos en: {{enlace}}\nEl código de acceso le llega en un mensaje aparte. El enlace vence el {{vence}}.",
+  },
+  // Sin datos del paciente en el cuerpo (Ley 1581): solo el aviso y el enlace.
+  ESTUDIO_ENLACE: {
+    asunto: "{{centro}} le comparte un estudio",
+    cuerpo: "Hola {{destinatario}}, tiene un estudio disponible de {{centro}}.\nÁbralo en: {{enlace}}\nEl código de acceso le llega en un mensaje aparte. El enlace vence el {{vence}}.",
+  },
+  ESTUDIO_CODIGO: {
+    asunto: "Código de acceso al estudio de {{centro}}",
+    cuerpo: "Su código de acceso al estudio es {{codigo}}. Úselo en el enlace que recibió por separado; no lo comparta.",
   },
   ENTREGA_CODIGO: {
     asunto: "Código de acceso a los resultados de {{centro}}",

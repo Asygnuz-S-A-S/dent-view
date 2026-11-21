@@ -3,13 +3,18 @@
 import { Search } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter, useSearchParams } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
 
-type Props = { tab: "todos" | "por-asignar"; q: string; modalidad: string; modalidades: string[]; porAsignar: number };
+type Props = {
+  tab: "todos" | "por-asignar"; q: string; modalidad: string; modalidades: string[]; porAsignar: number;
+  estado: string; doctor: string; desde: string; hasta: string; doctores: { id: string; nombre: string }[] | null;
+};
+const ESTADOS = { POR_ASIGNAR: "Por asignar", ASIGNADO: "Asignado", PUBLICADO: "Publicado" };
 
-export function FiltrosEstudios({ tab, q, modalidad, modalidades, porAsignar }: Props) {
+export function FiltrosEstudios({ tab, q, modalidad, modalidades, porAsignar, estado, doctor, desde, hasta, doctores }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const params = useSearchParams();
@@ -46,6 +51,28 @@ export function FiltrosEstudios({ tab, q, modalidad, modalidades, porAsignar }: 
           {modalidades.map((m) => <SelectItem key={m} value={m}>{m}</SelectItem>)}
         </SelectContent>
       </Select>
+      <Select value={estado || "todos"} onValueChange={(v) => router.push(url({ estado: v === "todos" ? "" : v, tab: "" }))}>
+        <SelectTrigger className="w-40" aria-label="Filtrar por estado"><SelectValue /></SelectTrigger>
+        <SelectContent>
+          <SelectItem value="todos">Todos los estados</SelectItem>
+          {Object.entries(ESTADOS).map(([k, v]) => <SelectItem key={k} value={k}>{v}</SelectItem>)}
+        </SelectContent>
+      </Select>
+      {doctores && (
+        <Select value={doctor || "todos"} onValueChange={(v) => router.push(url({ doctor: v === "todos" ? "" : v }))}>
+          <SelectTrigger className="w-48" aria-label="Filtrar por doctor remitente"><SelectValue /></SelectTrigger>
+          <SelectContent>
+            <SelectItem value="todos">Todos los doctores</SelectItem>
+            {doctores.map((d) => <SelectItem key={d.id} value={d.id}>{d.nombre}</SelectItem>)}
+          </SelectContent>
+        </Select>
+      )}
+      <div className="flex items-center gap-2">
+        <Input type="date" defaultValue={desde} max={hasta || undefined} aria-label="Fecha desde" className="w-40" onChange={(e) => router.push(url({ desde: e.target.value }))} />
+        <span className="text-sm text-muted-foreground">a</span>
+        <Input type="date" defaultValue={hasta} min={desde || undefined} aria-label="Fecha hasta" className="w-40" onChange={(e) => router.push(url({ hasta: e.target.value }))} />
+      </div>
+      {(q || modalidad || estado || doctor || desde || hasta) && <Button asChild variant="ghost" size="sm"><Link href={url({ q: "", modalidad: "", estado: "", doctor: "", desde: "", hasta: "" })}>Limpiar filtros</Link></Button>}
     </div>
   );
 }

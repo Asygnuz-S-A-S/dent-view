@@ -3,11 +3,11 @@ import { prisma } from "@dent-view/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AccionesFactura } from "@/components/facturacion/acciones-factura";
-import { Badge } from "@/components/ui/badge";
+import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableFooter, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { aCargoDe, nombresDoctores } from "@/lib/facturacion-datos";
-import { ETIQUETA_ESTADO_FACTURA, ETIQUETA_MEDIO, numeroFactura, saldo, totalPagado, VARIANTE_ESTADO_FACTURA } from "@/lib/facturacion";
+import { ETIQUETA_MEDIO, numeroFactura, saldo, totalPagado } from "@/lib/facturacion";
 import { numeroOrden } from "@/lib/ordenes";
 import { cop } from "@/lib/precios";
 import { GESTION } from "@/lib/roles";
@@ -36,7 +36,7 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
         <div className="space-y-1">
           <div className="flex items-center gap-3">
             <h1 className="text-2xl font-semibold tracking-tight">Cuenta de cobro {numeroFactura(f.numero)}</h1>
-            <Badge variant={VARIANTE_ESTADO_FACTURA[f.estado]}>{ETIQUETA_ESTADO_FACTURA[f.estado]}</Badge>
+            <BadgeCuenta estado={estadoCuenta(f)} />
           </div>
           <p className="text-sm text-muted-foreground">
             A cargo de: <span className="font-medium capitalize text-foreground">{aCargoDe(f, doctores, pacienteNombre)}</span> · {fecha(f.fecha)}

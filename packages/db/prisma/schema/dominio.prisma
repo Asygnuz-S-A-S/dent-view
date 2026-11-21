@@ -33,6 +33,7 @@ model PacienteTenant {
   direccion       String?
   alertas         String? // alergias, embarazo, condiciones relevantes para el estudio
   notas           String?
+  fotoKey         String? // clave S3 de la foto de perfil (tenants/{org}/pacientes/{id}/…); solo se sirve por ruta autenticada
   creadoEn        DateTime              @default(now())
   estudios        Estudio[]
   ordenes         Orden[]
@@ -43,6 +44,7 @@ model PacienteTenant {
   notasClinicas   NotaClinica[]
   facturas        Factura[]
   casosLab        CasoLaboratorio[]
+  doctores        DoctorPaciente[]
 
   @@unique([organizationId, personaId])
   @@index([organizationId])
@@ -365,4 +367,22 @@ model CasoLaboratorio {
   creadoEn        DateTime       @default(now())
 
   @@index([organizationId, estado])
+}
+
+// Equipo tratante registrado a mano (recepción/admin): relación paciente-doctor-especialidad.
+// Se suma a lo derivado de órdenes y estudios. doctorId = User.id del doctor remitente (sin FK, como firmanteId).
+model DoctorPaciente {
+  id             String         @id @default(cuid())
+  organizationId String
+  pacienteId     String
+  paciente       PacienteTenant @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  doctorId       String
+  especialidad   String // p. ej. Ortodoncia, Diseño de sonrisa
+  desde          DateTime       @db.Date
+  nota           String?
+  creadoPorId    String?
+  creadoEn       DateTime       @default(now())
+
+  @@index([organizationId, doctorId])
+  @@index([pacienteId])
 }

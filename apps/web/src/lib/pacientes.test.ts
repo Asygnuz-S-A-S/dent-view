@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { calcularEdad, normalizarDocumento } from "./pacientes";
+import { calcularEdad, iniciales, normalizarDocumento } from "./pacientes";
 
 describe("normalizarDocumento", () => {
   it("quita separadores y pasa a mayúsculas", () => {
@@ -14,3 +14,5 @@ describe("calcularEdad", () => {
   it("el día del cumpleaños", () => expect(calcularEdad(nac, new Date("2026-06-15T12:00:00Z"))).toBe(36));
   it("recién nacido", () => expect(calcularEdad(nac, nac)).toBe(0));
 });
+
+describe("iniciales", () => it("toma hasta dos", () => expect(iniciales("  ana maría  pérez")).toBe("AM")));

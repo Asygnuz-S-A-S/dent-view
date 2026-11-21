@@ -81,7 +81,8 @@ test("vínculo manual orden↔estudio y desvincular", async ({ page }) => {
 
   await page.goto("/estudios");
   const fila = page.getByRole("row", { name: /paciente cbct demo/i });
-  await fila.getByRole("button", { name: "Vincular orden" }).click();
+  await fila.getByRole("button", { name: "Más acciones" }).click();
+  await page.getByRole("menuitem", { name: /^(Vincular|Cambiar) orden$/ }).click();
   const dlg = page.getByRole("dialog");
   await dlg.getByRole("combobox").click();
   await page.getByRole("option", { name: new RegExp(`${numero}\\b`) }).click();

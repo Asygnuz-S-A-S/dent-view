@@ -1,54 +1,41 @@
 import { prisma } from "@dent-view/db";
-import { CalendarClock, CalendarDays, ChevronRight, ClipboardList, FileText, Inbox, Plus, ScanLine, type LucideIcon } from "lucide-react";
+import { CalendarClock, CalendarDays, ChevronRight, ClipboardList, FileText, Inbox, Plus, ScanLine } from "lucide-react";
 import Link from "next/link";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 import { GraficoEstudios } from "@/components/inicio/grafico-estudios";
 import { PacienteDialog } from "@/components/pacientes/paciente-dialog";
-import { Badge } from "@/components/ui/badge";
+import { BadgeCita, COLOR_VARIANTE, VARIANTE_ORDEN } from "@/components/comunes/estado-badge";
+import { Kpi } from "@/components/comunes/kpi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableRow } from "@/components/ui/table";
 import { filtroEstudios } from "@/lib/acceso";
 import { diaBogota, inicioDiaBogota, serieDiaria } from "@/lib/inicio";
 import { exigirContexto } from "@/lib/sesion";
-import { ETIQUETA_ESTADO_CITA, horaTexto, utcABogota, type EstadoCita } from "@/lib/agenda";
+import { horaTexto, utcABogota } from "@/lib/agenda";
 import { fechaCorta, fechaLarga } from "@/lib/fechas";
 import { numeroOrden } from "@/lib/ordenes";
 import { GESTION } from "@/lib/roles";
 
 export const dynamic = "force-dynamic";
 
+const filaOrden = (estado: keyof typeof ESTADOS_ORDEN, n: number) => ({
+  nombre: ESTADOS_ORDEN[estado], valor: String(n), n, color: COLOR_VARIANTE[VARIANTE_ORDEN[estado] ?? "default"],
+});
+
 const DIA = 86_400_000;
 const ESTADOS_ORDEN = {
   SOLICITADA: "Solicitada", AGENDADA: "Agendada", TOMADA: "Tomada",
   INFORMADA: "Informada", ENTREGADA: "Entregada", CANCELADA: "Cancelada",
 } as const;
+const COLOR_ESTUDIO = { POR_ASIGNAR: "var(--warning)", ASIGNADO: "var(--info)", PUBLICADO: "var(--success)" } as const;
 const ESTADOS_ESTUDIO = { POR_ASIGNAR: "Por asignar", ASIGNADO: "Asignado", PUBLICADO: "Publicado" } as const;
 
-/** Indicador que lleva a donde se resuelve: la recepción ve el número y entra con un toque. */
-function Kpi({ titulo, valor, nota, href, icono: Icono }: { titulo: string; valor: number; nota: string; href: string; icono: LucideIcon }) {
-  return (
-    <Link
-      href={href}
-      className="group rounded-xl border bg-card p-4 text-card-foreground transition-colors outline-none hover:bg-muted/50 focus-visible:ring-3 focus-visible:ring-ring/50"
-    >
-      <div className="flex items-center justify-between text-sm text-muted-foreground">
-        <span>{titulo}</span>
-        <Icono className="size-4" aria-hidden />
-      </div>
-      <p className="mt-2 text-3xl font-semibold tracking-tight tabular-nums">{valor}</p>
-      <p className="mt-1 flex items-center gap-0.5 text-xs text-muted-foreground">
-        {nota}
-        <ChevronRight className="size-3.5 transition-transform group-hover:translate-x-0.5" aria-hidden />
-      </p>
-    </Link>
-  );
-}
-
 function Lista({ titulo, descripcion, filas, vacio }: {
-  titulo: string; descripcion?: string; filas: { nombre: string; valor: string }[]; vacio: string;
+  titulo: string; descripcion?: string; filas: { nombre: string; valor: string; n?: number; color?: string }[]; vacio: string;
 }) {
+  const max = Math.max(1, ...filas.map((f) => f.n ?? 0));
   return (
     <Card>
       <CardHeader>
@@ -59,16 +46,24 @@ function Lista({ titulo, descripcion, filas, vacio }: {
         {filas.length === 0 ? (
           <p className="text-sm text-muted-foreground">{vacio}</p>
         ) : (
-          <Table>
-            <TableBody>
-              {filas.map((f) => (
-                <TableRow key={f.nombre}>
-                  <TableCell className="pl-0 font-medium">{f.nombre}</TableCell>
-                  <TableCell className="pr-0 text-right text-muted-foreground tabular-nums">{f.valor}</TableCell>
-                </TableRow>
-              ))}
-            </TableBody>
-          </Table>
+          <ul className="space-y-3">
+            {filas.map((f) => (
+              <li key={f.nombre} className="text-sm">
+                <div className="flex items-center justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2 font-medium">
+                    {f.color && <span className="size-2.5 shrink-0 rounded-full" style={{ background: f.color }} aria-hidden />}
+                    <span className="truncate">{f.nombre}</span>
+                  </span>
+                  <span className="shrink-0 text-muted-foreground tabular-nums">{f.valor}</span>
+                </div>
+                {f.color && f.n !== undefined && (
+                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
+                    <div className="h-full rounded-full" style={{ width: `${Math.max(4, (f.n / max) * 100)}%`, background: f.color }} />
+                  </div>
+                )}
+              </li>
+            ))}
+          </ul>
         )}
       </CardContent>
     </Card>
@@ -94,8 +89,8 @@ export default async function Inicio() {
         _count: true,
       }),
     ]);
-    const filasOrdenes = ordenes.map((o) => ({ nombre: ESTADOS_ORDEN[o.estado], valor: String(o._count) }));
-    const filasEstudios = estudios.map((e) => ({ nombre: ESTADOS_ESTUDIO[e.estado], valor: String(e._count) }));
+    const filasOrdenes = ordenes.map((o) => filaOrden(o.estado, o._count));
+    const filasEstudios = estudios.map((e) => ({ nombre: ESTADOS_ESTUDIO[e.estado], valor: String(e._count), n: e._count, color: COLOR_ESTUDIO[e.estado] }));
     return (
       <div className="space-y-6">
         <EncabezadoPagina
@@ -182,10 +177,10 @@ export default async function Inicio() {
       />
 
       <section aria-label="Pendientes de hoy" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
-        <Kpi titulo="Citas de hoy" valor={citasHoy.length} nota={citasHoy.length ? `${pendientesCitas} por atender` : "Ver agenda"} href="/agenda" icono={CalendarDays} />
-        <Kpi titulo="Órdenes por agendar" valor={solicitadas} nota={solicitadas ? "Solicitadas sin cita" : "Todo agendado"} href="/ordenes?estado=SOLICITADA" icono={CalendarClock} />
-        <Kpi titulo="Estudios por asignar" valor={porAsignar} nota={porAsignar ? "Sin paciente o doctor" : "Todo al día"} href="/estudios?tab=por-asignar" icono={Inbox} />
-        <Kpi titulo="Informes en borrador" valor={borradores} nota={borradores ? "Por firmar" : "Nada pendiente"} href="/informes" icono={FileText} />
+        <Kpi titulo="Citas de hoy" valor={citasHoy.length} nota={citasHoy.length ? `${pendientesCitas} por atender` : "Ver agenda"} href="/agenda" icono={CalendarDays} tono="info" />
+        <Kpi titulo="Órdenes por agendar" valor={solicitadas} nota={solicitadas ? "Solicitadas sin cita" : "Todo agendado"} href="/ordenes?estado=SOLICITADA" icono={CalendarClock} tono="warning" />
+        <Kpi titulo="Estudios por asignar" valor={porAsignar} nota={porAsignar ? "Sin paciente o doctor" : "Todo al día"} href="/estudios?tab=por-asignar" icono={Inbox} tono="violet" />
+        <Kpi titulo="Informes en borrador" valor={borradores} nota={borradores ? "Por firmar" : "Nada pendiente"} href="/informes" icono={FileText} tono="success" />
       </section>
 
       <div className="grid gap-4 lg:grid-cols-5">
@@ -211,7 +206,7 @@ export default async function Inicio() {
                       ) : <span className="block truncate text-muted-foreground">Sin paciente</span>}
                       <span className="block truncate text-xs text-muted-foreground">{c.sala.nombre}</span>
                     </span>
-                    <Badge variant={c.estado === "ATENDIDA" ? "secondary" : "outline"}>{ETIQUETA_ESTADO_CITA[c.estado as EstadoCita]}</Badge>
+                    <BadgeCita estado={c.estado} />
                   </li>
                 ))}
               </ol>
@@ -267,7 +262,7 @@ export default async function Inicio() {
         <div className="grid gap-4 lg:grid-cols-3">
           <Lista
             titulo="Órdenes por estado"
-            filas={ordenes.map((o) => ({ nombre: ESTADOS_ORDEN[o.estado], valor: String(o._count) }))}
+            filas={ordenes.map((o) => filaOrden(o.estado, o._count))}
             vacio="Aún no hay órdenes."
           />
           <Lista titulo="Top doctores del mes" descripcion="Por estudios remitidos" filas={filasTop} vacio="Sin estudios remitidos este mes." />

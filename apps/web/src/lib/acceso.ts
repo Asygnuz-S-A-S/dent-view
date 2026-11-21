@@ -39,6 +39,11 @@ export function puedeVerEstudio(
   return rol === "doctor_remitente" && estudio.doctorRemitenteId === usuarioId;
 }
 
+/** Descarga del DICOM completo: solo personal del centro (el doctor remitente lo consulta en el visor, no lo descarga). */
+export function puedeDescargarEstudio(usuarioId: string, rol: string | null, estudio: EstudioAcceso | null): boolean {
+  return !!rol && (ROLES_TENANT_COMPLETO as readonly string[]).includes(rol) && puedeVerEstudio(usuarioId, rol, estudio);
+}
+
 /** Filtro Prisma de estudios visibles para un rol dentro de la organización activa. */
 export function filtroEstudios(organizationId: string, usuarioId: string, rol: string) {
   return rol === "doctor_remitente"
@@ -54,6 +59,8 @@ export type EntradaVisor = {
   rol: string | null;
   /** Enlace de resultados de la cookie (solo cuenta sin sesión): UIDs que incluye y si sigue activo (no vencido ni revocado). */
   enlace?: { estudioUids: string[]; activo: boolean } | null;
+  /** Hay un enlace DOCTOR activo que compartió este estudio con el correo del usuario (solo aplica al doctor remitente). */
+  compartido?: boolean;
 };
 
 export function decidirAccesoVisor(e: EntradaVisor): 200 | 401 | 403 {
@@ -64,5 +71,6 @@ export function decidirAccesoVisor(e: EntradaVisor): 200 | 401 | 403 {
   }
   if (e.metodo !== "GET" && e.metodo !== "HEAD") return 403;
   if (!e.uid) return 403;
-  return puedeVerEstudio(e.usuarioId, e.rol, e.estudio) ? 200 : 403;
+  if (puedeVerEstudio(e.usuarioId, e.rol, e.estudio)) return 200;
+  return e.compartido && e.rol === "doctor_remitente" ? 200 : 403;
 }

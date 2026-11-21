@@ -21,12 +21,18 @@ test("crear paciente nuevo, buscarlo y abrir su ficha", async ({ page }) => {
 
   await page.goto("/pacientes");
   await page.getByRole("textbox", { name: "Buscar paciente" }).fill(doc);
-  await page.getByRole("search").getByRole("button", { name: "Buscar", exact: true }).click();
+  await page.getByRole("button", { name: "Aplicar filtros" }).click();
   await expect(page).toHaveURL(new RegExp(`q=${doc}`));
   await expect(page.getByRole("row", { name: new RegExp(nombre) })).toBeVisible();
   await page.getByRole("link", { name: `Ver ficha de ${nombre}` }).click();
   await expect(page).toHaveURL(new RegExp(pacienteId));
 });
+
+/** Odontograma, plan y notas clínicas viven en el módulo clínico (secundario). */
+async function abrirClinico(page: import("@playwright/test").Page, sub: string | RegExp) {
+  await page.getByRole("tab", { name: /Módulo clínico/ }).click();
+  await page.getByRole("tab", { name: sub }).click();
+}
 
 test.describe("ficha del paciente", () => {
   test.beforeEach(async ({ page }) => {
@@ -39,19 +45,19 @@ test.describe("ficha del paciente", () => {
   });
 
   test("odontograma: marcar un diente", async ({ page }) => {
-    await page.getByRole("tab", { name: "Odontograma" }).click();
+    await abrirClinico(page, "Odontograma");
     await page.getByRole("radio", { name: "Caries" }).click();
     const resp = page.waitForResponse((r) => r.request().method() === "POST" && r.url().includes("/pacientes/"));
     await page.getByRole("option", { name: "Tooth 16" }).click();
     expect((await resp).status()).toBe(200);
     // El estado persiste tras recargar.
     await page.reload();
-    await page.getByRole("tab", { name: "Odontograma" }).click();
+    await abrirClinico(page, "Odontograma");
     await expect(page.getByRole("option", { name: "Tooth 16" })).toHaveCSS("color", "rgb(220, 38, 38)"); // color de la condición "caries"
   });
 
   test("notas clínicas: agregar nota", async ({ page }) => {
-    await page.getByRole("tab", { name: /Notas clínicas/ }).click();
+    await abrirClinico(page, /Notas clínicas/);
     const texto = `Nota QA ${Date.now()}`;
     await page.getByRole("textbox", { name: "Nueva nota clínica" }).fill(texto);
     await page.getByRole("button", { name: "Agregar nota" }).click();
@@ -60,7 +66,7 @@ test.describe("ficha del paciente", () => {
   });
 
   test("plan de tratamiento: agregar ítem", async ({ page }) => {
-    await page.getByRole("tab", { name: /Plan de tratamiento/ }).click();
+    await abrirClinico(page, /Plan de tratamiento/);
     await page.getByRole("spinbutton", { name: "Diente (FDI)" }).fill("16");
     const valor = page.getByRole("textbox", { name: "Valor (COP)" });
     await valor.fill("150000");

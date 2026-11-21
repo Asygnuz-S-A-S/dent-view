@@ -64,7 +64,7 @@ export default async function DetalleInforme({ params, searchParams }: { params:
           {estudio && (
             <Button asChild variant="outline">
               {/* Enlace normal: /visor lo sirve Caddy, no Next */}
-              <a href={`/visor/viewer?StudyInstanceUIDs=${encodeURIComponent(estudio.studyInstanceUid)}`}><Eye /> Abrir visor</a>
+              <a href={`/visor/viewer?StudyInstanceUIDs=${encodeURIComponent(estudio.studyInstanceUid)}`} target="_blank" rel="noopener"><Eye /> Abrir visor</a>
             </Button>
           )}
           <AccionesInforme

@@ -1,13 +1,13 @@
 "use client";
 
 import { numeroOrden } from "@/lib/ordenes";
-import { Check, Link2, Link2Off, Send, UserCheck } from "lucide-react";
+import { Check } from "lucide-react";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
-import { asignarEstudio, buscarPacientes, desvincularEstudio, ordenesDePaciente, publicarEstudio, vincularEstudioOrden } from "@/app/(app)/estudios/actions";
+import { asignarEstudio, buscarPacientes, desvincularEstudio, ordenesDePaciente, vincularEstudioOrden } from "@/app/(app)/estudios/actions";
 import { Button } from "@/components/ui/button";
 import { Command, CommandEmpty, CommandInput, CommandItem, CommandList } from "@/components/ui/command";
-import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
+import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
@@ -15,8 +15,8 @@ type Paciente = { id: string; nombre: string; documento: string };
 type Orden = { id: string; numero: number; estado: string };
 const SIN_ORDEN = "ninguna";
 
-export function AsignarEstudio({ estudioId, doctores }: { estudioId: string; doctores: { id: string; nombre: string }[] }) {
-  const [abierto, setAbierto] = useState(false);
+export function AsignarEstudio({ estudioId, doctores, abierto, onAbierto }: { estudioId: string; doctores: { id: string; nombre: string }[]; abierto: boolean; onAbierto: (o: boolean) => void }) {
+  const setAbierto = onAbierto;
   const [pendiente, iniciar] = useTransition();
   const [q, setQ] = useState("");
   const [pacientes, setPacientes] = useState<Paciente[]>([]);
@@ -62,9 +62,6 @@ export function AsignarEstudio({ estudioId, doctores }: { estudioId: string; doc
 
   return (
     <Dialog open={abierto} onOpenChange={cambiar}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline"><UserCheck /> Asignar</Button>
-      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Asignar estudio</DialogTitle>
@@ -117,37 +114,16 @@ export function AsignarEstudio({ estudioId, doctores }: { estudioId: string; doc
   );
 }
 
-export function PublicarEstudio({ estudioId }: { estudioId: string }) {
-  const [pendiente, iniciar] = useTransition();
-  return (
-    <Button
-      size="sm"
-      variant="outline"
-      disabled={pendiente}
-      onClick={() =>
-        iniciar(async () => {
-          const r = await publicarEstudio(estudioId);
-          if (r.ok) toast.success("Estudio publicado");
-          else toast.error(r.error);
-        })
-      }
-    >
-      <Send /> Publicar
-    </Button>
-  );
-}
-
-export function VincularOrden({ estudioId, pacienteId, ordenActualId }: { estudioId: string; pacienteId: string; ordenActualId: string | null }) {
-  const [abierto, setAbierto] = useState(false);
+export function VincularOrden({ estudioId, pacienteId, ordenActualId, abierto, onAbierto }: { estudioId: string; pacienteId: string; ordenActualId: string | null; abierto: boolean; onAbierto: (o: boolean) => void }) {
+  const setAbierto = onAbierto;
   const [pendiente, iniciar] = useTransition();
   const [ordenes, setOrdenes] = useState<Orden[]>([]);
   const [orden, setOrden] = useState("");
 
-  function cambiar(o: boolean) {
-    setAbierto(o);
-    if (o) void ordenesDePaciente(pacienteId).then(setOrdenes);
-    else setOrden("");
-  }
+  useEffect(() => {
+    if (abierto) void ordenesDePaciente(pacienteId).then(setOrdenes);
+  }, [abierto, pacienteId]);
+  const cambiar = (o: boolean) => { setAbierto(o); if (!o) setOrden(""); };
   const ejecutar = (accion: () => ReturnType<typeof vincularEstudioOrden>, mensaje: string) =>
     iniciar(async () => {
       const r = await accion();
@@ -158,9 +134,6 @@ export function VincularOrden({ estudioId, pacienteId, ordenActualId }: { estudi
 
   return (
     <Dialog open={abierto} onOpenChange={cambiar}>
-      <DialogTrigger asChild>
-        <Button size="sm" variant="outline">{ordenActualId ? <Link2Off /> : <Link2 />} {ordenActualId ? "Cambiar orden" : "Vincular orden"}</Button>
-      </DialogTrigger>
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Orden del estudio</DialogTitle>

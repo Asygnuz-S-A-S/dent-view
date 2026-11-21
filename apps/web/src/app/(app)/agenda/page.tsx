@@ -3,14 +3,15 @@ import { AgendaDia } from "@/components/agenda/agenda-dia";
 import { bogotaAUtc, esFecha, hoyBogota, utcABogota } from "@/lib/agenda";
 import { CLINICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
+import { FiltrosUrl } from "@/components/comunes/filtros-url";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
 export const dynamic = "force-dynamic";
 
-export default async function Agenda({ searchParams }: { searchParams: Promise<{ fecha?: string; orden?: string }> }) {
+export default async function Agenda({ searchParams }: { searchParams: Promise<{ fecha?: string; orden?: string; sala?: string }> }) {
   const ctx = await exigirContexto(CLINICOS);
   const org = ctx.organizationId;
-  const { fecha: f, orden: ordenId } = await searchParams;
+  const { fecha: f, orden: ordenId, sala } = await searchParams;
   const fecha = esFecha(f) ? f : hoyBogota();
 
   const [salas, citas, pacientes, ordenes] = await Promise.all([
@@ -30,8 +31,11 @@ export default async function Agenda({ searchParams }: { searchParams: Promise<{
   return (
     <div className="space-y-6">
       <EncabezadoPagina titulo="Agenda" descripcion="Citas por sala. Toca una franja libre para agendar." />
+      {/* En móvil la agenda ya trae su propio selector de sala. */}
+      <div className="max-md:hidden"><FiltrosUrl filtros={[{ tipo: "select", clave: "sala", etiqueta: "Sala", todos: "Todas las salas", opciones: salas.map((s) => ({ valor: s.id, texto: s.nombre })) }]} /></div>
       <AgendaDia
         fecha={fecha}
+        salaFiltro={salas.find((s) => s.id === sala)?.id ?? ""}
         hoy={hoyBogota()}
         salas={salas.map((s) => ({ id: s.id, nombre: s.nombre, color: s.color }))}
         pacientes={pacientes.map((p) => ({ id: p.id, nombre: p.nombre, documento: `${p.persona.tipoDocumento} ${p.persona.numeroDocumento}` }))}

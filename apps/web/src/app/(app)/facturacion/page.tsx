@@ -2,17 +2,17 @@
 import { prisma, type Prisma } from "@dent-view/db";
 import { Plus, Search } from "lucide-react";
 import Link from "next/link";
-import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Input } from "@/components/ui/input";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { aCargoDe, nombresDoctores } from "@/lib/facturacion-datos";
-import { ESTADOS_FACTURA, ETIQUETA_ESTADO_FACTURA, numeroFactura, saldo, totalPagado, VARIANTE_ESTADO_FACTURA } from "@/lib/facturacion";
+import { ESTADOS_FACTURA, ETIQUETA_ESTADO_FACTURA, numeroFactura, saldo, totalPagado } from "@/lib/facturacion";
 import { cop } from "@/lib/precios";
 import { GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 import { fechaCorta } from "@/lib/fechas";
+import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
 export const dynamic = "force-dynamic";
@@ -101,7 +101,7 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
                     <TableCell className="hidden text-right lg:table-cell">{cop(f.total)}</TableCell>
                     <TableCell className="hidden text-right lg:table-cell">{cop(totalPagado(f.pagos))}</TableCell>
                     <TableCell className="text-right">{f.estado === "ANULADA" ? "—" : cop(saldo(f.total, f.pagos))}</TableCell>
-                    <TableCell className="pr-4 md:pr-6"><Badge variant={VARIANTE_ESTADO_FACTURA[f.estado]}>{ETIQUETA_ESTADO_FACTURA[f.estado]}</Badge></TableCell>
+                    <TableCell className="pr-4 md:pr-6"><BadgeCuenta estado={estadoCuenta(f)} /></TableCell>
                   </TableRow>
                 ))}
               </TableBody>

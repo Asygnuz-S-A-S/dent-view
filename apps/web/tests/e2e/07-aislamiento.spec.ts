@@ -38,12 +38,16 @@ test.describe("admin de otro centro (admin2) no ve datos de Radex", () => {
 test.describe("doctor remitente", () => {
   test.use({ storageState: authFile("doctor") });
 
-  test("no accede a /pacientes (404)", async ({ page }) => {
-    const r = await page.goto("/pacientes");
-    expect(r?.status()).toBe(404);
+  test("/pacientes solo lista sus pacientes (no los que no remitió)", async ({ page }) => {
+    const r = await page.goto(`/pacientes?q=${leerEstado().doc}`);
+    expect(r?.status()).toBe(200);
+    await expect(page.getByText(leerEstado().doc!)).toHaveCount(0);
+    // ?doctor= no amplía su alcance a los pacientes de otro doctor.
+    await page.goto("/pacientes?doctor=otro");
+    await expect(page.getByText(leerEstado().doc!)).toHaveCount(0);
   });
 
-  test("no ve la ficha de un paciente", async ({ page }) => {
+  test("no ve la ficha de un paciente que no remitió", async ({ page }) => {
     const r = await page.goto(`/pacientes/${leerEstado().pacienteId}`);
     expect(r?.status()).toBe(404);
   });

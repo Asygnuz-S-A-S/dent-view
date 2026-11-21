@@ -38,16 +38,17 @@ export async function crearEnlace(n: NuevoEnlace) {
 }
 
 /** Encola dos correos separados: el enlace y el código. `direccion` solo si no es el correo de la ficha del paciente. */
-export async function encolarEntrega(e: { enlaceId: string; organizationId: string; pacienteId: string; token: string; codigo: string; centro: string; paciente: string; destinatario: string; venceEn: Date; direccion?: string | null }) {
+export async function encolarEntrega(e: { enlaceId: string; organizationId: string; pacienteId: string; token: string; codigo: string; centro: string; paciente: string; destinatario: string; venceEn: Date; direccion?: string | null; /** correos de estudio compartido: sin nombre del paciente en el cuerpo */ generico?: boolean; claveBase?: string }) {
   const contexto = {
     destinatario: e.destinatario, paciente: e.paciente, centro: e.centro, enlace: `${urlBase()}/resultados/${e.token}`, codigo: e.codigo,
     vence: e.venceEn.toLocaleDateString("es-CO", { timeZone: "America/Bogota", dateStyle: "long" }),
   };
   const mensajes = [];
-  for (const [tipo, sufijo] of [["ENTREGA_ENLACE", "enlace"], ["ENTREGA_CODIGO", "codigo"]] as const) {
+  const tipos = e.generico ? ([["ESTUDIO_ENLACE", "enlace"], ["ESTUDIO_CODIGO", "codigo"]] as const) : ([["ENTREGA_ENLACE", "enlace"], ["ENTREGA_CODIGO", "codigo"]] as const);
+  for (const [tipo, sufijo] of tipos) {
     // N2: cada mensaje lleva solo su credencial (el enlace no viaja con el código ni al revés).
     const propio = sufijo === "enlace" ? { ...contexto, codigo: null } : { ...contexto, enlace: null };
-    const m = await encolarMensaje({ organizationId: e.organizationId, tipo, pacienteId: e.pacienteId, direccion: e.direccion, contexto: propio, claveUnica: `entrega-${e.enlaceId}-${sufijo}` });
+    const m = await encolarMensaje({ organizationId: e.organizationId, tipo, pacienteId: e.pacienteId, direccion: e.direccion, contexto: propio, claveUnica: `${e.claveBase ?? `entrega-${e.enlaceId}`}-${sufijo}` });
     // Un mensaje omitido no debe conservar credenciales.
     if (m?.estado === "OMITIDO") await prisma.mensaje.update({ where: { id: m.id }, data: { contexto: {} } });
     mensajes.push(m);

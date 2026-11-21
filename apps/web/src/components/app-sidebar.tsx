@@ -36,7 +36,7 @@ const NAV = [
     grupo: "Gestión",
     items: [
       { href: "/inicio", label: "Inicio", icon: House, roles: TODOS },
-      { href: "/pacientes", label: "Pacientes", icon: UserRound, roles: ["admin_tenant", "recepcion", "especialista"] },
+      { href: "/pacientes", label: "Pacientes", icon: UserRound, roles: TODOS },
       { href: "/ordenes", label: "Órdenes", icon: ClipboardList, roles: TODOS },
       { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/estudios", label: "Estudios", icon: ScanLine, roles: TODOS },

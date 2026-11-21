@@ -23,3 +23,6 @@ export function calcularEdad(nacimiento: Date, hoy: Date = new Date()) {
   if (aunNoCumple) edad--;
   return edad;
 }
+
+/** Iniciales (máx. 2) para el avatar de respaldo. */
+export const iniciales = (nombre: string) => nombre.split(/\s+/).filter(Boolean).slice(0, 2).map((x) => x[0]!.toUpperCase()).join("");

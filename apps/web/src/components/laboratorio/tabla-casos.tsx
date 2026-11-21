@@ -40,7 +40,7 @@ export function TablaCasos({ casos, gestionar, pacientes, ordenes, mostrarPacien
                     <span className="block capitalize">{c.paciente.toLowerCase()}</span>
                     {/* En pantallas angostas el trabajo y la entrega se pliegan bajo el nombre. */}
                     <span className="block text-xs font-normal text-muted-foreground xl:hidden">{c.tipo} · {c.laboratorio}</span>
-                    <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground xl:hidden">Entrega {fecha(c.entregaEsperada)}{estaVencido(c) && <Badge variant="destructive">Vencido</Badge>}</span>
+                    <span className="flex items-center gap-1 text-xs font-normal text-muted-foreground xl:hidden">Entrega {fecha(c.entregaEsperada)}{estaVencido(c) && <Badge variant="danger">Vencido</Badge>}</span>
                   </TableCell>
                 )}
                 <TableCell className={mostrarPaciente ? "hidden xl:table-cell" : "pl-4 md:pl-6"}>
@@ -49,11 +49,11 @@ export function TablaCasos({ casos, gestionar, pacientes, ordenes, mostrarPacien
                 </TableCell>
                 <TableCell className="hidden xl:table-cell">{fecha(c.enviado)}</TableCell>
                 <TableCell className="hidden xl:table-cell">
-                  <div className="flex items-center gap-2">{fecha(c.entregaEsperada)}{estaVencido(c) && <Badge variant="destructive">Vencido</Badge>}</div>
+                  <div className="flex items-center gap-2">{fecha(c.entregaEsperada)}{estaVencido(c) && <Badge variant="danger">Vencido</Badge>}</div>
                 </TableCell>
                 <TableCell className="hidden xl:table-cell">{fecha(c.recibido)}</TableCell>
                 <TableCell className="hidden text-right xl:table-cell">{cop(c.valor)}</TableCell>
-                <TableCell>{gestionar ? <EstadoCaso id={c.id} estado={c.estado} /> : <Badge variant="secondary">{ETIQUETA_LAB[c.estado]}</Badge>}</TableCell>
+                <TableCell>{gestionar ? <EstadoCaso id={c.id} estado={c.estado} /> : <Badge variant="info">{ETIQUETA_LAB[c.estado]}</Badge>}</TableCell>
                 {gestionar && (
                   <TableCell className="pr-4 md:pr-6 text-right">
                     <CasoDialog

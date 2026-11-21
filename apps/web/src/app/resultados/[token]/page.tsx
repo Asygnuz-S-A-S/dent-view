@@ -84,7 +84,7 @@ export default async function Resultados({ params }: { params: Promise<{ token: 
           </ul>
           {estudios.length > 0 && (
             // Enlace normal: /visor lo sirve Caddy, no Next
-            <Button asChild><a href={`/visor/viewer?StudyInstanceUIDs=${estudios.map((e) => encodeURIComponent(e.studyInstanceUid)).join(",")}`}><Eye /> Ver imágenes</a></Button>
+            <Button asChild><a href={`/visor/viewer?StudyInstanceUIDs=${estudios.map((e) => encodeURIComponent(e.studyInstanceUid)).join(",")}`} target="_blank" rel="noopener"><Eye /> Ver imágenes</a></Button>
           )}
         </CardContent>
       </Card>

@@ -1,35 +1,28 @@
-import { Activity, CalendarClock, ClipboardList, FileImage, Smile, UserRound, type LucideIcon } from "lucide-react";
+import { Activity, CalendarClock, ClipboardList, FileImage, FileText, HandCoins, Send, ShieldCheck, UserRound, PhoneCall, type LucideIcon } from "lucide-react";
+import Link from "next/link";
 import { fechaHoraCompleta } from "@/lib/fechas";
+import { ETIQUETA_TIPO_HOJA, type EntradaHoja, type TipoHoja } from "@/lib/pacientes-hoja";
 
-export type EventoVista = { id: string; tipo: string; actor: string; creadoEn: Date };
-
-const ICONOS: [string, LucideIcon][] = [
-  ["paciente.", UserRound],
-  ["odontograma.", Smile],
-  ["orden.", ClipboardList],
-  ["estudio.", FileImage],
-  ["cita.", CalendarClock],
-];
-const ETIQUETAS: Record<string, string> = {
-  "paciente.creado": "Paciente creado",
-  "paciente.actualizado": "Datos del paciente actualizados",
-  "odontograma.actualizado": "Odontograma actualizado",
+const ICONOS: Record<TipoHoja, LucideIcon> = {
+  orden: ClipboardList, cita: CalendarClock, estudio: FileImage, informe: FileText, entrega: Send,
+  pago: HandCoins, consentimiento: ShieldCheck, seguimiento: PhoneCall, paciente: UserRound,
 };
 
-export function HojaDeVida({ eventos }: { eventos: EventoVista[] }) {
-  if (!eventos.length) return <p className="py-8 text-center text-sm text-muted-foreground">Aún no hay eventos registrados.</p>;
+export function HojaDeVida({ entradas }: { entradas: EntradaHoja[] }) {
+  if (!entradas.length) return <p className="py-8 text-center text-sm text-muted-foreground">No hay eventos para mostrar.</p>;
   return (
     <ol className="space-y-4">
-      {eventos.map((e) => {
-        const Icono = ICONOS.find(([p]) => e.tipo.startsWith(p))?.[1] ?? Activity;
+      {entradas.map((e) => {
+        const Icono = ICONOS[e.tipo] ?? Activity;
         return (
-          <li key={e.id} className="flex gap-3">
-            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted"><Icono className="size-4" /></span>
-            <div>
-              <p className="text-sm font-medium">{ETIQUETAS[e.tipo] ?? e.tipo}</p>
-              <p className="text-xs text-muted-foreground">
-                {e.actor} · {fechaHoraCompleta(e.creadoEn)}
+          <li key={e.id} className="flex gap-3 break-inside-avoid">
+            <span className="mt-0.5 flex size-8 shrink-0 items-center justify-center rounded-full bg-muted"><Icono className="size-4" aria-hidden /></span>
+            <div className="min-w-0">
+              <p className="text-sm font-medium">
+                {e.href ? <Link href={e.href} className="underline-offset-4 hover:underline print:no-underline">{e.titulo}</Link> : e.titulo}
               </p>
+              {e.detalle && <p className="text-sm text-muted-foreground">{e.detalle}</p>}
+              <p className="text-xs text-muted-foreground">{ETIQUETA_TIPO_HOJA[e.tipo]} · {fechaHoraCompleta(e.fecha)}</p>
             </div>
           </li>
         );

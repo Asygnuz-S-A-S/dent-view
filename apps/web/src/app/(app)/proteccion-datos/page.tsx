@@ -69,7 +69,7 @@ export default async function ProteccionDatos({ searchParams }: { searchParams: 
                         <TableCell className="max-w-[12rem] whitespace-normal pl-4 md:pl-6"><p className="font-medium">{s.solicitanteNombre}</p><p className="truncate text-xs text-muted-foreground">{s.solicitanteCorreo}</p><p className="text-xs text-muted-foreground lg:hidden">{ETIQUETA_ESTADO_SOLICITUD[s.estado as EstadoSolicitud]} · {ETIQUETA_TIPO_SOLICITUD[s.tipo as TipoSolicitud]}{abierta ? ` · ${dias < 0 ? `vencida hace ${-dias} d` : `${dias} d`}` : ""}</p></TableCell>
                         <TableCell className="hidden lg:table-cell">{ETIQUETA_TIPO_SOLICITUD[s.tipo as TipoSolicitud]}</TableCell>
                         <TableCell className="hidden lg:table-cell">{(s.pacienteId && nombrePac.get(s.pacienteId)) || "—"}</TableCell>
-                        <TableCell className="hidden lg:table-cell"><Badge variant="secondary">{ETIQUETA_ESTADO_SOLICITUD[s.estado as EstadoSolicitud]}</Badge></TableCell>
+                        <TableCell className="hidden lg:table-cell"><Badge variant="info">{ETIQUETA_ESTADO_SOLICITUD[s.estado as EstadoSolicitud]}</Badge></TableCell>
                         <TableCell className={`hidden lg:table-cell ${abierta && dias < 0 ? "font-medium text-destructive" : ""}`}>{abierta ? (dias < 0 ? `Vencida hace ${-dias} d` : `${dias} d`) : s.resueltaEn ? fmt(s.resueltaEn) : "—"}</TableCell>
                         <TableCell className="whitespace-normal pr-4 md:pr-6"><AvanzarSolicitud id={s.id} estado={s.estado} /></TableCell>
                       </TableRow>

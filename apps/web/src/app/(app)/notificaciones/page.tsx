@@ -45,7 +45,7 @@ export default async function Notificaciones() {
                   <TableCell>{ETIQUETA_TIPO_MENSAJE[m.tipo as TipoMensaje] ?? m.tipo}</TableCell>
                   <TableCell className="hidden lg:table-cell">{m.canal}</TableCell>
                   <TableCell className="hidden lg:table-cell">{m.destinatario ?? "—"}</TableCell>
-                  <TableCell><Badge variant={m.estado === "ENVIADO" ? "default" : m.estado === "FALLIDO" ? "destructive" : "secondary"}>{m.estado === "ENVIADO" && m.simulado ? "Simulado" : m.estado}</Badge></TableCell>
+                  <TableCell><Badge variant={m.estado === "ENVIADO" ? (m.simulado ? "info" : "success") : m.estado === "FALLIDO" ? "danger" : "warning"}>{m.estado === "ENVIADO" && m.simulado ? "Simulado" : m.estado}</Badge></TableCell>
                   <TableCell className="hidden pr-4 md:pr-6 text-xs text-muted-foreground lg:table-cell">{m.motivo ?? m.error ?? (m.intentos ? `${m.intentos} intento(s)` : "")}</TableCell>
                 </TableRow>
               ))}
