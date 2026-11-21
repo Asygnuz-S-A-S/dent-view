@@ -1,0 +1,20 @@
+# Override de producción: docker compose -f compose.yaml -f compose.produccion.yaml up -d --build
+services:
+  caddy:
+    ports: !override
+      - "80:80"
+      - "443:443"
+    volumes:
+      - ./Caddyfile.produccion:/etc/caddy/Caddyfile:ro
+      - ./Caddyfile.rutas:/etc/caddy/Caddyfile.rutas:ro
+      - caddydata:/data
+    restart: unless-stopped
+  mailpit:
+    ports: !override [] # sin SMTP real configurado el correo queda capturado, no sale; no se publica la UI
+    restart: unless-stopped
+  postgres: {restart: unless-stopped}
+  minio: {restart: unless-stopped}
+  orthanc: {restart: unless-stopped}
+  visor: {restart: unless-stopped}
+  web: {restart: unless-stopped}
+  worker: {restart: unless-stopped}

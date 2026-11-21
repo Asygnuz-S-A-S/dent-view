@@ -1,0 +1,73 @@
+# Cada push a main despliega a la VM de GCP (dent-view-asygnuz). Sin claves: Workload Identity Federation,
+# restringida a este repo y a la rama main. Los secretos de producción viven solo en la VM (infra/.env).
+name: Desplegar a GCP
+
+on:
+  push:
+    branches: [main]
+  workflow_dispatch:
+
+concurrency:
+  group: desplegar
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROYECTO: dent-view-asygnuz
+  ZONA: us-east1-b
+  VM: dent-view
+  URL: https://dentview.asygnuz.com
+
+jobs:
+  desplegar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: true
+
+      - name: Parchar el visor OHIF
+        run: bash viewer/scripts/aplicar-parches.sh
+
+      - name: Empaquetar
+        run: |
+          tar --exclude=.git --exclude=.github --exclude=node_modules --exclude=.next \
+              --exclude=infra/.env --exclude=infra/Caddyfile.produccion --exclude='docs/qa' \
+              -czf "$RUNNER_TEMP/app.tgz" .
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/187757273619/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deploy@dent-view-asygnuz.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      - name: Subir a la VM
+        run: |
+          gcloud compute scp "$RUNNER_TEMP/app.tgz" "$VM:/tmp/app.tgz" \
+            --project="$PROYECTO" --zone="$ZONA" --quiet
+
+      - name: Construir y levantar
+        run: |
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command '
+            set -e
+            cd /opt/dent-view
+            sudo tar xzf /tmp/app.tgz --warning=no-unknown-keyword
+            sudo rm -f /tmp/app.tgz
+            cd infra
+            sudo docker compose -f compose.yaml -f compose.produccion.yaml up -d --build --remove-orphans
+            sudo docker image prune -f >/dev/null
+          '
+
+      - name: Verificar
+        run: |
+          for i in $(seq 1 30); do
+            code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/ingresar" || true)
+            [ "$code" = "200" ] && { echo "OK $code"; exit 0; }
+            sleep 10
+          done
+          echo "El sitio no respondió 200"; exit 1
