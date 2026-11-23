@@ -20,32 +20,39 @@ model Persona {
 
 // Registro del paciente dentro de un centro: cada tenant es dueño de sus datos.
 model PacienteTenant {
-  id              String                @id @default(cuid())
-  organizationId  String
-  organization    Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  personaId       String
-  persona         Persona               @relation(fields: [personaId], references: [id])
+  id                     String                 @id @default(cuid())
+  organizationId         String
+  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  personaId              String
+  persona                Persona                @relation(fields: [personaId], references: [id])
   // Datos propios del centro: nunca se comparten con otros centros.
-  nombre          String
-  fechaNacimiento DateTime?
-  celular         String?
-  correo          String?
-  direccion       String?
-  alertas         String? // alergias, embarazo, condiciones relevantes para el estudio
-  notas           String?
-  fotoKey         String? // clave S3 de la foto de perfil (tenants/{org}/pacientes/{id}/…); solo se sirve por ruta autenticada
-  creadoEn        DateTime              @default(now())
-  estudios        Estudio[]
-  imagenes        ImagenEstudio[]
-  ordenes         Orden[]
-  citas           Cita[]
-  condiciones     CondicionDental[]
-  eventos         Evento[]
-  planItems       PlanTratamientoItem[]
-  notasClinicas   NotaClinica[]
-  facturas        Factura[]
-  casosLab        CasoLaboratorio[]
-  doctores        DoctorPaciente[]
+  nombre                 String
+  fechaNacimiento        DateTime?
+  celular                String?
+  correo                 String?
+  direccion              String?
+  alertas                String? // alergias, embarazo, condiciones relevantes para el estudio
+  notas                  String?
+  fotoKey                String? // clave S3 de la foto de perfil (tenants/{org}/pacientes/{id}/…); solo se sirve por ruta autenticada
+  ultimaVisitaEn         DateTime? // fidelización: última atención (la mantiene la lógica de CRM)
+  proximoControlEn       DateTime? // fidelización: cuándo invitar a control
+  creadoEn               DateTime               @default(now())
+  estudios               Estudio[]
+  imagenes               ImagenEstudio[]
+  ordenes                Orden[]
+  citas                  Cita[]
+  condiciones            CondicionDental[]
+  eventos                Evento[]
+  planItems              PlanTratamientoItem[]
+  notasClinicas          NotaClinica[]
+  facturas               Factura[]
+  casosLab               CasoLaboratorio[]
+  doctores               DoctorPaciente[]
+  valoraciones           Valoracion[]
+  leads                  Lead[]
+  actividadesCrm         ActividadLead[]
+  tareasCrm              TareaCRM[]
+  inscripcionesSecuencia InscripcionSecuencia[]
 
   @@unique([organizationId, personaId])
   @@index([organizationId])
@@ -332,16 +339,16 @@ model FacturaItem {
 }
 
 model Pago {
-  id              String    @id @default(cuid())
-  facturaId       String
-  factura         Factura   @relation(fields: [facturaId], references: [id], onDelete: Cascade)
-  valor           Int
-  medio           MedioPago @default(EFECTIVO)
-  fecha           DateTime  @default(now())
-  nota            String?
-  registradoPorId String?
+  id                String    @id @default(cuid())
+  facturaId         String
+  factura           Factura   @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  valor             Int
+  medio             MedioPago @default(EFECTIVO)
+  fecha             DateTime  @default(now())
+  nota              String?
+  registradoPorId   String?
   // Pago hecho por pasarela: el link que lo originó (uno a uno) y el id de la transacción en el proveedor.
-  linkPagoId        String?  @unique
+  linkPagoId        String?   @unique
   linkPago          LinkPago? @relation(fields: [linkPagoId], references: [id], onDelete: SetNull)
   referenciaExterna String?
 

@@ -59,7 +59,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         {invitaciones.length > 0 && (
           <AvisoInvitaciones invitaciones={invitaciones.map((i) => ({ id: i.id, centro: i.organization.name, rol: ETIQUETA_ROL[i.role ?? ""] ?? "miembro" }))} />
         )}
-        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-background/80 px-4 backdrop-blur-md supports-[backdrop-filter]:bg-background/70">
+        <header className="sticky top-0 z-10 flex h-14 shrink-0 items-center gap-2 border-b bg-card px-4">
           <SidebarTrigger className="-ml-1" />
           <Separator orientation="vertical" className="mr-2 data-[orientation=vertical]:h-4" />
           {/* Logo del centro (data URL validado al guardarlo); sin logo, su nombre en el color de la marca. */}

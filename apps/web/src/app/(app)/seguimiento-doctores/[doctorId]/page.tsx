@@ -6,6 +6,8 @@ import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 import { Kpi } from "@/components/comunes/kpi";
 import { CrearSeguimiento, EditarSeguimiento, RegistrarContacto } from "@/components/seguimiento-doctores/acciones";
+import { Delta, TarjetaGrafica } from "@/components/comunes/tarjeta-grafica";
+import { fraseVariacion } from "@/components/comunes/variacion";
 import { GraficaRemisiones } from "@/components/seguimiento-doctores/sparkline";
 import { Badge } from "@/components/ui/badge";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
@@ -42,6 +44,8 @@ export default async function FichaDoctor({ params }: { params: Promise<{ doctor
   const listaResp = responsables.map((m) => ({ id: m.userId, nombre: m.user.name }));
   const nombreDe = new Map(listaResp.map((r) => [r.id, r.nombre]));
   const ab = d.abierto;
+  const sumaMeses = (xs: { n: number }[]) => xs.reduce((t, x) => t + x.n, 0);
+  const reciente = sumaMeses(d.porMes.slice(-3)), previo = sumaMeses(d.porMes.slice(-6, -3));
 
   return (
     <div className="space-y-6">
@@ -63,10 +67,16 @@ export default async function FichaDoctor({ params }: { params: Promise<{ doctor
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">
-        <Card className="lg:col-span-2">
-          <CardHeader><CardTitle>Remisiones por mes</CardTitle></CardHeader>
-          <CardContent><GraficaRemisiones datos={d.porMes} /></CardContent>
-        </Card>
+        <TarjetaGrafica
+          className="lg:col-span-2"
+          titulo={reciente === 0 && previo === 0 ? "No ha remitido estudios en los últimos 6 meses" : `Remitió ${reciente} ${reciente === 1 ? "estudio" : "estudios"} en los últimos 3 meses: ${fraseVariacion(reciente, previo, "", "los 3 meses anteriores")}`}
+          subtitulo="Remisiones por mes, últimos 12 meses"
+          cifra={reciente}
+          delta={<Delta actual={reciente} anterior={previo} etiqueta="vs. los 3 meses anteriores" />}
+          comoSeCalcula="estudios remitidos por el doctor en cada mes. La comparación pone los últimos 3 meses junto a los 3 anteriores."
+        >
+          <GraficaRemisiones datos={d.porMes} />
+        </TarjetaGrafica>
         <Card>
           <CardHeader><CardTitle>Convenio y descuentos</CardTitle></CardHeader>
           <CardContent className="space-y-2 text-sm">

@@ -1,10 +1,8 @@
-"use client";
 // Adaptado de OpenDentist (MIT, © 2026 Clawnify) — https://github.com/clawnify/OpenDentist
-
-import { Area, AreaChart, Bar, BarChart, CartesianGrid, Cell, Pie, PieChart, XAxis, YAxis } from "recharts";
-import { COLOR_VARIANTE, VARIANTE_CITA, VARIANTE_ORDEN } from "@/components/comunes/estado-badge";
-import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { ChartContainer, ChartTooltip, ChartTooltipContent, type ChartConfig } from "@/components/ui/chart";
+import { BarrasLista, type FilaBarra } from "@/components/comunes/barras-lista";
+import { GraficoBarrasDia } from "@/components/comunes/grafico-barras-dia";
+import { Delta, TarjetaGrafica } from "@/components/comunes/tarjeta-grafica";
+import { fraseVariacion } from "@/components/comunes/variacion";
 import { ETIQUETA_ESTADO_CITA, type EstadoCita } from "@/lib/agenda";
 import { ETIQUETA_ESTADO_ORDEN, type EstadoOrden } from "@/lib/ordenes";
 import { cop } from "@/lib/precios";
@@ -16,117 +14,90 @@ export type DatosGraficos = {
   estudiosPorModalidad: Serie;
   topDoctores: { nombre: string; valor: number }[];
   citasPorEstado: Serie;
+  cobros: number;
 };
 
-// Paleta del tema (chart-1 sigue el color del centro).
-const PALETA = ["var(--chart-1)", "var(--chart-2)", "var(--chart-3)", "var(--chart-4)", "var(--chart-5)", "var(--chart-6)"];
-const color = (i: number) => PALETA[i % PALETA.length];
+const suma = (s: Serie) => s.reduce((t, x) => t + x.total, 0);
+const pct = (n: number, t: number) => (t ? Math.round((n / t) * 100) : 0);
+const ORDEN_FLUJO: EstadoOrden[] = ["SOLICITADA", "AGENDADA", "TOMADA", "INFORMADA", "ENTREGADA", "CANCELADA"];
+const ORDEN_CITA: EstadoCita[] = ["PROGRAMADA", "CONFIRMADA", "LLEGO", "EN_ATENCION", "ATENDIDA", "NO_ASISTIO", "CANCELADA"];
+const MALOS_CITA = ["NO_ASISTIO", "CANCELADA"];
 
-const cfg = (etiqueta: string, c = "var(--chart-1)"): ChartConfig => ({ total: { label: etiqueta, color: c } });
-
-function Panel({ titulo, vacio, children }: { titulo: string; vacio: boolean; children: React.ReactNode }) {
-  return (
-    <Card className="min-w-0">
-      <CardHeader><CardTitle className="text-base">{titulo}</CardTitle></CardHeader>
-      <CardContent>{vacio ? <p className="py-10 text-center text-sm text-muted-foreground">Sin datos en el rango.</p> : children}</CardContent>
-    </Card>
-  );
+function filasPorEstado(s: Serie, orden: string[], etiqueta: Record<string, string>, malos: string[]): FilaBarra[] {
+  const total = suma(s);
+  return orden.flatMap((e) => {
+    const n = s.find((x) => x.nombre === e)?.total ?? 0;
+    return n ? [{ nombre: etiqueta[e] ?? e, n, valor: String(n), extra: `${pct(n, total)} %`, malo: malos.includes(e) }] : [];
+  });
 }
 
-// El día llega como "MM-DD".
-const fechaCorta = (d: string) => `${d.slice(3)}/${d.slice(0, 2)}`;
+/** `dias` son las fechas YYYY-MM-DD del rango, en el mismo orden que `d.ingresosPorDia`; `p` es el periodo anterior de igual duración. */
+export function Graficos({ d, p, dias }: { d: DatosGraficos; p: DatosGraficos; dias: string[] }) {
+  const cobrosDia = d.ingresosPorDia.map((x, i) => ({ dia: dias[i]!, valor: x.valor }));
+  const ordenes = suma(d.ordenesPorEstado);
+  const solicitadas = d.ordenesPorEstado.find((x) => x.nombre === "SOLICITADA")?.total ?? 0;
+  const citas = suma(d.citasPorEstado);
+  const atendidas = d.citasPorEstado.find((x) => x.nombre === "ATENDIDA")?.total ?? 0;
+  const noVino = d.citasPorEstado.find((x) => x.nombre === "NO_ASISTIO")?.total ?? 0;
+  const estudios = suma(d.estudiosPorModalidad);
+  const modalidades = [...d.estudiosPorModalidad].sort((a, b) => b.total - a.total);
+  const totalDoctores = d.topDoctores.reduce((t, x) => t + x.valor, 0);
+  const topDoctor = d.topDoctores[0];
 
-function Ingresos({ datos }: { datos: { nombre: string; total: number }[] }) {
-  return (
-    <ChartContainer config={cfg("Cobros", "var(--chart-6)")} className="h-64 w-full">
-      <AreaChart data={datos} accessibilityLayer margin={{ left: 4, right: 8, top: 8 }}>
-        <defs>
-          <linearGradient id="relleno-ingresos" x1="0" y1="0" x2="0" y2="1">
-            <stop offset="0%" stopColor="var(--color-total)" stopOpacity={0.45} />
-            <stop offset="100%" stopColor="var(--color-total)" stopOpacity={0.03} />
-          </linearGradient>
-        </defs>
-        <CartesianGrid vertical={false} strokeDasharray="3 3" />
-        <XAxis dataKey="nombre" tickLine={false} axisLine={false} minTickGap={20} tickFormatter={fechaCorta} />
-        <YAxis hide />
-        <ChartTooltip content={<ChartTooltipContent formatter={(v) => cop(Number(v))} />} />
-        <Area dataKey="total" name="Cobros" type="monotone" stroke="var(--color-total)" strokeWidth={2} fill="url(#relleno-ingresos)" />
-      </AreaChart>
-    </ChartContainer>
-  );
-}
-
-/** Barras con un color de la paleta por categoría. */
-function Barras({ datos, etiqueta, formato, horizontal }: { datos: { nombre: string; total: number }[]; etiqueta: string; formato?: (n: number) => string; horizontal?: boolean }) {
-  return (
-    <ChartContainer config={cfg(etiqueta)} className="h-64 w-full">
-      <BarChart data={datos} layout={horizontal ? "vertical" : "horizontal"} accessibilityLayer>
-        <CartesianGrid vertical={!!horizontal} horizontal={!horizontal} strokeDasharray="3 3" />
-        {horizontal ? (
-          <>
-            <XAxis type="number" hide />
-            <YAxis type="category" dataKey="nombre" width={110} tickLine={false} axisLine={false} />
-          </>
-        ) : (
-          <>
-            <XAxis dataKey="nombre" tickLine={false} axisLine={false} interval="preserveStartEnd" />
-            <YAxis hide />
-          </>
-        )}
-        <ChartTooltip cursor={{ fill: "var(--muted)", opacity: 0.5 }} content={<ChartTooltipContent hideLabel={false} formatter={(v) => (formato ? formato(Number(v)) : String(v))} />} />
-        <Bar dataKey="total" name={etiqueta} radius={4}>
-          {datos.map((_, i) => <Cell key={i} fill={color(i)} />)}
-        </Bar>
-      </BarChart>
-    </ChartContainer>
-  );
-}
-
-/** Dona con el total al centro y leyenda en HTML (legible y accesible). */
-function Dona({ datos, etiqueta }: { datos: { nombre: string; total: number; color: string }[]; etiqueta: string }) {
-  const total = datos.reduce((t, d) => t + d.total, 0);
-  return (
-    <div className="flex flex-col items-center gap-4 sm:flex-row">
-      <ChartContainer config={cfg(etiqueta)} className="aspect-square h-52 shrink-0">
-        <PieChart accessibilityLayer>
-          <ChartTooltip content={<ChartTooltipContent hideLabel nameKey="nombre" />} />
-          <Pie data={datos} dataKey="total" nameKey="nombre" innerRadius="62%" outerRadius="95%" paddingAngle={2} strokeWidth={0}>
-            {datos.map((d) => <Cell key={d.nombre} fill={d.color} />)}
-          </Pie>
-          <text x="50%" y="48%" textAnchor="middle" className="fill-foreground text-2xl font-semibold tabular-nums">{total}</text>
-          <text x="50%" y="60%" textAnchor="middle" className="fill-muted-foreground text-xs">{etiqueta}</text>
-        </PieChart>
-      </ChartContainer>
-      <ul className="grid w-full min-w-0 gap-2 text-sm">
-        {datos.map((d) => (
-          <li key={d.nombre} className="flex items-center justify-between gap-3">
-            <span className="flex min-w-0 items-center gap-2"><span className="size-2.5 shrink-0 rounded-full" style={{ background: d.color }} aria-hidden /><span className="truncate">{d.nombre}</span></span>
-            <span className="text-muted-foreground tabular-nums">{d.total} · {Math.round((d.total / total) * 100)}%</span>
-          </li>
-        ))}
-      </ul>
-    </div>
-  );
-}
-
-export function Graficos({ d }: { d: DatosGraficos }) {
-  const ingresos = d.ingresosPorDia.map((x) => ({ nombre: x.dia, total: x.valor }));
-  const orden = d.ordenesPorEstado.map((x) => ({ nombre: ETIQUETA_ESTADO_ORDEN[x.nombre as EstadoOrden] ?? x.nombre, total: x.total, color: COLOR_VARIANTE[VARIANTE_ORDEN[x.nombre as EstadoOrden] ?? "secondary"] }));
-  const citas = d.citasPorEstado.map((x) => ({ nombre: ETIQUETA_ESTADO_CITA[x.nombre as EstadoCita] ?? x.nombre, total: x.total, color: COLOR_VARIANTE[VARIANTE_CITA[x.nombre as EstadoCita] ?? "secondary"] }));
-  const doctores = d.topDoctores.map((x) => ({ nombre: x.nombre, total: x.valor }));
   return (
     <div className="grid grid-cols-1 gap-4 lg:grid-cols-2 [&>*]:min-w-0">
-      <div className="lg:col-span-2 min-w-0">
-        <Panel titulo="Ingresos por día" vacio={ingresos.every((x) => x.total === 0)}>
-          <Ingresos datos={ingresos} />
-        </Panel>
-      </div>
-      <Panel titulo="Órdenes por estado" vacio={orden.length === 0}><Dona datos={orden} etiqueta="Órdenes" /></Panel>
-      <Panel titulo="Citas por estado" vacio={citas.length === 0}><Dona datos={citas} etiqueta="Citas" /></Panel>
-      <Panel titulo="Estudios por modalidad" vacio={d.estudiosPorModalidad.length === 0}><Barras datos={d.estudiosPorModalidad} etiqueta="Estudios" /></Panel>
-      <Panel titulo="Top 10 doctores remitentes (valor de órdenes)" vacio={doctores.length === 0}>
-        <Barras datos={doctores} etiqueta="Valor" formato={cop} horizontal />
-      </Panel>
+      <TarjetaGrafica
+        className="lg:col-span-2"
+        titulo={d.cobros ? `Se cobraron ${cop(d.cobros)} en el periodo` : "No se registraron cobros en el periodo"}
+        subtitulo={d.cobros || p.cobros ? fraseVariacion(d.cobros, p.cobros, "", "el periodo anterior", cop) + "." : undefined}
+        cifra={cop(d.cobros)}
+        delta={<Delta actual={d.cobros} anterior={p.cobros} />}
+        vacio={d.cobros === 0 ? "Cuando se registren pagos en estas fechas, verás aquí cuánto entró cada día. Prueba con otro rango." : undefined}
+        comoSeCalcula="suma de los pagos recibidos cada día (hora de Bogotá), sin importar de qué cuenta de cobro vienen. Se rotula el día más alto."
+        tabla={{ columnas: ["Día", "Cobros"], filas: cobrosDia.filter((x) => x.valor).map((x) => [x.dia, cop(x.valor)]) }}
+      >
+        <GraficoBarrasDia datos={cobrosDia} moneda />
+      </TarjetaGrafica>
+
+      <TarjetaGrafica
+        titulo={ordenes === 0 ? "No hay órdenes en el periodo" : solicitadas ? `${solicitadas} de ${ordenes} órdenes siguen esperando cita` : `Las ${ordenes} órdenes del periodo ya tienen cita o avanzaron`}
+        cifra={String(ordenes)}
+        delta={<Delta actual={ordenes} anterior={suma(p.ordenesPorEstado)} />}
+        vacio={ordenes === 0 ? "Crea una orden o amplía el rango de fechas para ver su avance." : undefined}
+        comoSeCalcula="órdenes creadas en el rango, agrupadas por su estado actual. Cancelada va en rojo."
+      >
+        <BarrasLista filas={filasPorEstado(d.ordenesPorEstado, ORDEN_FLUJO, ETIQUETA_ESTADO_ORDEN, ["CANCELADA"])} />
+      </TarjetaGrafica>
+
+      <TarjetaGrafica
+        titulo={citas === 0 ? "No hay citas en el periodo" : `${atendidas} de ${citas} citas se atendieron${noVino ? `; ${noVino} no asistieron` : ""}`}
+        cifra={String(citas)}
+        delta={<Delta actual={citas} anterior={suma(p.citasPorEstado)} />}
+        vacio={citas === 0 ? "Agenda una cita o amplía el rango de fechas para ver cómo van." : undefined}
+        comoSeCalcula="citas cuyo inicio cae en el rango, por su estado actual. No asistió y cancelada van en rojo."
+      >
+        <BarrasLista filas={filasPorEstado(d.citasPorEstado, ORDEN_CITA, ETIQUETA_ESTADO_CITA, MALOS_CITA)} />
+      </TarjetaGrafica>
+
+      <TarjetaGrafica
+        titulo={estudios === 0 ? "No hay estudios en el periodo" : `${modalidades[0]!.nombre} es el estudio más frecuente: ${pct(modalidades[0]!.total, estudios)} % del total`}
+        cifra={String(estudios)}
+        delta={<Delta actual={estudios} anterior={suma(p.estudiosPorModalidad)} />}
+        vacio={estudios === 0 ? "Los estudios llegan solos desde los equipos del centro; prueba con otro rango." : undefined}
+        comoSeCalcula="estudios recibidos en el rango, por modalidad del equipo (CT, panorámica, etc.)."
+      >
+        <BarrasLista filas={modalidades.map((m) => ({ nombre: m.nombre, n: m.total, valor: String(m.total), extra: `${pct(m.total, estudios)} %` }))} />
+      </TarjetaGrafica>
+
+      <TarjetaGrafica
+        titulo={!topDoctor ? "No hay órdenes con doctor remitente en el periodo" : `${topDoctor.nombre} aporta el ${pct(topDoctor.valor, totalDoctores)} % del valor remitido`}
+        subtitulo={topDoctor ? "Los 10 doctores con más valor en órdenes" : undefined}
+        cifra={topDoctor ? cop(totalDoctores) : undefined}
+        vacio={!topDoctor ? "Cuando las órdenes tengan doctor remitente, aquí verás quiénes aportan más." : undefined}
+        comoSeCalcula="suma del precio de los ítems de las órdenes no canceladas del rango, por doctor remitente."
+      >
+        <BarrasLista filas={d.topDoctores.map((x) => ({ nombre: x.nombre, n: x.valor, valor: cop(x.valor), extra: `${pct(x.valor, totalDoctores)} %` }))} />
+      </TarjetaGrafica>
     </div>
   );
 }

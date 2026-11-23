@@ -59,6 +59,8 @@ jobs:
             sudo tar xzf /tmp/app.tgz --warning=no-unknown-keyword
             sudo rm -f /tmp/app.tgz
             cd infra
+            # El worker dispara los procesos programados (notificaciones, CRM) con este secreto; se crea una sola vez.
+            sudo grep -q '^CRON_SECRET=' .env || echo "CRON_SECRET=$(openssl rand -hex 24)" | sudo tee -a .env >/dev/null
             sudo docker compose -f compose.yaml -f compose.produccion.yaml up -d --build --remove-orphans
             sudo docker image prune -f >/dev/null
           '

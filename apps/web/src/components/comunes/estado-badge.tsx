@@ -7,14 +7,14 @@ type Variante = React.ComponentProps<typeof Badge>["variant"];
 
 /** Color semántico por estado: el mismo en badges, filtros y gráficas (var CSS del tema). */
 export const VARIANTE_ORDEN: Record<EstadoOrden, Variante> = {
-  SOLICITADA: "warning", AGENDADA: "info", TOMADA: "violet", INFORMADA: "default", ENTREGADA: "success", CANCELADA: "danger",
+  SOLICITADA: "warning", AGENDADA: "info", TOMADA: "violet", INFORMADA: "soft", ENTREGADA: "success", CANCELADA: "danger",
 };
 export const VARIANTE_CITA: Record<EstadoCita, Variante> = {
   PROGRAMADA: "secondary", CONFIRMADA: "info", LLEGO: "warning", EN_ATENCION: "violet", ATENDIDA: "success", NO_ASISTIO: "danger", CANCELADA: "secondary",
 };
 /** Color sólido (para gráficas) equivalente a cada variante. */
 export const COLOR_VARIANTE: Record<string, string> = {
-  default: "var(--chart-1)", info: "var(--info)", warning: "var(--warning)", violet: "var(--violet)",
+  default: "var(--chart-1)", soft: "var(--chart-1)", info: "var(--info)", warning: "var(--warning)", violet: "var(--violet)",
   success: "var(--success)", danger: "var(--danger)", secondary: "var(--muted-foreground)",
 };
 

@@ -3,9 +3,12 @@ import { CalendarDays, UserRound, UserRoundSearch, ChevronRight, ClipboardList, 
 import Link from "next/link";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
-import { GraficoEstudios } from "@/components/inicio/grafico-estudios";
+import { BarrasLista } from "@/components/comunes/barras-lista";
+import { GraficoBarrasDia } from "@/components/comunes/grafico-barras-dia";
+import { Delta, TarjetaGrafica } from "@/components/comunes/tarjeta-grafica";
+import { fraseVariacion } from "@/components/comunes/variacion";
 import { PacienteDialog } from "@/components/pacientes/paciente-dialog";
-import { BadgeCita, COLOR_VARIANTE, VARIANTE_ORDEN } from "@/components/comunes/estado-badge";
+import { BadgeCita } from "@/components/comunes/estado-badge";
 import { Kpi } from "@/components/comunes/kpi";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
@@ -22,7 +25,7 @@ import { tipoDeCentro } from "@/lib/tipo-centro-servidor";
 export const dynamic = "force-dynamic";
 
 const filaOrden = (estado: keyof typeof ESTADOS_ORDEN, n: number) => ({
-  nombre: ESTADOS_ORDEN[estado], valor: String(n), n, color: COLOR_VARIANTE[VARIANTE_ORDEN[estado] ?? "default"],
+  nombre: ESTADOS_ORDEN[estado], valor: String(n), n, malo: estado === "CANCELADA",
 });
 
 const DIA = 86_400_000;
@@ -30,13 +33,11 @@ const ESTADOS_ORDEN = {
   SOLICITADA: "Solicitada", AGENDADA: "Agendada", TOMADA: "Tomada",
   INFORMADA: "Informada", ENTREGADA: "Entregada", CANCELADA: "Cancelada",
 } as const;
-const COLOR_ESTUDIO = { POR_ASIGNAR: "var(--warning)", ASIGNADO: "var(--info)", PUBLICADO: "var(--success)" } as const;
 const ESTADOS_ESTUDIO = { POR_ASIGNAR: "Por asignar", ASIGNADO: "Asignado", PUBLICADO: "Publicado" } as const;
 
 function Lista({ titulo, descripcion, filas, vacio }: {
-  titulo: string; descripcion?: string; filas: { nombre: string; valor: string; n?: number; color?: string }[]; vacio: string;
+  titulo: string; descripcion?: string; filas: { nombre: string; valor: string; n?: number; malo?: boolean }[]; vacio: string;
 }) {
-  const max = Math.max(1, ...filas.map((f) => f.n ?? 0));
   return (
     <Card>
       <CardHeader>
@@ -46,22 +47,14 @@ function Lista({ titulo, descripcion, filas, vacio }: {
       <CardContent>
         {filas.length === 0 ? (
           <p className="text-sm text-muted-foreground">{vacio}</p>
+        ) : filas.every((f) => f.n !== undefined) ? (
+          <BarrasLista filas={[...filas].sort((a, b) => b.n! - a.n!).map((f) => ({ ...f, n: f.n! }))} />
         ) : (
-          <ul className="space-y-3">
+          <ul className="divide-y text-sm">
             {filas.map((f) => (
-              <li key={f.nombre} className="text-sm">
-                <div className="flex items-center justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-2 font-medium">
-                    {f.color && <span className="size-2.5 shrink-0 rounded-full" style={{ background: f.color }} aria-hidden />}
-                    <span className="truncate">{f.nombre}</span>
-                  </span>
-                  <span className="shrink-0 text-muted-foreground tabular-nums">{f.valor}</span>
-                </div>
-                {f.color && f.n !== undefined && (
-                  <div className="mt-1.5 h-1.5 overflow-hidden rounded-full bg-muted" aria-hidden>
-                    <div className="h-full rounded-full" style={{ width: `${Math.max(4, (f.n / max) * 100)}%`, background: f.color }} />
-                  </div>
-                )}
+              <li key={f.nombre} className="flex items-center justify-between gap-3 py-2 first:pt-0 last:pb-0">
+                <span className="min-w-0 truncate font-medium">{f.nombre}</span>
+                <span className="shrink-0 text-muted-foreground tabular-nums">{f.valor}</span>
               </li>
             ))}
           </ul>
@@ -91,7 +84,7 @@ export default async function Inicio() {
       }),
     ]);
     const filasOrdenes = ordenes.map((o) => filaOrden(o.estado, o._count));
-    const filasEstudios = estudios.map((e) => ({ nombre: ESTADOS_ESTUDIO[e.estado], valor: String(e._count), n: e._count, color: COLOR_ESTUDIO[e.estado] }));
+    const filasEstudios = estudios.map((e) => ({ nombre: ESTADOS_ESTUDIO[e.estado], valor: String(e._count), n: e._count }));
     return (
       <div className="space-y-6">
         <EncabezadoPagina
@@ -152,6 +145,10 @@ export default async function Inicio() {
   const solicitadas = ordenes.find((o) => o.estado === "SOLICITADA")?._count ?? 0;
   const pendientesCitas = citasHoy.filter((c) => !["ATENDIDA", "NO_ASISTIO"].includes(c.estado)).length;
   const gestion = (GESTION as readonly string[]).includes(ctx.rol);
+  const serie = serieDiaria(recientes.map((r) => r.creadoEn), 30, ahora);
+  const suma = (xs: { total: number }[]) => xs.reduce((t, x) => t + x.total, 0);
+  const semana = suma(serie.slice(-7));
+  const anterior = suma(serie.slice(-14, -7));
 
   const nombres = new Map(doctores.map((d) => [d.userId, d.user.name]));
   const filasTop = topMes.flatMap((t) =>
@@ -182,9 +179,9 @@ export default async function Inicio() {
       <section aria-label="Pendientes de hoy" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi titulo="Citas de hoy" valor={citasHoy.length} nota={citasHoy.length ? `${pendientesCitas} por atender` : "Ver agenda"} href="/agenda" icono={CalendarDays} tono="info" />
         {radiologico ? (
-          <Kpi titulo="Doctores en riesgo" valor={inactivos.length} nota={inactivos.length ? "Más de 60 días sin remitir" : "Todos activos"} href="/seguimiento-doctores" icono={UserRoundSearch} tono="warning" />
+          <Kpi titulo="Doctores en riesgo" valor={inactivos.length} nota={inactivos.length ? "Más de 60 días sin remitir" : "Todos activos"} href="/seguimiento-doctores" icono={UserRoundSearch} tono={inactivos.length ? "warning" : "primary"} />
         ) : (
-          <Kpi titulo="Pacientes" valor={pacientes} nota={solicitadas ? `${solicitadas} órdenes por agendar` : "Ver pacientes"} href="/pacientes" icono={UserRound} tono="warning" />
+          <Kpi titulo="Pacientes" valor={pacientes} nota={solicitadas ? `${solicitadas} órdenes por agendar` : "Ver pacientes"} href="/pacientes" icono={UserRound} />
         )}
         <Kpi titulo="Estudios por asignar" valor={porAsignar} nota={porAsignar ? "Sin paciente o doctor" : "Todo al día"} href="/estudios?tab=por-asignar" icono={Inbox} tono="violet" />
         <Kpi titulo="Informes en borrador" valor={borradores} nota={borradores ? "Por firmar" : "Nada pendiente"} href="/informes" icono={FileText} tono="success" />
@@ -252,19 +249,17 @@ export default async function Inicio() {
 
       <section aria-labelledby="titulo-actividad" className="space-y-4">
         <h2 id="titulo-actividad" className="text-base font-semibold">Actividad del centro</h2>
-        <Card>
-          <CardHeader>
-            <CardTitle>Estudios por día</CardTitle>
-            <CardDescription>Últimos 30 días · {estudiosHoy} hoy · {estudiosMes} este mes</CardDescription>
-          </CardHeader>
-          <CardContent>
-            {recientes.length === 0 ? (
-              <EstadoVacio icono={ScanLine} titulo="Aún no hay estudios en este período" descripcion="Los estudios llegan solos desde los equipos del centro." className="py-6" />
-            ) : (
-              <GraficoEstudios datos={serieDiaria(recientes.map((r) => r.creadoEn), 30, ahora)} />
-            )}
-          </CardContent>
-        </Card>
+        <TarjetaGrafica
+          titulo={semana === 0 && anterior === 0 ? "No se han tomado estudios en las últimas dos semanas" : `En los últimos 7 días llegaron ${semana} ${semana === 1 ? "estudio" : "estudios"}${anterior || semana ? `: ${fraseVariacion(semana, anterior, "", "la semana anterior")}` : ""}`}
+          subtitulo={`Estudios por día, últimos 30 días · ${estudiosHoy} hoy · ${estudiosMes} este mes`}
+          cifra={semana}
+          delta={<Delta actual={semana} anterior={anterior} etiqueta="vs. los 7 días anteriores" />}
+          vacio={recientes.length === 0 ? "Aún no hay estudios en este período. Los estudios llegan solos desde los equipos del centro." : undefined}
+          comoSeCalcula="estudios recibidos cada día (hora de Bogotá). La comparación pone los últimos 7 días junto a los 7 anteriores; se rotula el día más alto."
+          tabla={{ columnas: ["Día", "Estudios"], filas: serie.filter((x) => x.total).map((x) => [x.dia, x.total]) }}
+        >
+          <GraficoBarrasDia datos={serie.map((x) => ({ dia: x.dia, valor: x.total }))} />
+        </TarjetaGrafica>
 
         <div className="grid gap-4 lg:grid-cols-3">
           <Lista

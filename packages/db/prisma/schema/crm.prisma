@@ -1,0 +1,232 @@
+// CRM: leads, seguimiento, secuencias automáticas configurables y fidelización.
+// Consentimiento de mercadeo y "no contactar" de PACIENTES: se reutilizan Autorizacion (finalidad "MERCADEO") y
+// PreferenciaContacto.noContactar de sala-limpia.prisma; aquí solo se guarda el equivalente para LEADS.
+
+enum EtapaLead {
+  NUEVO
+  CONTACTADO
+  VALORACION_AGENDADA
+  VALORACION_REALIZADA
+  PROPUESTA
+  GANADO
+  PERDIDO
+}
+
+enum TipoActividad {
+  NOTA
+  LLAMADA
+  CORREO
+  WHATSAPP
+  VISITA
+  CAMBIO_ETAPA
+  VALORACION
+  AUTOMATICA
+  TAREA
+}
+
+enum DisparadorSecuencia {
+  LEAD_NUEVO
+  LEAD_SIN_RESPUESTA
+  VALORACION_COMPLETADA
+  ORDEN_ENTREGADA
+  TRATAMIENTO_TERMINADO
+  PACIENTE_INACTIVO
+  CUMPLEANOS
+  CONTROL_PERIODICO
+  MANUAL
+}
+
+enum AccionPaso {
+  CORREO
+  TAREA
+  CAMBIAR_ETAPA
+  FINALIZAR
+}
+
+enum EstadoInscripcion {
+  ACTIVA
+  COMPLETADA
+  PAUSADA
+  CANCELADA
+}
+
+enum EstadoEjecucion {
+  ENVIADO
+  FALLIDO
+  OMITIDO
+  TAREA_CREADA
+}
+
+enum EstadoTarea {
+  PENDIENTE
+  HECHA
+  CANCELADA
+}
+
+model Lead {
+  id                     String                 @id @default(cuid())
+  organizationId         String
+  organization           Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre                 String
+  telefono               String?
+  correo                 String?
+  ciudad                 String?
+  origen                 String // WEB | REFERIDO | REDES | LLAMADA | WHATSAPP | DOCTOR | VALORACION_VIRTUAL | OTRO
+  interes                String? // tratamiento de interés
+  etapa                  EtapaLead              @default(NUEVO)
+  valorEstimado          Int? // COP
+  responsableId          String?
+  responsable            User?                  @relation("LeadResponsable", fields: [responsableId], references: [id], onDelete: SetNull)
+  pacienteId             String? // se llena al convertirse en paciente
+  paciente               PacienteTenant?        @relation(fields: [pacienteId], references: [id], onDelete: SetNull)
+  proximoContacto        DateTime?
+  ultimoContactoEn       DateTime?
+  motivoPerdida          String?
+  consentimientoMercadeo Boolean                @default(false)
+  consentimientoEn       DateTime?
+  noContactar            Boolean                @default(false)
+  cerradoEn              DateTime?
+  creadoEn               DateTime               @default(now())
+  actualizadoEn          DateTime               @updatedAt
+  actividades            ActividadLead[]
+  tareas                 TareaCRM[]
+  valoraciones           Valoracion[]
+  inscripciones          InscripcionSecuencia[]
+
+  @@index([organizationId, etapa])
+  @@index([organizationId, responsableId])
+  @@index([organizationId, proximoContacto])
+}
+
+model ActividadLead {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId         String? // o pacienteId (actividad sobre un cliente ya convertido)
+  lead           Lead?           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pacienteId     String?
+  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  tipo           TipoActividad
+  texto          String?
+  autorId        String?
+  automatica     Boolean         @default(false)
+  creadoEn       DateTime        @default(now())
+
+  @@index([leadId, creadoEn])
+  @@index([pacienteId, creadoEn])
+  @@index([organizationId])
+}
+
+model SecuenciaCRM {
+  id              String                 @id @default(cuid())
+  organizationId  String
+  organization    Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre          String
+  descripcion     String?
+  disparador      DisparadorSecuencia
+  diasInactividad Int? // solo PACIENTE_INACTIVO
+  filtro          Json? // p. ej. { origen, interes, modalidad }
+  activa          Boolean                @default(false)
+  creadaPorId     String?
+  creadoEn        DateTime               @default(now())
+  actualizadoEn   DateTime               @updatedAt
+  pasos           PasoSecuencia[]
+  inscripciones   InscripcionSecuencia[]
+
+  @@index([organizationId, activa, disparador])
+}
+
+model PasoSecuencia {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  secuenciaId    String
+  secuencia      SecuenciaCRM    @relation(fields: [secuenciaId], references: [id], onDelete: Cascade)
+  orden          Int
+  esperaDias     Int             @default(0)
+  esperaHoras    Int             @default(0)
+  accion         AccionPaso
+  asunto         String?
+  cuerpo         String? // admite {{nombre}}, {{centro}}, {{enlace}}
+  etapaDestino   EtapaLead?
+  tareaTitulo    String?
+  ejecuciones    EjecucionPaso[]
+
+  @@unique([secuenciaId, orden])
+  @@index([organizationId])
+}
+
+// Idempotencia: claveUnica la arma la lógica (p. ej. "lead:<id>", "pac:<id>:val:<id>", "pac:<id>:2026" para cumpleaños anual)
+// y @@unique([secuenciaId, claveUnica]) impide inscribir dos veces lo mismo aunque el motor corra en paralelo.
+// (Un unique compuesto con columnas NULL no deduplica en Postgres, por eso no se usa (secuenciaId, leadId).)
+model InscripcionSecuencia {
+  id               String            @id @default(cuid())
+  organizationId   String
+  organization     Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  secuenciaId      String
+  secuencia        SecuenciaCRM      @relation(fields: [secuenciaId], references: [id], onDelete: Cascade)
+  leadId           String?
+  lead             Lead?             @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pacienteId       String?
+  paciente         PacienteTenant?   @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  valoracionId     String?
+  valoracion       Valoracion?       @relation(fields: [valoracionId], references: [id], onDelete: Cascade)
+  claveUnica       String
+  estado           EstadoInscripcion @default(ACTIVA)
+  pasoActual       Int               @default(0)
+  proximaEjecucion DateTime
+  creadoEn         DateTime          @default(now())
+  finalizadoEn     DateTime?
+  motivoFin        String?
+  ejecuciones      EjecucionPaso[]
+
+  @@unique([secuenciaId, claveUnica])
+  @@index([estado, proximaEjecucion])
+  @@index([organizationId])
+}
+
+model EjecucionPaso {
+  id             String               @id @default(cuid())
+  organizationId String
+  organization   Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  inscripcionId  String
+  inscripcion    InscripcionSecuencia @relation(fields: [inscripcionId], references: [id], onDelete: Cascade)
+  pasoId         String?
+  paso           PasoSecuencia?       @relation(fields: [pasoId], references: [id], onDelete: SetNull)
+  estado         EstadoEjecucion
+  detalle        String?
+  creadoEn       DateTime             @default(now())
+
+  @@index([inscripcionId, creadoEn])
+  @@index([organizationId])
+}
+
+model TareaCRM {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  leadId         String?
+  lead           Lead?           @relation(fields: [leadId], references: [id], onDelete: Cascade)
+  pacienteId     String?
+  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  titulo         String
+  vence          DateTime?
+  asignadoId     String?
+  asignado       User?           @relation("TareaCrmAsignado", fields: [asignadoId], references: [id], onDelete: SetNull)
+  estado         EstadoTarea     @default(PENDIENTE)
+  automatica     Boolean         @default(false)
+  creadoEn       DateTime        @default(now())
+  completadaEn   DateTime?
+
+  @@index([organizationId, estado, vence])
+  @@index([asignadoId, estado])
+}
+
+model ConfigFidelizacion {
+  organizationId     String       @id
+  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  activa             Boolean      @default(false)
+  diasControl        Int          @default(180)
+  recordarCumpleanos Boolean      @default(true)
+  mensajeCumpleanos  String?
+}

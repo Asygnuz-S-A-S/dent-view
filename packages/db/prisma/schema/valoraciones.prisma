@@ -1,0 +1,122 @@
+// Valoración virtual (teleodontología): el paciente sube fotos/video por un enlace público de un solo uso y el odontólogo valora a distancia.
+// Datos de salud sensibles (Ley 1581): los archivos solo se sirven por rutas autenticadas; el token del enlace se guarda hasheado (lib/entrega.ts).
+
+enum EstadoValoracion {
+  BORRADOR
+  PENDIENTE_PACIENTE
+  RECIBIDA
+  EN_REVISION
+  REQUIERE_MAS_INFO
+  COMPLETADA
+  CANCELADA
+  EXPIRADA
+}
+
+enum TipoMedia {
+  FOTO
+  VIDEO
+}
+
+enum AnguloMedia {
+  FRONTAL_REPOSO
+  SONRISA
+  LATERAL_DERECHA
+  LATERAL_IZQUIERDA
+  OCLUSAL_SUPERIOR
+  OCLUSAL_INFERIOR
+  INTRAORAL_FRONTAL
+  INTRAORAL_DERECHA
+  INTRAORAL_IZQUIERDA
+  ZONA_DOLOR
+  RADIOGRAFIA
+  VIDEO_APERTURA
+  OTRO
+}
+
+enum AutorMensaje {
+  PACIENTE
+  PROFESIONAL
+}
+
+model Valoracion {
+  id                    String                 @id @default(cuid())
+  organizationId        String
+  organization          Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId            String?
+  paciente              PacienteTenant?        @relation(fields: [pacienteId], references: [id], onDelete: SetNull)
+  leadId                String?
+  lead                  Lead?                  @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  // Snapshot del solicitante (puede aún no ser paciente).
+  nombre                String
+  telefono              String?
+  correo                String?
+  ciudad                String?
+  motivo                String
+  cuestionario          Json? // dolor, síntomas, antecedentes, alergias, medicamentos (sin diagnósticos)
+  estado                EstadoValoracion       @default(PENDIENTE_PACIENTE)
+  doctorId              String?
+  doctor                User?                  @relation("ValoracionDoctor", fields: [doctorId], references: [id], onDelete: SetNull)
+  tokenHash             String                 @unique // sha256 del token del enlace público
+  codigoHash            String? // HMAC del código de 6 dígitos (hashCodigo)
+  intentosCodigo        Int                    @default(0)
+  expiraEn              DateTime
+  consentimientoEn      DateTime?
+  consentimientoVersion String?
+  consentimientoIp      String? // hash o IP truncada
+  diagnosticoPreliminar String?
+  recomendaciones       String?
+  requierePresencial    Boolean                @default(false)
+  presupuestoEstimado   Int? // COP, pesos enteros
+  tratamientoSugerido   String?
+  completadaEn          DateTime?
+  creadoPorId           String?
+  creadoEn              DateTime               @default(now())
+  actualizadoEn         DateTime               @updatedAt
+  medios                ValoracionMedia[]
+  mensajes              ValoracionMensaje[]
+  inscripciones         InscripcionSecuencia[]
+
+  @@index([organizationId, estado])
+  @@index([organizationId, doctorId])
+  @@index([pacienteId])
+  @@index([leadId])
+}
+
+model ValoracionMedia {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  valoracionId   String
+  valoracion     Valoracion   @relation(fields: [valoracionId], references: [id], onDelete: Cascade)
+  tipo           TipoMedia
+  angulo         AnguloMedia
+  claveS3        String
+  claveMiniatura String?
+  mime           String
+  bytes          Int
+  duracionSeg    Int?
+  ancho          Int?
+  alto           Int?
+  nota           String?
+  creadoEn       DateTime     @default(now())
+
+  @@index([valoracionId])
+  @@index([organizationId])
+}
+
+model ValoracionMensaje {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  valoracionId   String
+  valoracion     Valoracion   @relation(fields: [valoracionId], references: [id], onDelete: Cascade)
+  autor          AutorMensaje
+  autorId        String? // User del profesional (null si escribe el paciente)
+  texto          String
+  solicitaMedia  AnguloMedia? // el profesional pide una foto concreta
+  leidoEn        DateTime?
+  creadoEn       DateTime     @default(now())
+
+  @@index([valoracionId, creadoEn])
+  @@index([organizationId])
+}

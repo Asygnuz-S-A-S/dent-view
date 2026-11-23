@@ -64,8 +64,8 @@ export default async function SeguimientoDoctores({ searchParams }: { searchPara
 
       <div className="grid grid-cols-2 gap-4 lg:grid-cols-4">
         <Kpi titulo="Activos" valor={cuenta("ACTIVO")} nota={`${cuenta("NUEVO")} nuevos`} icono={CheckCircle2} tono="success" href="/seguimiento-doctores?estado=ACTIVO" />
-        <Kpi titulo="En riesgo" valor={cuenta("EN_RIESGO")} icono={AlertTriangle} tono="warning" href="/seguimiento-doctores?estado=EN_RIESGO" />
-        <Kpi titulo="Inactivos" valor={cuenta("INACTIVO", "CRITICO")} nota={`${cuenta("CRITICO")} críticos`} icono={Clock} tono="danger" href="/seguimiento-doctores?estado=INACTIVO" />
+        <Kpi titulo="En riesgo" valor={cuenta("EN_RIESGO")} icono={AlertTriangle} tono={cuenta("EN_RIESGO") ? "warning" : "primary"} href="/seguimiento-doctores?estado=EN_RIESGO" />
+        <Kpi titulo="Inactivos" valor={cuenta("INACTIVO", "CRITICO")} nota={`${cuenta("CRITICO")} críticos`} icono={Clock} tono={cuenta("INACTIVO", "CRITICO") ? "danger" : "primary"} href="/seguimiento-doctores?estado=INACTIVO" />
         <Kpi titulo="Ingresos en riesgo" valor={cop(ingresosRiesgo)} nota="Facturado en 12 meses por doctores en riesgo o inactivos" icono={TrendingDown} tono="violet" />
       </div>
 

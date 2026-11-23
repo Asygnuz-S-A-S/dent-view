@@ -17,6 +17,7 @@ const badgeVariants = cva(
           "border-border text-foreground [a]:hover:bg-muted [a]:hover:text-muted-foreground",
         ghost:
           "hover:bg-muted hover:text-muted-foreground dark:hover:bg-muted/50",
+        soft: "bg-primary/10 text-primary",
         success: "bg-success-soft text-success-ink",
         warning: "bg-warning-soft text-warning-ink",
         info: "bg-info-soft text-info-ink",

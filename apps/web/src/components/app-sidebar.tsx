@@ -2,7 +2,7 @@
 
 import {
   Building2, CalendarDays, Check, ChevronsUpDown, ClipboardList, House, LogOut, ScanLine, Settings2, ShieldCheck, HardDriveUpload, Plug,
-  Stethoscope, Tags, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, UserRoundSearch,
+  Stethoscope, Tags, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -43,6 +43,8 @@ const NAV = [
       { href: "/estudios", label: "Estudios", icon: ScanLine, roles: TODOS },
       { href: "/informes", label: "Informes", icon: FileText, roles: TODOS },
       { href: "/seguimiento", label: "Seguimiento", icon: PhoneCall, roles: ["admin_tenant", "recepcion", "especialista"] },
+      { href: "/valoraciones", label: "Valoraciones virtuales", icon: Video, roles: ["admin_tenant", "recepcion", "especialista"] },
+      { href: "/crm", label: "CRM", icon: Target, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/seguimiento-doctores", label: "Seguimiento de doctores", icon: UserRoundSearch, roles: ["admin_tenant", "recepcion"] },
       { href: "/doctores", label: "Doctores remitentes", icon: Stethoscope, roles: ["admin_tenant", "recepcion"] },
       { href: "/laboratorio", label: "Laboratorio", icon: FlaskConical, roles: ["admin_tenant", "recepcion", "especialista"] },

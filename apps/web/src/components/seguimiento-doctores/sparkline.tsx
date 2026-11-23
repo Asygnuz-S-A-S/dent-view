@@ -19,8 +19,8 @@ export function GraficaRemisiones({ datos }: { datos: { mes: string; n: number }
       {datos.map((d) => (
         <div key={d.mes} className="flex h-full min-w-0 flex-1 flex-col items-center justify-end gap-1">
           <span className="text-xs tabular-nums text-muted-foreground">{d.n || ""}</span>
-          <div className="w-full rounded-t bg-primary" style={{ height: `${(d.n / max) * 100}%`, minHeight: d.n ? 3 : 1, opacity: d.n ? 1 : 0.25 }} />
-          <span className="text-[10px] text-muted-foreground sm:text-xs">{nombre(d.mes)}</span>
+          <div className={d.n ? "w-full rounded-t-sm bg-primary" : "w-full bg-border"} style={{ height: `${(d.n / max) * 100}%`, minHeight: d.n ? 3 : 1 }} />
+          <span className="text-xs text-muted-foreground">{nombre(d.mes)}</span>
         </div>
       ))}
     </div>

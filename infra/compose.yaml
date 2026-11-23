@@ -110,6 +110,9 @@ services:
       BETTER_AUTH_SECRET: ${BETTER_AUTH_SECRET} # respaldo de CIFRADO_SECRETO para descifrar secretos de webhooks y conectores
       CIFRADO_SECRETO: ${CIFRADO_SECRETO:-}
       WEBHOOKS_PERMITIR_LOCAL: ${WEBHOOKS_PERMITIR_LOCAL:-}
+      # Planificador (apps/worker/src/scheduler.ts): llama a /api/cron/* de la app; sin CRON_SECRET no corre.
+      CRON_SECRET: ${CRON_SECRET:-}
+      WEB_INTERNAL_URL: ${WEB_INTERNAL_URL:-http://web:3000}
     depends_on:
       - orthanc
       - web # web aplica las migraciones al iniciar

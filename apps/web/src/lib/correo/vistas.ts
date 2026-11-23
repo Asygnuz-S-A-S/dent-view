@@ -14,6 +14,10 @@ const POR_TIPO: Record<TipoMensaje, { titulo: string; boton?: string; aviso?: st
   ENTREGA_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },
   ESTUDIO_ENLACE: { titulo: "Tienes un estudio disponible", boton: "Abrir estudio", aviso: IGNORAR },
   ESTUDIO_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },
+  VALORACION_ENLACE: { titulo: "Completa tu valoración", boton: "Completar valoración", aviso: IGNORAR },
+  VALORACION_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },
+  VALORACION_RESULTADO: { titulo: "Tu valoración está lista", boton: "Ver valoración", aviso: IGNORAR },
+  VALORACION_AVISO: { titulo: "Valoración por revisar", boton: "Abrir valoración" },
 };
 
 export function vistaMensaje(tipo: string, cuerpo: string, codigo?: string | null): Vista {

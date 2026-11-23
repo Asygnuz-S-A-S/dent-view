@@ -3,6 +3,7 @@ import { ordenParaVincular, prisma } from '@dent-view/db';
 import { encolarWebhooks } from '../../web/src/lib/webhooks.ts';
 import { iniciarEntregaWebhooks } from './webhooks.ts';
 import { iniciarSyncIntegraciones } from './sync-integraciones.ts';
+import { iniciarPlanificador } from './scheduler.ts';
 import { centroDeEtiquetas, extraerMallaPly, formatearNombre, SOP_RAW_DATA } from './dicom.ts';
 
 const env = (k: string) => process.env[k] ?? (() => { throw new Error(`Falta ${k}`); })();
@@ -110,6 +111,7 @@ async function ingerir(orthancId: string) {
 // shortcut: el cursor vive en memoria y arranca en 0; los upserts son idempotentes. Persistirlo (tabla o archivo) cuando el volumen de /changes haga lenta la relectura al reiniciar.
 iniciarEntregaWebhooks();
 iniciarSyncIntegraciones();
+iniciarPlanificador();
 let since = 0;
 for (;;) {
   try {

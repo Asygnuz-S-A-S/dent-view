@@ -24,14 +24,15 @@ export const esTipoCentro = (v: unknown): v is TipoCentro => TIPOS_CENTRO.includ
 export const MODULOS = [
   "inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "seguimiento-doctores", "doctores",
   "laboratorio", "facturacion", "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta",
-  "integraciones", "pasarelas", "notificaciones", "proteccion-datos",
+  "integraciones", "pasarelas", "notificaciones", "proteccion-datos", "valoraciones", "crm",
 ] as const;
 export type Modulo = (typeof MODULOS)[number];
 
 // Se declara qué NO tiene cada tipo: un módulo nuevo queda habilitado en todos hasta que se excluya a propósito.
 const SIN_MODULOS: Record<TipoCentro, readonly Modulo[]> = {
   // Radiología: flujo completo; sin laboratorio protésico.
-  CENTRO_RADIOLOGICO: ["laboratorio"],
+  CENTRO_RADIOLOGICO: ["laboratorio", "valoraciones", "crm"],
+  // (valoración virtual y CRM de pacientes son de odontología; el radiológico retiene doctores con seguimiento-doctores)
   // Odontología: sin ingesta, sin convenios con remitentes ni seguimiento de doctores remitentes.
   CENTRO_ODONTOLOGICO: ["seguimiento-doctores", "convenios", "ingesta"],
   CLINICA_ODONTOLOGICA: ["seguimiento-doctores", "convenios", "ingesta"],
@@ -56,7 +57,7 @@ const RUTAS: readonly (readonly [string, Modulo])[] = [
   ["/seguimiento-doctores", "seguimiento-doctores"],
   ["/proteccion-datos", "proteccion-datos"],
   ...(["inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "doctores", "laboratorio", "facturacion",
-    "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta", "integraciones", "notificaciones"] as const).map(
+    "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta", "integraciones", "notificaciones", "valoraciones", "crm"] as const).map(
     (m) => [`/${m}`, m] as const,
   ),
 ];

@@ -3,15 +3,17 @@
 
 export const CANALES = ["CORREO", "SMS", "WHATSAPP"] as const;
 export type Canal = (typeof CANALES)[number];
-export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO"] as const;
+export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "VALORACION_AVISO"] as const;
 /** Mensajes con credenciales de acceso: una vez enviados no se conserva su contenido. */
-export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO"];
+export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO"];
 export type TipoMensaje = (typeof TIPOS_MENSAJE)[number];
 export const ETIQUETA_TIPO_MENSAJE: Record<TipoMensaje, string> = {
   CITA_CREADA: "Cita agendada", CITA_RECORDATORIO: "Recordatorio de cita", INFORME_PACIENTE: "Informe listo (paciente)",
   INFORME_REMITENTE: "Informe listo (doctor remitente)", SEGUIMIENTO: "Seguimiento",
   ENTREGA_ENLACE: "Entrega de resultados (enlace)", ENTREGA_CODIGO: "Entrega de resultados (código)",
   ESTUDIO_ENLACE: "Estudio compartido (enlace)", ESTUDIO_CODIGO: "Estudio compartido (código)",
+  VALORACION_ENLACE: "Valoración virtual (enlace)", VALORACION_CODIGO: "Valoración virtual (código)",
+  VALORACION_RESULTADO: "Valoración virtual (resultado)", VALORACION_AVISO: "Valoración virtual (aviso al odontólogo)",
 };
 
 export type Preferencia = { noContactar: boolean; correo: boolean; sms: boolean; whatsapp: boolean; tiposRechazados: string[] } | null;
@@ -84,6 +86,23 @@ export const PLANTILLAS_DEFECTO: Record<TipoMensaje, { asunto: string; cuerpo: s
   ESTUDIO_CODIGO: {
     asunto: "Código de acceso al estudio de {{centro}}",
     cuerpo: "Su código de acceso al estudio es {{codigo}}. Úselo en el enlace que recibió por separado; no lo comparta.",
+  },
+  // Valoración virtual: sin nombre ni datos clínicos (Ley 1581); solo el aviso y el enlace.
+  VALORACION_ENLACE: {
+    asunto: "{{centro}}: completa tu valoración",
+    cuerpo: "Hola, {{centro}} te invita a completar tu valoración virtual: subir fotos y un video corto desde tu celular.\nÁbrela en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
+  },
+  VALORACION_CODIGO: {
+    asunto: "Código de acceso a tu valoración en {{centro}}",
+    cuerpo: "Tu código de acceso es {{codigo}}. Úsalo en el enlace que recibiste por separado; no lo compartas.",
+  },
+  VALORACION_RESULTADO: {
+    asunto: "{{centro}}: tu valoración está lista",
+    cuerpo: "Hola, {{centro}} ya tiene lista tu valoración virtual.\nConsúltala en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
+  },
+  VALORACION_AVISO: {
+    asunto: "Tienes una valoración virtual por revisar",
+    cuerpo: "Llegó una valoración virtual para revisar en {{centro}}.\nÁbrela en: {{enlace}}",
   },
   ENTREGA_CODIGO: {
     asunto: "Código de acceso a los resultados de {{centro}}",

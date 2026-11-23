@@ -7,10 +7,13 @@ vi.mock("react", () => ({ cache: <T,>(f: T) => f }));
 
 describe("matriz de módulos", () => {
   it("radiológico: flujo completo sin laboratorio; seguimiento de doctores solo aquí", () => {
-    expect(moduloHabilitado("CENTRO_RADIOLOGICO", "laboratorio")).toBe(false);
-    for (const m of MODULOS.filter((m) => m !== "laboratorio")) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m)).toBe(true);
+    const SIN = ["laboratorio", "valoraciones", "crm"]; // exclusivos de odontología
+    for (const m of SIN) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m as never)).toBe(false);
+    for (const m of MODULOS.filter((m) => !SIN.includes(m))) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m)).toBe(true);
     for (const t of ["CENTRO_ODONTOLOGICO", "CLINICA_ODONTOLOGICA", "ODONTOLOGO_PARTICULAR"] as const) {
       expect(moduloHabilitado(t, "seguimiento-doctores")).toBe(false);
+      expect(moduloHabilitado(t, "valoraciones")).toBe(true);
+      expect(moduloHabilitado(t, "crm")).toBe(true);
     }
   });
   it("odontológico y clínica: laboratorio y cartera sí; ingesta y convenios no", () => {

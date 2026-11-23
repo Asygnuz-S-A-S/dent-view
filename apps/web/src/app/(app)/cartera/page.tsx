@@ -15,7 +15,8 @@ import { EstadoVacio } from "@/components/comunes/estado-vacio";
 import { BadgeCuenta, estadoCuenta, type EstadoCuenta } from "@/components/comunes/estado-badge";
 import { FiltrosUrl } from "@/components/comunes/filtros-url";
 import { Kpi } from "@/components/comunes/kpi";
-import { GraficoCartera } from "@/components/facturacion/grafico-cartera";
+import { BarrasLista } from "@/components/comunes/barras-lista";
+import { TarjetaGrafica } from "@/components/comunes/tarjeta-grafica";
 
 export const dynamic = "force-dynamic";
 
@@ -53,6 +54,7 @@ export default async function Cartera({ searchParams }: { searchParams: Promise<
 
   const totalCartera = totales.reduce((a, b) => a + b, 0);
   const sumaSaldo = (pred: (f: (typeof filas)[number]) => boolean) => filas.filter(pred).reduce((t, f) => t + f.saldo, 0);
+  const masDe60 = totales[2]! + totales[3]!;
   const vencida = sumaSaldo((f) => estadoCuenta(f, ahora) === "VENCIDA");
   const aCargoDoctores = sumaSaldo((f) => f.responsable === "DOCTOR");
   const hayFiltros = !!(doctor || convenio || estado);
@@ -69,16 +71,20 @@ export default async function Cartera({ searchParams }: { searchParams: Promise<
 
       <section aria-label="Resumen de cartera" className="grid grid-cols-2 gap-3 lg:grid-cols-4">
         <Kpi titulo="Cartera total" valor={cop(totalCartera)} nota={`${filas.length} ${filas.length === 1 ? "cuenta" : "cuentas"} con saldo`} icono={Wallet} tono="primary" />
-        <Kpi titulo="Vencida" valor={cop(vencida)} nota="Pasó su fecha de vencimiento" icono={AlertTriangle} tono="danger" />
+        <Kpi titulo="Vencida" valor={cop(vencida)} nota="Pasó su fecha de vencimiento" icono={AlertTriangle} tono={vencida > 0 ? "danger" : "primary"} />
         <Kpi titulo="Vigente" valor={cop(totalCartera - vencida)} nota="Aún dentro de plazo" icono={Clock} tono="info" />
         <Kpi titulo="A cargo de doctores" valor={cop(aCargoDoctores)} nota="Responsable: doctor remitente" icono={HandCoins} tono="violet" />
       </section>
 
       {grupos.length > 0 && (
-        <Card>
-          <CardHeader><CardTitle>Saldo por antigüedad</CardTitle></CardHeader>
-          <CardContent><GraficoCartera datos={TRAMOS.map((t, i) => ({ tramo: t, total: totales[i] }))} /></CardContent>
-        </Card>
+        <TarjetaGrafica
+          titulo={masDe60 > 0 ? `${cop(masDe60)} (${Math.round((masDe60 / totalCartera) * 100)} % de la cartera) lleva más de 60 días sin pagarse` : "Ninguna cuenta lleva más de 60 días sin pagarse"}
+          subtitulo="Saldo pendiente según los días desde el vencimiento (o desde la fecha, si no vence)"
+          cifra={cop(totalCartera)}
+          comoSeCalcula="saldo (total menos abonos) de las cuentas de cobro abiertas, agrupado por días de antigüedad. Rojo: más de 60 días. Es una foto de hoy, no compara con periodos anteriores."
+        >
+          <BarrasLista filas={TRAMOS.map((t, i) => ({ nombre: `${t} días`, n: totales[i]!, valor: cop(totales[i]!), extra: `${Math.round((totales[i]! / totalCartera) * 100)} %`, malo: i >= 2 }))} />
+        </TarjetaGrafica>
       )}
 
       <Card className="py-0">
