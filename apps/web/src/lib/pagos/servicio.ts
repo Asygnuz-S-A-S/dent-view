@@ -3,7 +3,7 @@ import { prisma } from "@dent-view/db";
 import { registrarEvento } from "@/lib/eventos";
 import { estadoTrasPago, numeroFactura } from "@/lib/facturacion";
 import { decidirEvento, linkActivo } from "./decision";
-import { type EventoMapeado, type Llaves } from "./proveedor";
+import { esLocal, type EventoMapeado, type Llaves } from "./proveedor";
 import { obtenerProveedor } from "./registro";
 
 type Pasarela = { id: string; organizationId: string; proveedor: "WOMPI" | "EPAYCO" | "PAYU" | "MERCADOPAGO" | "BOLD"; modo: "SANDBOX" | "PRODUCCION" };
@@ -20,9 +20,15 @@ export async function procesarEvento(pasarela: Pasarela, ev: EventoMapeado, acto
       const registro = await tx.eventoPasarela.create({
         data: { organizationId: org, proveedor: pasarela.proveedor, idEventoExterno: `${pasarela.id}:${ev.idEventoExterno}`, payload: { estado: ev.estado, referencia: ev.referencia, monto: ev.monto, moneda: ev.moneda } },
       });
+      const cerrar = (r: ResultadoEvento) => tx.eventoPasarela.update({ where: { id: registro.id }, data: { procesadoEn: new Date() } }).then(() => r);
+      // Pasarela de pruebas en un servidor real (no localhost): el evento se audita pero NO mueve dinero (ni Pago, ni Anticipo, ni cuenta).
+      // Sin esto, quien conozca la URL del webhook de una pasarela SANDBOX (firma de prueba) podría marcar cuentas como pagadas.
+      if (pasarela.modo === "SANDBOX" && !esLocal()) {
+        await registrarEvento({ organizationId: org, actorId, tipo: "pago.prueba", detalle: { proveedor: pasarela.proveedor, estado: ev.estado } }, tx);
+        return cerrar("ignorado");
+      }
       const condiciones = [...(ev.referencia ? [{ referencia: ev.referencia }] : []), ...(ev.idExterno ? [{ idExterno: ev.idExterno }] : [])];
       const encontrado = condiciones.length ? await tx.linkPago.findFirst({ where: { pasarelaId: pasarela.id, organizationId: org, OR: condiciones }, select: { id: true } }) : null;
-      const cerrar = (r: ResultadoEvento) => tx.eventoPasarela.update({ where: { id: registro.id }, data: { procesadoEn: new Date() } }).then(() => r);
       if (!encontrado) {
         await registrarEvento({ organizationId: org, actorId, tipo: "pago.pasarela_sin_link", detalle: { proveedor: pasarela.proveedor, estado: ev.estado } }, tx);
         return cerrar("sin_link");

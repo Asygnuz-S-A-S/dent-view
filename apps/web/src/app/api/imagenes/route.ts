@@ -1,9 +1,10 @@
 import { prisma } from "@dent-view/db";
 import { randomUUID } from "node:crypto";
+import { cuerpoExcede } from "@/lib/cuerpo";
 import { limitarIp } from "@/lib/entrega";
 import { registrarEvento } from "@/lib/eventos";
-import { claveOriginal, claveVariante, IMG_MAX_BYTES, IMG_MAX_POR_SUBIDA, tipoDeImagenEstudio, validarCantidad, validarImagenEstudio } from "@/lib/imagenes";
-import { procesarImagen } from "@/lib/imagenes-proceso";
+import { claveOriginal, claveVariante, IMG_MAX_PETICION, tipoDeImagenEstudio, validarCantidad, validarImagenEstudio } from "@/lib/imagenes";
+import { ImagenInvalida, procesarImagen } from "@/lib/imagenes-proceso";
 import { borrarS3, contextoImagenes, guardarS3, mismoOrigen } from "@/lib/imagenes-servidor";
 
 export const dynamic = "force-dynamic";
@@ -16,7 +17,7 @@ export async function POST(req: Request) {
   if (!ctx) return new Response(null, { status: 401 });
   if (!mismoOrigen(req)) return Response.json({ error: "Origen no permitido" }, { status: 403 });
   if (!limitarIp(porUsuario, ctx.usuario.id, Date.now(), 10, 10 * 60_000)) return Response.json({ error: "Demasiadas subidas. Inténtalo en unos minutos." }, { status: 429 });
-  if (Number(req.headers.get("content-length") ?? 0) > IMG_MAX_BYTES * IMG_MAX_POR_SUBIDA + 1_000_000) return Response.json({ error: "La subida es demasiado grande" }, { status: 413 });
+  if (cuerpoExcede(req, IMG_MAX_PETICION)) return Response.json({ error: "La subida es demasiado grande (máximo 150 MB por subida)" }, { status: 413 });
 
   const datos = await req.formData().catch(() => null);
   if (!datos) return Response.json({ error: "Solicitud inválida" }, { status: 400 });
@@ -57,7 +58,7 @@ export async function POST(req: Request) {
     } catch (e) {
       console.error("Subida de imagen fallida", e);
       await Promise.all(llaves.map(borrarS3));
-      errores.push({ nombre: f.name, error: "No se pudo procesar la imagen" });
+      errores.push({ nombre: f.name, error: e instanceof ImagenInvalida ? e.message : "No se pudo procesar la imagen" });
     }
   }
   return Response.json({ subidas, errores }, { status: subidas ? 200 : 400 });

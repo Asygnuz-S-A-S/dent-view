@@ -29,5 +29,6 @@ COPY --from=build /repo/apps/web/.next/static apps/web/.next/static
 COPY --from=migrador /migrar /migrar
 USER node
 EXPOSE 3000
-# Migra con MIGRATE_DATABASE_URL (dueño), reaplica los permisos del rol de la app y arranca con DATABASE_URL (dentview_app).
-CMD ["sh", "-c", "cd /migrar && node_modules/.bin/prisma migrate deploy && node_modules/.bin/prisma db execute --file rol-app.sql && cd /repo && exec node apps/web/server.js"]
+# Solo arranca el servidor con DATABASE_URL (dentview_app). Las migraciones las corre el servicio `migrador` de compose
+# (mismo build, command distinto: prisma migrate deploy + rol-app.sql en /migrar) para que web no reciba la credencial del dueño.
+CMD ["node", "apps/web/server.js"]

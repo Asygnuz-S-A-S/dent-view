@@ -43,7 +43,7 @@ export default function Ingresar() {
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>Ingresar</CardTitle>
+            <CardTitle role="heading" aria-level={1}>Ingresar</CardTitle>
             <CardDescription>Accede con el correo de tu centro.</CardDescription>
           </CardHeader>
           <CardContent>

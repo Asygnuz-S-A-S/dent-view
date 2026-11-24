@@ -10,12 +10,13 @@ import { crearPacienteEnCentro } from "@/lib/pacientes-centro";
 export const GET = rutaApi("pacientes:leer", async (c) => {
   const documento = textoConsulta(c.url, "documento", 20);
   const q = textoConsulta(c.url, "q");
+  const docQ = q ? normalizarDocumento(q) : ""; // "---" normaliza a "" y un startsWith vacío coincidiría con todos
   return listarApi(c.url, {
     // actualizadoDesde filtra por creadoEn: el paciente no tiene columna de actualización.
     filtros: {
       organizationId: c.organizationId,
       ...(documento && { persona: { numeroDocumento: normalizarDocumento(documento) } }),
-      ...(q && { OR: [{ nombre: { contains: q, mode: "insensitive" } }, { persona: { numeroDocumento: { startsWith: normalizarDocumento(q) } } }] }),
+      ...(q && { OR: [{ nombre: { contains: q, mode: "insensitive" } }, ...(docQ ? [{ persona: { numeroDocumento: { startsWith: docQ } } }] : [])] }),
     },
     consulta: (a) => prisma.pacienteTenant.findMany({ ...a, include: { persona: true } }),
     fecha: (p) => p.creadoEn,

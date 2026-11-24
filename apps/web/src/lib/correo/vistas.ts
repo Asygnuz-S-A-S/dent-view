@@ -8,7 +8,7 @@ const POR_TIPO: Record<TipoMensaje, { titulo: string; boton?: string; aviso?: st
   CITA_CREADA: { titulo: "Tu cita quedó agendada" },
   CITA_RECORDATORIO: { titulo: "Recordatorio de tu cita" },
   INFORME_PACIENTE: { titulo: "Tu informe está listo" },
-  INFORME_REMITENTE: { titulo: "Informe radiológico listo", boton: "Ver informe" },
+  INFORME_REMITENTE: { titulo: "Informe listo", boton: "Ver informe" },
   SEGUIMIENTO: { titulo: "Es momento de tu control" },
   ENTREGA_ENLACE: { titulo: "Resultados disponibles", boton: "Ver resultados", aviso: IGNORAR },
   ENTREGA_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },

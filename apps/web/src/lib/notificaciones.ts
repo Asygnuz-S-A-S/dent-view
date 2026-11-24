@@ -52,40 +52,46 @@ export const renderPlantilla = (t: string, vars: Record<string, string | number 
 
 export const escaparHtml = (s: string) => s.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
 
+/**
+ * Regla de tono (es-CO): todo correo tutea ("tu", "te", imperativos en "tú"). Prohibido "usted/ustedes" y los posesivos "su/sus"
+ * (salvo "su destinatario" en el pie legal, que no es una plantilla). Los asuntos nunca llevan el nombre del paciente ni datos clínicos.
+ */
+export const TONO_FORMAL_PROHIBIDO = /\b(usted(es)?|su|sus|le|les|lleve|retire|avise|solicite|consúltelo|úselo|ábralo|ábralos|llámenos)\b/i;
+
 /** Plantillas por defecto (el centro puede sobrescribirlas). Nunca incluyen texto clínico libre. */
 export const PLANTILLAS_DEFECTO: Record<TipoMensaje, { asunto: string; cuerpo: string }> = {
   CITA_CREADA: {
-    asunto: "Su cita en {{centro}} quedó agendada",
-    cuerpo: "Hola {{paciente}}, su cita en {{centro}} es el {{fecha}} a las {{hora}}.\nLleve la orden de su doctor remitente, retire objetos metálicos y avise si hay posibilidad de embarazo.\nDirección: {{direccion}}. Teléfono: {{telefono}}.",
+    asunto: "Tu cita en {{centro}} quedó agendada",
+    cuerpo: "Hola {{paciente}}, tu cita en {{centro}} es el {{fecha}} a las {{hora}}.\nLleva la orden de tu doctor remitente, retira los objetos metálicos y avísanos si hay posibilidad de embarazo.\nDirección: {{direccion}}. Teléfono: {{telefono}}.",
   },
   CITA_RECORDATORIO: {
-    asunto: "Recordatorio de su cita en {{centro}}",
-    cuerpo: "Hola {{paciente}}, le recordamos su cita en {{centro}} el {{fecha}} a las {{hora}}.\nRetire objetos metálicos antes del estudio y avise si hay posibilidad de embarazo.\nDirección: {{direccion}}. Teléfono: {{telefono}}.",
+    asunto: "Recordatorio de tu cita en {{centro}}",
+    cuerpo: "Hola {{paciente}}, te recordamos tu cita en {{centro}} el {{fecha}} a las {{hora}}.\nRetira los objetos metálicos antes del estudio y avísanos si hay posibilidad de embarazo.\nDirección: {{direccion}}. Teléfono: {{telefono}}.",
   },
   INFORME_PACIENTE: {
-    asunto: "Su informe radiológico está listo",
-    cuerpo: "Hola {{paciente}}, el informe de su estudio en {{centro}} (orden {{orden}}) ya está listo. Lo encuentra adjunto a este mensaje.",
+    asunto: "Tu informe está listo",
+    cuerpo: "Hola {{paciente}}, el informe de tu estudio en {{centro}} (orden {{orden}}) ya está listo. Por seguridad no lo enviamos por correo: pide a {{centro}} el enlace de acceso a tus resultados.",
   },
   INFORME_REMITENTE: {
-    asunto: "Informe radiológico listo: orden {{orden}}",
-    cuerpo: "Doctor(a) {{medico}}, el informe de su paciente {{paciente}} (orden {{orden}}) fue emitido por {{centro}}. Lo encuentra adjunto y también puede consultarlo en {{enlace}}.",
+    asunto: "Informe listo: orden {{orden}}",
+    cuerpo: "Doctor(a) {{medico}}, {{centro}} emitió el informe de la orden {{orden}}. Por seguridad el correo no lleva datos del paciente ni archivos: consúltalo con tu cuenta en {{enlace}}.",
   },
   SEGUIMIENTO: {
-    asunto: "{{centro}}: es momento de su control",
-    cuerpo: "Hola {{paciente}}, en {{centro}} le recordamos que ({{motivo}}) está pendiente para {{mes}}. Llámenos al {{telefono}} para agendar.",
+    asunto: "{{centro}}: es momento de tu control",
+    cuerpo: "Hola {{paciente}}, en {{centro}} te recordamos que ({{motivo}}) está pendiente para {{mes}}. Llámanos al {{telefono}} para agendar.",
   },
   ENTREGA_ENLACE: {
-    asunto: "Resultados del estudio de {{paciente}} en {{centro}}",
-    cuerpo: "Hola {{destinatario}}, {{centro}} le comparte los resultados del estudio de {{paciente}}.\nÁbralos en: {{enlace}}\nEl código de acceso le llega en un mensaje aparte. El enlace vence el {{vence}}.",
+    asunto: "Resultados disponibles en {{centro}}",
+    cuerpo: "Hola {{destinatario}}, {{centro}} te comparte los resultados del estudio de {{paciente}}.\nÁbrelos en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
   },
   // Sin datos del paciente en el cuerpo (Ley 1581): solo el aviso y el enlace.
   ESTUDIO_ENLACE: {
-    asunto: "{{centro}} le comparte un estudio",
-    cuerpo: "Hola {{destinatario}}, tiene un estudio disponible de {{centro}}.\nÁbralo en: {{enlace}}\nEl código de acceso le llega en un mensaje aparte. El enlace vence el {{vence}}.",
+    asunto: "{{centro}} te comparte un estudio",
+    cuerpo: "Hola {{destinatario}}, tienes un estudio disponible de {{centro}}.\nÁbrelo en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
   },
   ESTUDIO_CODIGO: {
     asunto: "Código de acceso al estudio de {{centro}}",
-    cuerpo: "Su código de acceso al estudio es {{codigo}}. Úselo en el enlace que recibió por separado; no lo comparta.",
+    cuerpo: "Tu código de acceso al estudio es {{codigo}}. Úsalo en el enlace que recibiste por separado; no lo compartas.",
   },
   // Valoración virtual: sin nombre ni datos clínicos (Ley 1581); solo el aviso y el enlace.
   VALORACION_ENLACE: {
@@ -106,6 +112,6 @@ export const PLANTILLAS_DEFECTO: Record<TipoMensaje, { asunto: string; cuerpo: s
   },
   ENTREGA_CODIGO: {
     asunto: "Código de acceso a los resultados de {{centro}}",
-    cuerpo: "Su código de acceso a los resultados del estudio de {{paciente}} es {{codigo}}. Úselo en el enlace que recibió por separado; no lo comparta.",
+    cuerpo: "Tu código de acceso a los resultados del estudio de {{paciente}} es {{codigo}}. Úsalo en el enlace que recibiste por separado; no lo compartas.",
   },
 };

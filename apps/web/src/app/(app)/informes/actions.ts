@@ -58,11 +58,11 @@ export async function crearInformeDeEstudio(estudioId: string): Promise<R & { id
 }
 
 const esquemaBorrador = z.object({
-  motivo: z.string().trim().max(2000).optional(),
-  tecnica: z.string().trim().max(500).optional(),
-  hallazgos: z.string().trim().max(10000),
-  impresion: z.string().trim().max(5000),
-  recomendaciones: z.string().trim().max(3000).optional(),
+  motivo: z.string().trim().max(2000, "El motivo admite máximo 2000 caracteres").optional(),
+  tecnica: z.string().trim().max(500, "La técnica admite máximo 500 caracteres").optional(),
+  hallazgos: z.string().trim().max(10000, "Los hallazgos admiten máximo 10000 caracteres"),
+  impresion: z.string().trim().max(5000, "La impresión diagnóstica admite máximo 5000 caracteres"),
+  recomendaciones: z.string().trim().max(3000, "Las recomendaciones admiten máximo 3000 caracteres").optional(),
 });
 
 export async function guardarBorrador(id: string, entrada: z.input<typeof esquemaBorrador>): Promise<R> {
@@ -142,7 +142,7 @@ export async function emitirInforme(id: string): Promise<R> {
         edad: pac.fechaNacimiento ? calcularEdad(pac.fechaNacimiento) : null,
       },
       orden: orden ? numeroOrden(orden.numero) : null, remitente: orden?.doctorRemitente?.name ?? null,
-      estudioFecha: estudio?.fechaEstudio ? fechaBogota(estudio.fechaEstudio) : null,
+      estudioFecha: estudio?.fechaEstudio ? fechaBogota(estudio.fechaEstudio, { dateStyle: "long", timeZone: "UTC" }) : null, // StudyDate = medianoche UTC
       motivo: inf.motivo, tecnica: inf.tecnica, hallazgos: inf.hallazgos, impresion: inf.impresion, recomendaciones: inf.recomendaciones, alertas, capturas, colorPrimario: normalizarHex(config?.colorPrimario),
       firmante: { nombre: ctx.usuario.name, tarjeta: perfil?.tarjetaProfesional ?? null },
       emitidoEn: fechaBogota(ahora, { dateStyle: "long", timeStyle: "short" }), version: inf.version, codigo, urlVerificacion: `${baseUrl()}/verificar/${codigo}`,

@@ -3,6 +3,8 @@ import { z } from "zod";
 
 export const IMG_MAX_BYTES = 25 * 1024 * 1024;
 export const IMG_MAX_POR_SUBIDA = 20;
+/** Tope del cuerpo completo de una subida (Caddy aplica el mismo): 150 MB aunque 20 x 25 MB sumarían más. */
+export const IMG_MAX_PETICION = 150 * 1024 * 1024;
 export const MAX_CAPTURAS = 12;
 export const MAX_LEYENDA = 200;
 export const IMG_ACCEPT = "image/jpeg,image/png,image/webp,image/heic,image/heif,.heic,.heif";

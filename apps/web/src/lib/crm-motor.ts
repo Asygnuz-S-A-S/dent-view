@@ -106,7 +106,8 @@ export const claveLead = (leadId: string) => `lead:${leadId}`;
 export const clavePacienteValoracion = (pacienteId: string, valoracionId: string) => `pac:${pacienteId}:val:${valoracionId}`;
 export const clavePacienteAnio = (pacienteId: string, anio: number) => `pac:${pacienteId}:${anio}`;
 export const clavePacienteOrden = (pacienteId: string, ordenId: string) => `pac:${pacienteId}:ord:${ordenId}`;
-export const clavePacienteTratamiento = (pacienteId: string, anio: number, mes: number) => `pac:${pacienteId}:trat:${anio}${String(mes).padStart(2, "0")}`;
+/** Un cierre de tratamiento = el último ítem del plan: no cambia de mes (la cita atendida cuenta 30 días) y un plan nuevo da otra clave. */
+export const clavePacienteTratamiento = (pacienteId: string, ultimoItemId: string) => `pac:${pacienteId}:trat:${ultimoItemId}`;
 export const claveManual = (sujeto: string, marca: number) => `man:${sujeto}:${marca}`;
 
 // ---- Cumpleaños ----

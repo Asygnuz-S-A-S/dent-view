@@ -48,7 +48,8 @@ export function BuscadorGlobal() {
     <>
       <Button variant="outline" size="sm" className="ml-auto text-muted-foreground" onClick={() => setAbierto(true)} aria-label="Buscar pacientes y órdenes">
         <Search /> <span className="hidden sm:inline">Buscar…</span>
-        <kbd className="pointer-events-none ml-2 hidden rounded border bg-muted px-1.5 font-mono text-[10px] sm:inline">Ctrl K</kbd>
+        {/* La pista del atajo va en un pseudo-elemento: no forma parte del texto visible del botón, que debe estar contenido en su nombre accesible (WCAG 2.5.3). */}
+        <kbd aria-hidden className="pointer-events-none ml-2 hidden rounded border bg-muted px-1.5 font-mono text-[10px] after:content-['Ctrl_K'] sm:inline" />
       </Button>
       <CommandDialog open={abierto} onOpenChange={(o) => { setAbierto(o); if (!o) { setQ(""); setRes([]); } }} title="Búsqueda global" description="Busca pacientes por nombre o documento y órdenes por número">
         {/* shouldFilter=false: el servidor ya filtró. */}

@@ -30,18 +30,36 @@
 
 	handle {
 		# B1: tope de cuerpo en la API (el visor y DICOM-web suben archivos grandes y quedan fuera).
-		# Excepción: la subida de fotos y video de la valoración virtual (hasta 50 MB de video + formulario).
+		# Excepciones: la subida de fotos y video de la valoración virtual (hasta 50 MB de video + formulario), la subida de
+		# imágenes del personal (hasta 20 archivos de 25 MB) y la ingesta de DICOM/ZIP desde las estaciones (CBCT de cientos de MB).
+		# En estas rutas la app valida primero sesión o token y aplica su propio tope, con un mensaje claro.
 		@valoracionSubida path /api/valoraciones/publico/*
 		request_body @valoracionSubida {
 			max_size 60MB
 		}
+		# Imágenes del personal: hasta 150 MB por petición (la app lo exige también por Content-Length antes de leer el cuerpo).
+		@imagenesSubida path /api/imagenes
+		request_body @imagenesSubida {
+			max_size 150MB
+		}
+		# Foto de perfil del paciente: 6 MB.
+		@fotoPaciente path_regexp ^/pacientes/[^/]+/foto$
+		request_body @fotoPaciente {
+			max_size 6MB
+		}
+		@ingesta path /api/ingesta
+		request_body @ingesta {
+			max_size 2200MB
+		}
 		@api {
 			path /api/*
-			not path /api/valoraciones/publico/*
+			not path /api/valoraciones/publico/* /api/imagenes /api/ingesta
 		}
 		request_body @api {
 			max_size 2MB
 		}
+		# x-pathname lo fija solo la app (proxy.ts): el cliente no puede inyectarlo.
+		request_header -x-pathname
 		header Content-Security-Policy "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; media-src 'self' blob:; font-src 'self' data:; connect-src 'self'; frame-ancestors 'none'; object-src 'none'; base-uri 'self'; form-action 'self'"
 		reverse_proxy web:3000
 	}

@@ -38,7 +38,7 @@ import { cop, precioFinal } from "@/lib/precios";
 import { listarEnlaces } from "@/lib/resultados";
 import { CLINICOS, GESTION, MEDICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
-import { fechaCorta, fechaHoraCompleta } from "@/lib/fechas";
+import { fechaCorta, fechaDeEstudio, fechaHoraCompleta } from "@/lib/fechas";
 
 export const dynamic = "force-dynamic";
 
@@ -72,7 +72,7 @@ function TablaEstudios({ estudios }: { estudios: EstudioFila[] }) {
           <TableBody>
             {estudios.map((e) => (
               <TableRow key={e.id}>
-                <TableCell className="pl-6">{fecha(e.fechaEstudio ?? e.creadoEn)}</TableCell>
+                <TableCell className="pl-6">{fechaDeEstudio(e)}</TableCell>
                 <TableCell><Badge variant="outline">{e.modalidad ?? "—"}</Badge></TableCell>
                 <TableCell className="hidden max-w-[16rem] truncate text-muted-foreground md:table-cell">{e.descripcion ?? "—"}</TableCell>
                 <TableCell><Badge variant="secondary">{ESTUDIO[e.estado]}</Badge></TableCell>
@@ -156,7 +156,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
   // Imágenes no DICOM del paciente (el doctor remitente solo ve las de sus órdenes/estudios); suben las clínicas, no el doctor.
   const imagenes = await prisma.imagenEstudio.findMany({ where: { pacienteId: p.id, ...filtroImagenes(ctx.organizationId, ctx.usuario.id, ctx.rol) }, orderBy: { creadoEn: "desc" }, select: { id: true, titulo: true, nombreOriginal: true, mime: true, bytes: true } });
   const galeria = (
-    <GaleriaImagenes pacienteId={p.id} imagenes={imagenes} puedeEditar={!esDoctor} ordenes={p.ordenes.map((o) => ({ id: o.id, etiqueta: numeroOrden(o.numero) }))} estudios={p.estudios.map((e) => ({ id: e.id, etiqueta: `${e.modalidad ?? "Estudio"} · ${fecha(e.fechaEstudio ?? e.creadoEn)}` }))} />
+    <GaleriaImagenes pacienteId={p.id} imagenes={imagenes} puedeEditar={!esDoctor} ordenes={p.ordenes.map((o) => ({ id: o.id, etiqueta: numeroOrden(o.numero) }))} estudios={p.estudios.map((e) => ({ id: e.id, etiqueta: `${e.modalidad ?? "Estudio"} · ${fechaDeEstudio(e)}` }))} />
   );
 
   // Equipo tratante: derivado de órdenes y estudios (ya acotados al doctor si es doctor) + lo registrado a mano.
@@ -467,7 +467,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
               </TabsList>
         <TabsContent value="odontograma">
           <Card><CardContent>
-            <Odontograma pacienteId={p.id} condiciones={p.condiciones.map((c) => ({ diente: c.diente, condicion: c.condicion }))} editable />
+            <Odontograma pacienteId={p.id} condiciones={p.condiciones.map((c) => ({ diente: c.diente, condicion: c.condicion }))} editable={verClinica} />
           </CardContent></Card>
         </TabsContent>
 
@@ -476,12 +476,14 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
             pacienteId={p.id}
             items={p.planItems}
             servicios={servicios.map((s) => ({ id: s.id, nombre: s.nombre, valor: precioFinal(s, "DIGITAL") ?? 0 }))}
+            soloLectura={!verClinica}
           />
         </TabsContent>
 
         <TabsContent value="notas">
           <NotasClinicas
             pacienteId={p.id}
+            soloLectura={!verClinica}
             notas={p.notasClinicas.map((n) => ({
               id: n.id, texto: n.texto, autor: (n.autorId && nombreActor.get(n.autorId)) || "Sin autor",
               fecha: fechaHoraCompleta(n.fecha),

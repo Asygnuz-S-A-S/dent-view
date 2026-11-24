@@ -164,3 +164,14 @@ describe("utilidades", () => {
     expect(esquemaCuestionario.safeParse({ dolor: 4, sintomas: ["INVENTADO"], motivo: "me duele" }).success).toBe(false);
   });
 });
+
+describe("contenido clínico de valoraciones", () => {
+  it("solo quien valora lo ve: recepción y admin no odontólogo, no", async () => {
+    const { puedeVerClinico } = await import("./valoraciones");
+    expect(puedeVerClinico("especialista", false)).toBe(true);
+    expect(puedeVerClinico("admin_tenant", true)).toBe(true);
+    expect(puedeVerClinico("admin_tenant", false)).toBe(false);
+    expect(puedeVerClinico("recepcion", false)).toBe(false);
+    expect(puedeVerClinico("recepcion", true)).toBe(false);
+  });
+});

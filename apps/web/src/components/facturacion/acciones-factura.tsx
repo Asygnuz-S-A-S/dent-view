@@ -15,7 +15,7 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { ETIQUETA_MEDIO, MEDIOS_PAGO, validarAbono, validarNotaCredito, type MedioPago } from "@/lib/facturacion";
 import { cop } from "@/lib/precios";
 
-export function AccionesFactura({ id, abierta, saldo, tienePagos, pagada = false, pagado = 0, admin = false }: { id: string; abierta: boolean; saldo: number; tienePagos: boolean; pagada?: boolean; pagado?: number; admin?: boolean }) {
+export function AccionesFactura({ id, abierta, saldo, tienePagos, pagada = false, pagado = 0, total, admin = false }: { id: string; abierta: boolean; saldo: number; tienePagos: boolean; pagada?: boolean; pagado?: number; total?: number; admin?: boolean }) {
   const [pendiente, iniciar] = useTransition();
   const [abierto, setAbierto] = useState(false);
   const [valor, setValor] = useState(String(saldo));
@@ -23,7 +23,7 @@ export function AccionesFactura({ id, abierta, saldo, tienePagos, pagada = false
   const [nota, setNota] = useState("");
   const [valorNota, setValorNota] = useState("");
   const errorAbono = validarAbono(Number(valor), saldo);
-  const errorNota = validarNotaCredito(Number(valorNota), pagado);
+  const errorNota = validarNotaCredito(Number(valorNota), pagado, total ?? pagado);
 
   const abonar = () =>
     iniciar(async () => {
@@ -69,11 +69,11 @@ export function AccionesFactura({ id, abierta, saldo, tienePagos, pagada = false
       )}
       {pagada && admin && (
         <DialogoMotivo
-          titulo="Nota crédito" descripcion="Reduce el total de la cuenta en el valor indicado (no puede superar lo pagado). Queda registrada con consecutivo." confirmar="Crear nota crédito" exito="Nota crédito creada"
+          titulo="Nota crédito" descripcion="Reduce el total de la cuenta en el valor indicado (no puede superar lo pagado ni el total vigente). Queda registrada con consecutivo." confirmar="Crear nota crédito" exito="Nota crédito creada"
           ejecutar={(m) => crearNotaCredito(id, { valor: Number(valorNota), motivo: m })} bloqueado={!!errorNota}
           extra={
             <div className="space-y-2">
-              <Label htmlFor="valor-nota">Valor (máx. {cop(pagado)})</Label>
+              <Label htmlFor="valor-nota">Valor (máx. {cop(Math.min(pagado, total ?? pagado))})</Label>
               <InputMoneda id="valor-nota" value={valorNota} onValueChange={setValorNota} aria-invalid={!!errorNota} />
               {valorNota !== "" && errorNota && <p className="text-xs text-destructive">{errorNota}</p>}
             </div>

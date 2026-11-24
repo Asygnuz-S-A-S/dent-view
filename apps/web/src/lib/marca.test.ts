@@ -48,3 +48,9 @@ describe("marca del centro", () => {
     expect(esquemaLogo.safeParse("javascript:alert(1)").success).toBe(false);
   });
 });
+
+describe("modo oscuro: el primario se lee también sobre su tinte y sobre tarjetas", () => {
+  it("teal institucional (#0f766e) llega a 6:1 contra el fondo oscuro", () => {
+    expect(contraste(temaMarca("#0f766e").oscuro.primario, "#0a0a0a")).toBeGreaterThanOrEqual(6);
+  });
+});

@@ -24,9 +24,11 @@ export function MarcaCentro({ nombreOrg, inicial }: Props) {
   const tema = color ? temaMarca(color) : null;
   const colorInvalido = hexTexto.trim() !== "" && !color;
   const nombreVisible = nombre.trim() || nombreOrg;
+  // La vista previa sigue el modo activo: ambas paletas viajan como variables y `dark:` elige (en oscuro el primario se aclara).
   const vistaPrevia = (tema
-    ? { "--primary": tema.claro.primario, "--primary-foreground": tema.claro.texto, "--sidebar-primary": tema.claro.primario, "--sidebar-primary-foreground": tema.claro.texto }
+    ? { "--pc": tema.claro.primario, "--tc": tema.claro.texto, "--po": tema.oscuro.primario, "--to": tema.oscuro.texto }
     : {}) as CSSProperties;
+  const claseVistaPrevia = tema ? "[--primary:var(--pc)] [--primary-foreground:var(--tc)] [--sidebar-primary:var(--pc)] [--sidebar-primary-foreground:var(--tc)] dark:[--primary:var(--po)] dark:[--primary-foreground:var(--to)] dark:[--sidebar-primary:var(--po)] dark:[--sidebar-primary-foreground:var(--to)]" : "";
 
   function elegirLogo(f: File | undefined) {
     if (!f) return;
@@ -115,7 +117,7 @@ export function MarcaCentro({ nombreOrg, inicial }: Props) {
           </div>
         </div>
 
-        <figure className="grid content-start gap-2" style={vistaPrevia}>
+        <figure className={`grid content-start gap-2 ${claseVistaPrevia}`} style={vistaPrevia}>
           <figcaption className="text-xs font-medium text-muted-foreground">Vista previa</figcaption>
           <div className="overflow-hidden rounded-xl border bg-background">
             <div className="flex">

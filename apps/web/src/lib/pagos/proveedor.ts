@@ -86,7 +86,7 @@ export function aPesos(v: unknown): number | null {
 
 /** Simulación (solo desarrollo): sustituye las llamadas salientes en modo SANDBOX; las firmas siguen verificándose de verdad. */
 // Defensa extra: el simulador solo existe si la app corre en localhost, aunque alguien deje PAGOS_SIMULADO=1 en un servidor real.
-const esLocal = () => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(process.env.BETTER_AUTH_URL ?? "");
+export const esLocal = () => /^https?:\/\/(localhost|127\.0\.0\.1)(:|\/|$)/.test(process.env.BETTER_AUTH_URL ?? "");
 export const simulacionActiva = (modo: Modo) => process.env.PAGOS_SIMULADO === "1" && modo === "SANDBOX" && esLocal();
 
 /** Últimos 4 caracteres para mostrar en la UI (nunca el valor completo). */

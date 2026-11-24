@@ -10,8 +10,13 @@ import { aCargoDe, nombresDoctores } from "@/lib/facturacion-datos";
 import { ESTADOS_FACTURA, ETIQUETA_ESTADO_FACTURA, numeroFactura, saldo, totalPagado } from "@/lib/facturacion";
 import { cop } from "@/lib/precios";
 import { GESTION } from "@/lib/roles";
+import { idsPacientesPorNombre } from "@/lib/busqueda";
+import { documentoDeBusqueda } from "@/lib/pacientes";
+import { numeroDeBusqueda } from "@/lib/ordenes";
 import { exigirContexto } from "@/lib/sesion";
 import { fechaCorta } from "@/lib/fechas";
+import { calcularPagina } from "@/lib/paginacion";
+import { Paginacion } from "@/components/comunes/paginacion";
 import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
@@ -19,28 +24,31 @@ export const dynamic = "force-dynamic";
 
 const fecha = fechaCorta;
 
-export default async function Facturacion({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string }> }) {
+export default async function Facturacion({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string; pagina?: string }> }) {
   const ctx = await exigirContexto(GESTION);
-  const { estado, q } = await searchParams;
+  const { estado, q, pagina } = await searchParams;
   const estadoValido = ESTADOS_FACTURA.find((e) => e === estado);
   const busqueda = q?.trim();
 
   const where: Prisma.FacturaWhereInput = { organizationId: ctx.organizationId };
   if (estadoValido) where.estado = estadoValido;
   if (busqueda) {
-    const numero = Number(busqueda.replace(/^fc-?/i, ""));
+    const numero = numeroDeBusqueda(busqueda.replace(/^fc-?/i, ""));
     where.OR = [
-      { paciente: { nombre: { contains: busqueda, mode: "insensitive" } } },
-      { paciente: { persona: { numeroDocumento: { contains: busqueda } } } },
+      { pacienteId: { in: await idsPacientesPorNombre(ctx.organizationId, busqueda) } },
+      { paciente: { persona: { numeroDocumento: { contains: documentoDeBusqueda(busqueda) || "#sin-documento#" } } } },
       { convenio: { contains: busqueda, mode: "insensitive" } },
-      ...(Number.isInteger(numero) && numero > 0 ? [{ numero }] : []),
+      ...(numero !== null ? [{ numero }] : []),
     ];
   }
+  const total = await prisma.factura.count({ where });
+  const pg = calcularPagina(pagina, total);
   const facturas = await prisma.factura.findMany({
     where,
     include: { paciente: { include: { persona: true } }, pagos: { where: { anuladoEn: null }, select: { valor: true } } },
     orderBy: { numero: "desc" },
-    take: 200,
+    skip: pg.skip,
+    take: pg.take,
   });
   const doctores = await nombresDoctores(ctx.organizationId, facturas.map((f) => f.responsableId));
   const enlace = (e?: string) => `/facturacion?${new URLSearchParams({ ...(e ? { estado: e } : {}), ...(busqueda ? { q: busqueda } : {}) })}`;
@@ -109,6 +117,8 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
           )}
         </CardContent>
       </Card>
+
+      <Paginacion ruta="/facturacion" params={{ ...(estadoValido ? { estado: estadoValido } : {}), q: busqueda }} {...pg} total={total} />
     </div>
   );
 }

@@ -7,7 +7,7 @@ import { toast } from "sonner";
 import { VisorImagen, type ImagenVista } from "@/components/estudios/visor-imagen";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 import { Button } from "@/components/ui/button";
-import { IMG_ACCEPT, IMG_MAX_BYTES, validarCantidad } from "@/lib/imagenes";
+import { IMG_ACCEPT, IMG_MAX_BYTES, IMG_MAX_PETICION, validarCantidad } from "@/lib/imagenes";
 
 type Opcion = { id: string; etiqueta: string };
 const SELECT = "h-8 rounded-md border border-input bg-background px-2 text-sm";
@@ -28,6 +28,7 @@ export function GaleriaImagenes({ pacienteId, imagenes, puedeEditar, ordenes = [
     if (err) return void (archivos.length && toast.error(err));
     const grande = archivos.find((f) => f.size > IMG_MAX_BYTES);
     if (grande) return void toast.error(`${grande.name} supera los 25 MB`);
+    if (archivos.reduce((t, f) => t + f.size, 0) > IMG_MAX_PETICION) return void toast.error("La subida supera los 150 MB: súbelas en tandas");
     const datos = new FormData();
     datos.set("pacienteId", pacienteId);
     if (ordenId) datos.set("ordenId", ordenId);
@@ -60,7 +61,7 @@ export function GaleriaImagenes({ pacienteId, imagenes, puedeEditar, ordenes = [
         </>)}
       </div>
       {imagenes.length === 0 ? (
-        <EstadoVacio icono={ImageIcon} titulo="Sin imágenes" descripcion="Sube fotos o radiografías en JPG, PNG, WebP o HEIC (máx. 25 MB, hasta 20 por subida)." />
+        <EstadoVacio icono={ImageIcon} titulo="Sin imágenes" descripcion="Sube fotos o radiografías en JPG, PNG, WebP o HEIC (máx. 25 MB por archivo, hasta 20 archivos y 150 MB por subida)." />
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {imagenes.map((im, i) => (

@@ -63,7 +63,7 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
           )}
           {f.notas && <p className="text-sm">{f.notas}</p>}
         </div>
-        <AccionesFactura id={f.id} abierta={f.estado === "ABIERTA"} saldo={pendiente} tienePagos={f.pagos.some((p) => !p.anuladoEn)} pagada={f.estado === "PAGADA"} pagado={totalPagado(f.pagos)} admin={ctx.rol === "admin_tenant"} />
+        <AccionesFactura id={f.id} abierta={f.estado === "ABIERTA"} saldo={pendiente} tienePagos={f.pagos.some((p) => !p.anuladoEn)} pagada={f.estado === "PAGADA"} pagado={totalPagado(f.pagos)} total={f.total} admin={ctx.rol === "admin_tenant"} />
       </div>
 
       <Card className="py-0">

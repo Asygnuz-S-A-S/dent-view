@@ -63,9 +63,9 @@ test("agenda?orden=<id> abre «Nueva cita» prellenada y «Llegó» marca la lle
   }
   expect(hora, "ninguna franja libre").not.toBe("");
   const nombreCita = nombre!.toLowerCase();
-  await expect(page.getByRole("button", { name: new RegExp(`${nombreCita}, ${hora}, Programada`) })).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(`${nombreCita}\\s+${hora} · Programada`) })).toBeVisible();
   await page.getByRole("button", { name: `Marcar llegada de ${nombreCita}` }).click();
-  await expect(page.getByRole("button", { name: new RegExp(`${nombreCita}, ${hora}, Llegó`) })).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(`${nombreCita}\\s+${hora} · Llegó`) })).toBeVisible();
 });
 
 test("vínculo manual orden↔estudio y desvincular", async ({ page }) => {

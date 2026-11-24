@@ -126,14 +126,15 @@ async function candidatosDe(db: Db, org: string, s: SecuenciaConPasos, ahora: Da
       return o.map((x) => ({ clave: clavePacienteOrden(x.pacienteId, x.id), pacienteId: x.pacienteId }));
     }
     case "TRATAMIENTO_TERMINADO": {
-      // Plan con ítems realizados y ninguno pendiente, y una cita atendida en los últimos 30 días.
-      const filas = await db.$queryRaw<{ id: string }[]>`
-        SELECT p.id FROM "PacienteTenant" p WHERE p."organizationId" = ${org}
+      // Plan con ítems realizados y ninguno pendiente, y una cita atendida en los últimos 30 días. La clave es el cierre del plan (último ítem), no el mes: no se repite al cruzar de mes.
+      const filas = await db.$queryRaw<{ id: string; ultimo: string }[]>`
+        SELECT p.id, (SELECT i.id FROM "PlanTratamientoItem" i WHERE i."pacienteId" = p.id ORDER BY i."creadoEn" DESC, i.id DESC LIMIT 1) AS ultimo
+        FROM "PacienteTenant" p WHERE p."organizationId" = ${org}
           AND EXISTS (SELECT 1 FROM "PlanTratamientoItem" i WHERE i."pacienteId" = p.id AND i.estado = 'REALIZADO')
           AND NOT EXISTS (SELECT 1 FROM "PlanTratamientoItem" i WHERE i."pacienteId" = p.id AND i.estado IN ('PLANEADO', 'ACEPTADO'))
           AND EXISTS (SELECT 1 FROM "Cita" c WHERE c."pacienteId" = p.id AND c.estado = 'ATENDIDA' AND c.inicio >= ${hace(30)})
         LIMIT ${LIMITE_LOTE}`;
-      return filas.map((f) => ({ clave: clavePacienteTratamiento(f.id, bog.anio, bog.mes), pacienteId: f.id }));
+      return filas.map((f) => ({ clave: clavePacienteTratamiento(f.id, f.ultimo), pacienteId: f.id }));
     }
     case "PACIENTE_INACTIVO": {
       if (!fid) return [];

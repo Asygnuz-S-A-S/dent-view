@@ -30,7 +30,7 @@ export function EntrarCentro({ organizationId, nombre }: { organizationId: strin
         })
       }
     >
-      <LogIn /> Entrar al centro
+      <LogIn /> Entrar
     </Button>
   );
 }

@@ -85,15 +85,60 @@ services:
     volumes:
       - ../viewer/config/dent-view.js:/usr/share/nginx/html/visor/app-config.js:ro
 
+  # Corre una vez: migra con el dueño de la base (MIGRATE_DATABASE_URL) y reaplica los permisos del rol de la app.
+  # Es el único servicio de la app con la credencial de dueño; web no la recibe (un RCE en web no obtiene DDL ni superusuario).
+  migrador:
+    build:
+      context: ..
+      dockerfile: apps/web/Dockerfile
+    command: ["sh", "-c", "cd /migrar && node_modules/.bin/prisma migrate deploy && node_modules/.bin/prisma db execute --file rol-app.sql"]
+    environment:
+      MIGRATE_DATABASE_URL: ${MIGRATE_DATABASE_URL:-${DATABASE_URL}}
+    depends_on:
+      postgres:
+        condition: service_healthy
+    restart: "no"
+
   web:
     build:
       context: ..
       dockerfile: apps/web/Dockerfile
-    env_file: .env
+    # Lista explícita: solo lo que web lee (sin MIGRATE_DATABASE_URL, POSTGRES_PASSWORD ni APP_DB_PASSWORD).
+    # Forma sin valor (- VAR): se pasa solo si está definida en .env; las opcionales no definidas quedan sin definir (el código usa ?? y valores por defecto).
+    environment:
+      - DATABASE_URL
+      - BETTER_AUTH_SECRET
+      - BETTER_AUTH_URL
+      - BETTER_AUTH_TRUSTED_ORIGINS
+      - APP_URL
+      - CIFRADO_SECRETO
+      - SMTP_HOST
+      - SMTP_PORT
+      - SMTP_USER
+      - SMTP_PASS
+      - SMTP_FROM
+      - SMTP_SECURE
+      - ORTHANC_URL
+      - S3_ENDPOINT
+      - S3_ACCESS_KEY
+      - S3_SECRET_KEY
+      - S3_BUCKET_ESTUDIOS
+      - CRON_SECRET
+      - MFA_EXENTOS
+      - PAGOS_SIMULADO
+      - WEBHOOKS_PERMITIR_LOCAL
+      - INGESTA_MAX_BYTES
+      - CRM_TOPE_DIARIO
+      - CRM_VENTANA_DESDE
+      - CRM_VENTANA_HASTA
+      - CRM_VENTANA_LIBRE
+      - CRM_ENVIAR_DOMINGOS
     depends_on:
       postgres:
         condition: service_healthy
-    # Healthy = migraciones aplicadas (CMD migra antes de arrancar el servidor) y Next respondiendo.
+      migrador:
+        condition: service_completed_successfully
+    # Healthy = Next respondiendo (las migraciones ya las aplicó el migrador).
     healthcheck:
       test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/ingresar').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
       interval: 5s
@@ -124,7 +169,7 @@ services:
       orthanc:
         condition: service_started
       web:
-        condition: service_healthy # web aplica las migraciones al iniciar: el worker espera a que terminen
+        condition: service_healthy # web arranca después del migrador: el worker espera a que Next responda
 
   mailpit:
     # Buzón SMTP de desarrollo: captura todo el correo (SMTP interno mailpit:1025, UI en http://127.0.0.1:8025).

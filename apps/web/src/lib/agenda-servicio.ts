@@ -1,5 +1,5 @@
 // Alta/edición de citas compartida por la app (server action) y la API pública.
-import { esCruceDeCitas } from "./agenda-cruce";
+import { esConflictoDeEscritura, esCruceDeCitas } from "./agenda-cruce";
 import { prisma } from "@dent-view/db";
 import { z } from "zod";
 import { bogotaAUtc, ESTADOS_CITA, esFecha, FIN_DIA_MIN, hayCruce, INICIO_DIA_MIN, PASO_MIN } from "./agenda";
@@ -21,7 +21,22 @@ export const esquemaCita = z.object({
 });
 export type EntradaCita = z.output<typeof esquemaCita>;
 
-export async function guardarCitaEnCentro(a: {
+/**
+ * Dos altas simultáneas al mismo hueco pueden terminar en deadlock (Prisma P2034) en la perdedora: se reintenta,
+ * y en el reintento ya ve la cita ganadora y responde el cruce normal en vez de un 500.
+ */
+export async function guardarCitaEnCentro(a: Parameters<typeof guardarCita>[0]): ReturnType<typeof guardarCita> {
+  for (let intento = 0; ; intento++) {
+    try {
+      return await guardarCita(a);
+    } catch (e) {
+      if (!esConflictoDeEscritura(e) || intento >= 2) throw e;
+      await new Promise((r) => setTimeout(r, 150 * (intento + 1)));
+    }
+  }
+}
+
+async function guardarCita(a: {
   organizationId: string;
   actorId: string | null;
   datos: EntradaCita;

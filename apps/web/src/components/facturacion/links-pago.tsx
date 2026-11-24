@@ -48,6 +48,7 @@ export function LinksPago({ facturaId, puedeGenerar, disponible, pasarelas, link
   const generar = () => iniciar(async () => {
     const r = await generarLinkPago(facturaId, { pasarelaId, abono: parcial ? monto : undefined });
     aviso(r, "Link de pago generado");
+    if (r.aviso) toast.warning(r.aviso);
     if (!r.error) setAbierto(false);
   });
 

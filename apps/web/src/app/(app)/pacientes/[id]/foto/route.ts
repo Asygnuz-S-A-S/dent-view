@@ -2,8 +2,9 @@ import { DeleteObjectCommand, GetObjectCommand, PutObjectCommand } from "@aws-sd
 import { prisma } from "@dent-view/db";
 import { randomUUID } from "node:crypto";
 import sharp from "sharp";
+import { cuerpoExcede } from "@/lib/cuerpo";
 import { registrarEvento } from "@/lib/eventos";
-import { claveFoto, claveFotoValida, validarFoto } from "@/lib/pacientes-foto";
+import { claveFoto, claveFotoValida, FOTO_MAX_PETICION, validarFoto } from "@/lib/pacientes-foto";
 import { filtroVisibles } from "@/lib/pacientes-filtro";
 import { CLINICOS, GESTION } from "@/lib/roles";
 import { s3 } from "@/lib/s3";
@@ -46,6 +47,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   const ctx = await contexto(GESTION);
   if (!ctx) return new Response(null, { status: 401 });
   if (!mismoOrigen(req)) return Response.json({ error: "Origen no permitido" }, { status: 403 });
+  if (cuerpoExcede(req, FOTO_MAX_PETICION)) return Response.json({ error: "La foto supera los 5 MB" }, { status: 413 });
   const { id } = await params;
   const p = await prisma.pacienteTenant.findFirst({ where: { id, organizationId: ctx.organizationId }, select: { id: true, fotoKey: true } });
   if (!p) return Response.json({ error: "Paciente no encontrado" }, { status: 404 });
@@ -59,7 +61,7 @@ export async function POST(req: Request, { params }: { params: Promise<{ id: str
   // Se re-codifica a JPEG cuadrado: sin EXIF/GPS (sharp no copia metadatos) y sin carga útil oculta.
   let jpeg: Buffer;
   try {
-    jpeg = await sharp(bytes).rotate().resize(512, 512, { fit: "cover" }).jpeg({ quality: 85 }).toBuffer();
+    jpeg = await sharp(bytes, { limitInputPixels: 50_000_000 }).rotate().resize(512, 512, { fit: "cover" }).jpeg({ quality: 85 }).toBuffer();
   } catch {
     return Response.json({ error: "No se pudo leer la imagen" }, { status: 400 });
   }

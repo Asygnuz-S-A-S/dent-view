@@ -7,7 +7,7 @@ import { z } from "zod";
 import { generarCodigoAcceso, generarToken, hashCodigo, hashToken } from "@/lib/entrega";
 import { registrarEvento } from "@/lib/eventos";
 import { secreto } from "@/lib/resultados";
-import { exigirContexto } from "@/lib/sesion";
+import { exigirContexto, exigirModulo } from "@/lib/sesion";
 import {
   DIAS_RESULTADO, DIAS_VENCIMIENTO, ROLES_VER_VALORACIONES, enlaceWhatsapp, esquemaMensaje, esquemaResultado, esquemaSolicitud, estadoEfectivo, transicionValida, vencimiento,
   type EstadoVal,
@@ -23,7 +23,8 @@ type R = { error?: string };
 type D<T> = { error: string } | T;
 
 async function ctxPersonal(): Promise<ContextoVal> {
-  await exigirContexto(ROLES_VER_VALORACIONES); // redirige/404 por sesión, clave temporal, MFA o rol
+  const base = await exigirContexto(ROLES_VER_VALORACIONES); // redirige/404 por sesión, clave temporal, MFA o rol
+  await exigirModulo(base, "valoraciones");
   const ctx = await contextoValoraciones();
   if (!ctx) notFound();
   return ctx;

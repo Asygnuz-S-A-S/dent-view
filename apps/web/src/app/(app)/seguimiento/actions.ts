@@ -7,7 +7,7 @@ import { z } from "zod";
 import { registrarEvento } from "@/lib/eventos";
 import { encolarMensaje } from "@/lib/notificar";
 import { varsCentro } from "@/lib/recordatorios";
-import { CANALES_CONTACTO, estadoTrasIntento, ETIQUETA_MOTIVO, MOTIVOS, mesTexto, primerDiaMes, PRIORIDADES, RESULTADOS, seguimientoAbierto, sumarMeses, type EstadoSeg, type Motivo, type Resultado } from "@/lib/seguimiento";
+import { CANALES_CONTACTO, notaAplazamiento, estadoTrasIntento, ETIQUETA_MOTIVO, MOTIVOS, mesTexto, primerDiaMes, PRIORIDADES, RESULTADOS, seguimientoAbierto, sumarMeses, type EstadoSeg, type Motivo, type Resultado } from "@/lib/seguimiento";
 import { CLINICOS, GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 
@@ -93,5 +93,5 @@ export async function cancelarSeguimiento(id: string) {
 }
 export async function aplazarSeguimiento(id: string, meses: number): Promise<R> {
   if (!Number.isInteger(meses) || meses < 1 || meses > 24) return { error: "Meses inválidos" };
-  return cambiar(id, GESTION, (s, u) => ({ estado: "PENDIENTE", mesObjetivo: sumarMeses(s.mesObjetivo, meses), nota: [s.nota, `${new Date().toISOString().slice(0, 10)} ${u.name}: aplazado ${meses} mes(es)`].filter(Boolean).join("\n") }), "seguimiento.aplazado");
+  return cambiar(id, GESTION, (s, u) => ({ estado: "PENDIENTE", mesObjetivo: sumarMeses(s.mesObjetivo, meses), nota: notaAplazamiento(s.nota, new Date(), u.name, meses) }), "seguimiento.aplazado");
 }

@@ -48,8 +48,8 @@ function Entregar({ origen, abrirInicial }: { origen: Origen; abrirInicial: bool
           <div className="space-y-3 text-sm">
             <p>{res.enviado ? "Correos en cola: el enlace y el código salen en mensajes separados." : "No se envió correo (sin correo o el paciente no desea ser contactado). Entregue estos datos en persona."}</p>
             <p className="text-muted-foreground">Se muestran una sola vez; luego solo se guardan cifrados.</p>
-            <div className="grid gap-1"><Label>Enlace</Label><div className="flex gap-2"><Input readOnly value={res.enlace} /><Button type="button" variant="outline" size="icon" aria-label="Copiar enlace" onClick={() => copiar(res.enlace)}><Copy /></Button></div></div>
-            <div className="grid gap-1"><Label>Código</Label><div className="flex gap-2"><Input readOnly value={res.codigo} className="font-mono tracking-widest" /><Button type="button" variant="outline" size="icon" aria-label="Copiar código" onClick={() => copiar(res.codigo)}><Copy /></Button></div></div>
+            <div className="grid gap-1"><Label htmlFor="ent-res-enlace">Enlace</Label><div className="flex gap-2"><Input id="ent-res-enlace" readOnly value={res.enlace} /><Button type="button" variant="outline" size="icon" aria-label="Copiar enlace" onClick={() => copiar(res.enlace)}><Copy /></Button></div></div>
+            <div className="grid gap-1"><Label htmlFor="ent-res-codigo">Código</Label><div className="flex gap-2"><Input id="ent-res-codigo" readOnly value={res.codigo} className="font-mono tracking-widest" /><Button type="button" variant="outline" size="icon" aria-label="Copiar código" onClick={() => copiar(res.codigo)}><Copy /></Button></div></div>
             <DialogFooter><HojaEntrega centro={origen.centro} paciente={origen.nombre} enlace={res.enlace} codigo={res.codigo} venceEn={res.venceEn} /><Button onClick={() => setAbierto(false)}>Listo</Button></DialogFooter>
           </div>
         ) : (
@@ -85,16 +85,16 @@ export function PanelEntrega({ enlaces, origen, abrirInicial = false }: { enlace
       ) : (
         <Table>
           <TableHeader><TableRow>
-            <TableHead>Destinatario</TableHead><TableHead>Estado</TableHead><TableHead>Vence</TableHead><TableHead>Accesos</TableHead><TableHead>Último acceso</TableHead><TableHead className="text-right">Acciones</TableHead>
+            <TableHead>Destinatario</TableHead><TableHead>Estado</TableHead><TableHead className="hidden md:table-cell">Vence</TableHead><TableHead className="hidden md:table-cell">Accesos</TableHead><TableHead className="hidden md:table-cell">Último acceso</TableHead><TableHead className="text-right">Acciones</TableHead>
           </TableRow></TableHeader>
           <TableBody>
             {enlaces.map((e) => (
               <TableRow key={e.id}>
                 <TableCell><div className="font-medium">{e.nombre || "—"} <span className="text-xs font-normal text-muted-foreground">({e.tipo === "DOCTOR" ? "doctor" : "paciente"})</span></div><div className="text-xs text-muted-foreground">{e.correo}</div></TableCell>
                 <TableCell><Badge variant={e.estado === "ACTIVO" ? "default" : "secondary"}>{ETIQUETA[e.estado]}</Badge></TableCell>
-                <TableCell>{e.vence}</TableCell>
-                <TableCell>{e.accesos}</TableCell>
-                <TableCell>{e.ultimoAcceso ?? "—"}</TableCell>
+                <TableCell className="hidden md:table-cell">{e.vence}</TableCell>
+                <TableCell className="hidden md:table-cell">{e.accesos}</TableCell>
+                <TableCell className="hidden md:table-cell">{e.ultimoAcceso ?? "—"}</TableCell>
                 <TableCell className="text-right">
                   {(e.estado === "ACTIVO" || e.estado === "BLOQUEADO") && <Button size="sm" variant="outline" disabled={pendiente} onClick={() => revocar(e.id)}>Revocar</Button>}
                 </TableCell>

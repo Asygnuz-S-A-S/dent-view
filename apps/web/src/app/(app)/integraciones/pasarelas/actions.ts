@@ -8,7 +8,7 @@ import { ErrorPasarela, type Llaves } from "@/lib/pagos/proveedor";
 import { ADAPTADORES, esProveedor, obtenerProveedor } from "@/lib/pagos/registro";
 import { conciliarLinks } from "@/lib/pagos/servicio";
 import { ADMIN } from "@/lib/roles";
-import { exigirContexto } from "@/lib/sesion";
+import { exigirContexto, exigirModulo } from "@/lib/sesion";
 
 type R = { error?: string };
 const idSchema = z.string().min(1).max(40).regex(/^[A-Za-z0-9_-]+$/);
@@ -18,6 +18,7 @@ const llavesSchema = z.record(z.string().max(40), z.string().max(500));
 /** Solo administradores del centro, nunca un superadmin suplantando, siempre dentro de su centro. */
 async function contexto() {
   const ctx = await exigirContexto(ADMIN);
+  await exigirModulo(ctx, "pasarelas");
   if (ctx.suplantadoPor) return { error: "Un superadmin dentro del centro no puede gestionar pasarelas" } as const;
   return ctx;
 }

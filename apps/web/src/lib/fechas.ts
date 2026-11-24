@@ -15,6 +15,9 @@ const mesAnio = f({ month: "long", year: "numeric" });
 export const fechaCorta = (d: Date | null | undefined, utc = false) =>
   d ? (utc ? f({ day: "2-digit", month: "2-digit", year: "numeric" }, "UTC").format(d) : corta.format(d)) : "—";
 
+/** Fecha de un estudio: `fechaEstudio` (medianoche UTC, se muestra en UTC) o, si falta, `creadoEn` (hora de Bogotá). */
+export const fechaDeEstudio = (e: { fechaEstudio: Date | null; creadoEn: Date }) => (e.fechaEstudio ? fechaCorta(e.fechaEstudio, true) : fechaCorta(e.creadoEn));
+
 /** "vie, 20 nov., 10:00 a. m." */
 export const fechaHora = (d: Date | null | undefined) =>
   d ? norm(`${diaCorto.format(d)}, ${hora.format(d)}`) : "—";

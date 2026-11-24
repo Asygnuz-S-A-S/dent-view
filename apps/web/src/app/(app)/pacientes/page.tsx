@@ -8,26 +8,31 @@ import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { idsPacientesPorNombre } from "@/lib/busqueda";
 import { iniciales } from "@/lib/pacientes";
-import { construirWhere, leerFiltros, ordenarPor } from "@/lib/pacientes-filtro";
+import { construirWhere, consultaFiltros, leerFiltros, ordenarPor } from "@/lib/pacientes-filtro";
 import { CLINICOS, GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
-import { fechaCorta } from "@/lib/fechas";
+import { fechaDeEstudio } from "@/lib/fechas";
+import { calcularPagina } from "@/lib/paginacion";
+import { Paginacion } from "@/components/comunes/paginacion";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
 export const dynamic = "force-dynamic";
-const LIMITE = 50;
 const PENDIENTES = ["SOLICITADA", "AGENDADA", "TOMADA"];
 
 export default async function Pacientes({ searchParams }: { searchParams: Promise<Record<string, string | string[] | undefined>> }) {
   // El doctor remitente entra solo a sus pacientes (filtro en construirWhere).
   const ctx = await exigirContexto([...CLINICOS, "doctor_remitente"]);
   const esDoctor = ctx.rol === "doctor_remitente";
-  const f = leerFiltros(await searchParams);
-  const where = construirWhere(ctx.organizationId, { id: ctx.usuario.id, rol: ctx.rol }, f);
+  const sp = await searchParams;
+  const f = leerFiltros(sp);
+  const where = construirWhere(ctx.organizationId, { id: ctx.usuario.id, rol: ctx.rol }, f, f.q ? await idsPacientesPorNombre(ctx.organizationId, f.q) : undefined);
   const activos = !!(f.q || f.doctor || f.especialidad || f.pendientes || f.cartera || f.desde || f.hasta || f.orden !== "nombre");
 
-  const [pacientes, total, miembros] = await Promise.all([
+  const total = await prisma.pacienteTenant.count({ where });
+  const pg = calcularPagina(sp.pagina, total);
+  const [pacientes, miembros] = await Promise.all([
     prisma.pacienteTenant.findMany({
       where,
       include: {
@@ -42,9 +47,9 @@ export default async function Pacientes({ searchParams }: { searchParams: Promis
         },
       },
       orderBy: [ordenarPor(f.orden), { id: "asc" }],
-      take: LIMITE,
+      skip: pg.skip,
+      take: pg.take,
     }),
-    prisma.pacienteTenant.count({ where }),
     esDoctor ? [] : prisma.member.findMany({ where: { organizationId: ctx.organizationId, role: "doctor_remitente" }, select: { user: { select: { id: true, name: true } } }, orderBy: { user: { name: "asc" } } }),
   ]);
   const doctores = esDoctor ? null : miembros.map((m) => ({ id: m.user.id, nombre: m.user.name }));
@@ -60,7 +65,7 @@ export default async function Pacientes({ searchParams }: { searchParams: Promis
       <FiltrosPacientesForm f={f} doctores={doctores} activos={activos} />
 
       <p className="text-sm text-muted-foreground" aria-live="polite">
-        {total === 0 ? "Sin resultados" : total > LIMITE ? `Mostrando ${LIMITE} de ${total} pacientes: afina los filtros para ver el resto.` : `${total} ${total === 1 ? "paciente" : "pacientes"}`}
+        {total === 0 ? "Sin resultados" : `${total} ${total === 1 ? "paciente" : "pacientes"}`}
       </p>
 
       <Card className="py-0">
@@ -84,8 +89,7 @@ export default async function Pacientes({ searchParams }: { searchParams: Promis
               <TableBody>
                 {pacientes.map((p) => {
                   const ultimo = p.estudios[0];
-                  const fecha = ultimo && (ultimo.fechaEstudio ?? ultimo.creadoEn);
-                  const docs = [...new Map(p.ordenes.flatMap((o) => (o.doctorRemitente ? [[o.doctorRemitente.id, o.doctorRemitente] as const] : []))).values()];
+                                    const docs = [...new Map(p.ordenes.flatMap((o) => (o.doctorRemitente ? [[o.doctorRemitente.id, o.doctorRemitente] as const] : []))).values()];
                   const pendiente = p.ordenes.some((o) => PENDIENTES.includes(o.estado));
                   return (
                     <TableRow key={p.id}>
@@ -113,7 +117,7 @@ export default async function Pacientes({ searchParams }: { searchParams: Promis
                         ) : "—"}
                       </TableCell>
                       <TableCell className="hidden max-w-[14rem] lg:table-cell">{p.alertas ? <Badge variant="destructive" className="max-w-full"><TriangleAlert /><span className="truncate">{p.alertas}</span></Badge> : "—"}</TableCell>
-                      <TableCell className="hidden xl:table-cell">{fecha ? fechaCorta(fecha) : "—"}</TableCell>
+                      <TableCell className="hidden xl:table-cell">{ultimo ? fechaDeEstudio(ultimo) : "—"}</TableCell>
                       <TableCell className="pr-4 text-right md:pr-6">
                         <Button asChild size="sm" variant="outline">
                           <Link href={`/pacientes/${p.id}`} aria-label={`Ver ficha de ${p.nombre}`}><Eye /> Ver</Link>
@@ -127,6 +131,8 @@ export default async function Pacientes({ searchParams }: { searchParams: Promis
           )}
         </CardContent>
       </Card>
+
+      <Paginacion ruta="/pacientes" params={Object.fromEntries(new URLSearchParams(consultaFiltros(f)))} {...pg} total={total} />
     </div>
   );
 }

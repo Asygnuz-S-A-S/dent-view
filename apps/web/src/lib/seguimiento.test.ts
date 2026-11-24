@@ -1,6 +1,6 @@
 // Implementación independiente (sala limpia) a partir de docs/sala-limpia/03-recordatorios-y-seguimiento.md
 import { describe, expect, it } from "vitest";
-import { estadoTrasIntento, ordenarLista, primerDiaMes, seguimientoAbierto, sumarMeses, tasaConversion } from "./seguimiento";
+import { notaAplazamiento, estadoTrasIntento, ordenarLista, primerDiaMes, seguimientoAbierto, sumarMeses, tasaConversion } from "./seguimiento";
 
 describe("estadoTrasIntento", () => {
   it("sin respuesta sobre pendiente pasa a sin respuesta", () => {
@@ -43,5 +43,12 @@ describe("ordenarLista", () => {
     const f = (id: string, prioridad: string, mes: string, c: number) => ({ id, prioridad, mesObjetivo: new Date(mes), creadoEn: new Date(c) });
     const r = ordenarLista([f("a", "BAJA", "2026-01-01", 1), f("b", "ALTA", "2026-03-01", 2), f("c", "ALTA", "2026-02-01", 3), f("d", "NORMAL", "2026-01-01", 0)]);
     expect(r.map((x) => x.id)).toEqual(["c", "b", "d", "a"]);
+  });
+});
+
+describe("notaAplazamiento", () => {
+  it("usa la fecha de Bogotá, no la UTC (22:00 del 24 en Bogotá es el 25 en UTC)", () => {
+    expect(notaAplazamiento(null, new Date("2026-11-25T03:00:00Z"), "Ana", 2)).toBe("2026-11-24 Ana: aplazado 2 mes(es)");
+    expect(notaAplazamiento("previa", new Date("2026-11-25T03:00:00Z"), "Ana", 1)).toContain("previa\n2026-11-24");
   });
 });

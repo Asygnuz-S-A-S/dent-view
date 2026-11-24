@@ -4,6 +4,7 @@ import { ordenParaVincular, prisma, type Prisma } from "@dent-view/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { registrarEvento } from "@/lib/eventos";
+import { idsPacientesPorNombre } from "@/lib/busqueda";
 import { numeroOrden } from "@/lib/ordenes";
 import { CLINICOS, GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
@@ -15,7 +16,7 @@ export async function buscarPacientes(q: string) {
     where: {
       organizationId: ctx.organizationId,
       ...(t && {
-        OR: [{ nombre: { contains: t, mode: "insensitive" } }, { persona: { numeroDocumento: { contains: t } } }],
+        OR: [{ id: { in: await idsPacientesPorNombre(ctx.organizationId, t) } }, { persona: { numeroDocumento: { contains: t } } }],
       }),
     },
     include: { persona: true },

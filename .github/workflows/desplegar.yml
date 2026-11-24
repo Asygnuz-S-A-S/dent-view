@@ -22,7 +22,39 @@ env:
   URL: https://dentview.asygnuz.com
 
 jobs:
+  # Compuerta previa: tipos y pruebas unitarias sin base de datos (las pruebas que la necesitan se omiten solas sin DATABASE_URL).
+  verificar:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias
+        run: npm ci --no-audit --no-fund
+
+      - name: Generar el cliente de Prisma
+        working-directory: packages/db
+        env:
+          DATABASE_URL: postgresql://x:x@localhost:5432/x # relleno: generate no se conecta
+        run: npx prisma generate
+
+      - name: Tipos
+        working-directory: apps/web
+        run: npx tsc --noEmit
+
+      - name: Pruebas unitarias
+        working-directory: apps/web
+        env:
+          BETTER_AUTH_SECRET: prueba-ci-no-es-un-secreto-real-0123456789
+        run: npx vitest run
+
   desplegar:
+    needs: verificar
     runs-on: ubuntu-latest
     timeout-minutes: 45
     steps:
@@ -51,19 +83,37 @@ jobs:
           gcloud compute scp "$RUNNER_TEMP/app.tgz" "$VM:/tmp/app.tgz" \
             --project="$PROYECTO" --zone="$ZONA" --quiet
 
+      # La app nueva se extrae en un directorio aparte y reemplaza a la vigente con dos mv: nunca quedan archivos viejos mezclados con los nuevos.
+      # infra/.env (secretos) e infra/Caddyfile.produccion viven solo en la VM y se copian al directorio nuevo. Los volúmenes de Docker
+      # no dependen del nombre del directorio (compose.yaml fija `name: dent-view`).
       - name: Construir y levantar
         run: |
-          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command '
-            set -e
-            cd /opt/dent-view
-            sudo tar xzf /tmp/app.tgz --warning=no-unknown-keyword
-            sudo rm -f /tmp/app.tgz
-            cd infra
-            # El worker dispara los procesos programados (notificaciones, CRM) con este secreto; se crea una sola vez.
-            sudo grep -q '^CRON_SECRET=' .env || echo "CRON_SECRET=$(openssl rand -hex 24)" | sudo tee -a .env >/dev/null
-            sudo docker compose -f compose.yaml -f compose.produccion.yaml up -d --build --remove-orphans
-            sudo docker image prune -f >/dev/null
-          '
+          cat > "$RUNNER_TEMP/desplegar.sh" <<'REMOTO'
+          set -euo pipefail
+          VIGENTE=/opt/dent-view
+          NUEVO=/opt/dent-view.nuevo
+          ANTERIOR=/opt/dent-view.anterior
+          sudo rm -rf "$NUEVO" "$ANTERIOR"
+          sudo mkdir -p "$NUEVO"
+          sudo tar xzf /tmp/app.tgz -C "$NUEVO" --warning=no-unknown-keyword
+          sudo rm -f /tmp/app.tgz
+          sudo cp -p "$VIGENTE/infra/.env" "$NUEVO/infra/.env"
+          sudo cp -p "$VIGENTE/infra/Caddyfile.produccion" "$NUEVO/infra/Caddyfile.produccion"
+          sudo chown --reference="$VIGENTE" "$NUEVO"
+          # El worker dispara los procesos programados (notificaciones, CRM) con este secreto; se crea una sola vez y se conserva el existente.
+          sudo grep -q '^CRON_SECRET=' "$NUEVO/infra/.env" || echo "CRON_SECRET=$(openssl rand -hex 24)" | sudo tee -a "$NUEVO/infra/.env" >/dev/null
+          sudo mv "$VIGENTE" "$ANTERIOR"
+          sudo mv "$NUEVO" "$VIGENTE"
+          cd "$VIGENTE/infra"
+          sudo docker compose -f compose.yaml -f compose.produccion.yaml up -d --build --remove-orphans
+          # Caddy y el visor montan archivos del directorio: se recrean para que tomen los nuevos (el mv deja montado el inodo viejo).
+          sudo docker compose -f compose.yaml -f compose.produccion.yaml up -d --force-recreate --no-deps caddy visor
+          sudo docker image prune -f >/dev/null
+          # Éxito: se descarta la versión anterior (si algo falló arriba, queda en $ANTERIOR para recuperarla a mano).
+          sudo rm -rf "$ANTERIOR"
+          REMOTO
+          gcloud compute scp "$RUNNER_TEMP/desplegar.sh" "$VM:/tmp/desplegar.sh" --project="$PROYECTO" --zone="$ZONA" --quiet
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command 'bash /tmp/desplegar.sh; r=$?; rm -f /tmp/desplegar.sh; exit $r'
 
       - name: Verificar
         run: |

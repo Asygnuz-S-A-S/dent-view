@@ -49,7 +49,7 @@ export const primerUrl = (t: string) => URL_RE.exec(t)?.[0] ?? null;
 export const correoValido = (c: string | null | undefined): c is string => !!c && /^[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+$/.test(c);
 
 const PRIVACIDAD =
-  "Este mensaje es confidencial y va dirigido solo a su destinatario. Tratamos tus datos personales conforme a la Ley 1581 de 2012 (Habeas Data); para ejercer tus derechos, escríbenos al correo del centro.";
+  "Este mensaje es confidencial y va dirigido solo a quien lo recibe. Tratamos tus datos personales conforme a la Ley 1581 de 2012 (Habeas Data); para ejercer tus derechos, escríbenos al correo del centro.";
 
 const FUENTE = "-apple-system,BlinkMacSystemFont,'Segoe UI',Roboto,Helvetica,Arial,sans-serif";
 

@@ -1,7 +1,8 @@
 import sharp from "sharp";
 import { describe, expect, it } from "vitest";
 import { generarPdfInforme } from "./informe-pdf";
-import { procesarImagen } from "./imagenes-proceso";
+import { crc32, deflateSync } from "node:zlib";
+import { ImagenInvalida, procesarImagen, validarDimensiones } from "./imagenes-proceso";
 
 describe("procesarImagen", () => {
   it("re-codifica a JPEG sin EXIF/GPS y genera miniatura", async () => {
@@ -16,6 +17,32 @@ describe("procesarImagen", () => {
   });
   it("rechaza datos que no son imagen", async () => {
     await expect(procesarImagen(Uint8Array.from([0xff, 0xd8, 0xff, 1, 2, 3]), "image/jpeg")).rejects.toThrow();
+  });
+});
+
+// PNG mínimo (firma + IHDR + IDAT vacío + IEND) que solo declara dimensiones: pesa bytes pero anuncia gigapíxeles.
+function pngDeclarado(ancho: number, alto: number) {
+  const chunk = (tipo: string, datos: Buffer) => {
+    const cuerpo = Buffer.concat([Buffer.from(tipo, "ascii"), datos]);
+    const len = Buffer.alloc(4); len.writeUInt32BE(datos.length);
+    const crc = Buffer.alloc(4); crc.writeUInt32BE(crc32(cuerpo));
+    return Buffer.concat([len, cuerpo, crc]);
+  };
+  const ihdr = Buffer.alloc(13); ihdr.writeUInt32BE(ancho, 0); ihdr.writeUInt32BE(alto, 4); ihdr[8] = 8; ihdr[9] = 2;
+  return new Uint8Array(Buffer.concat([Buffer.from([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]), chunk("IHDR", ihdr), chunk("IDAT", deflateSync(Buffer.alloc(0))), chunk("IEND", Buffer.alloc(0))]));
+}
+
+describe("límites de dimensiones (bomba de descompresión)", () => {
+  it("validarDimensiones acepta lo razonable y rechaza lado o área excesivos", () => {
+    expect(() => validarDimensiones(8000, 6000)).not.toThrow(); // 48 MP
+    expect(() => validarDimensiones(12001, 100)).toThrow(ImagenInvalida);
+    expect(() => validarDimensiones(8000, 7000)).toThrow(/demasiado grande/); // 56 MP
+    expect(() => validarDimensiones(undefined, 10)).toThrow(ImagenInvalida);
+  });
+  it("rechaza un PNG pequeño que declara 30000x30000 sin decodificarlo", async () => {
+    const png = pngDeclarado(30000, 30000);
+    expect(png.length).toBeLessThan(100);
+    await expect(procesarImagen(png, "image/png")).rejects.toThrow(/demasiado grande/);
   });
 });
 

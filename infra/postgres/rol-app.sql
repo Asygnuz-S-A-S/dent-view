@@ -27,8 +27,9 @@ BEGIN
     REVOKE UPDATE, DELETE ON TABLE public."Evento" FROM dentview_app;
   END IF;
   -- Historia clínica y kardex inmutables (Res. 1995/1999; conservación 15 años): solo INSERT y SELECT.
+  -- NotaClinica, Autorizacion (consentimientos: revocar = fila nueva) y OdontogramaHistorial son solo-inserción en el código de la app; Informe NO (sus borradores se actualizan).
   -- Las correcciones son adendas / movimientos compensatorios / notas crédito.
-  FOREACH tabla IN ARRAY ARRAY['EvolucionClinica', 'AdendaEvolucion', 'AdjuntoEvolucion', 'RegistroToma', 'MovimientoInventario', 'NotaCredito'] LOOP
+  FOREACH tabla IN ARRAY ARRAY['EvolucionClinica', 'AdendaEvolucion', 'AdjuntoEvolucion', 'RegistroToma', 'MovimientoInventario', 'NotaCredito', 'NotaClinica', 'Autorizacion', 'OdontogramaHistorial'] LOOP
     IF to_regclass(format('public.%I', tabla)) IS NOT NULL THEN
       EXECUTE format('REVOKE UPDATE, DELETE ON TABLE public.%I FROM dentview_app', tabla);
     END IF;

@@ -15,6 +15,8 @@ export const dynamic = "force-dynamic";
 // Con el token en la URL: ni buscadores ni referrers hacia otros orígenes.
 export const metadata = { title: "Resultados de su estudio", robots: { index: false, follow: false }, referrer: "same-origin" as const };
 const fecha = (d: Date | null) => d?.toLocaleDateString("es-CO", { timeZone: "America/Bogota", dateStyle: "long" }) ?? "—";
+// La fecha del estudio (DICOM StudyDate) se guarda como medianoche UTC: en Bogotá se vería el día anterior.
+const fechaEstudio = (d: Date | null) => d?.toLocaleDateString("es-CO", { timeZone: "UTC", dateStyle: "long" }) ?? "—";
 
 export default async function Resultados({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
@@ -76,11 +78,11 @@ export default async function Resultados({ params }: { params: Promise<{ token: 
       <Card>
         <CardHeader>
           <CardTitle>Imágenes</CardTitle>
-          <CardDescription>{estudios.length === 1 ? "1 estudio" : `${estudios.length} estudios`}{estudios[0]?.fechaEstudio ? ` · ${fecha(estudios[0].fechaEstudio)}` : ""}</CardDescription>
+          <CardDescription>{estudios.length === 1 ? "1 estudio" : `${estudios.length} estudios`}{estudios[0]?.fechaEstudio ? ` · ${fechaEstudio(estudios[0].fechaEstudio)}` : ""}</CardDescription>
         </CardHeader>
         <CardContent className="space-y-3">
           <ul className="space-y-1 text-sm text-muted-foreground">
-            {estudios.map((e) => <li key={e.studyInstanceUid}>{[e.modalidad, e.descripcion, fecha(e.fechaEstudio)].filter(Boolean).join(" · ")}</li>)}
+            {estudios.map((e) => <li key={e.studyInstanceUid}>{[e.modalidad, e.descripcion, fechaEstudio(e.fechaEstudio)].filter(Boolean).join(" · ")}</li>)}
           </ul>
           {estudios.length > 0 && (
             // Enlace normal: /visor lo sirve Caddy, no Next
@@ -93,7 +95,7 @@ export default async function Resultados({ params }: { params: Promise<{ token: 
         <Card>
           <CardHeader>
             <CardTitle>Compartir con mi doctor</CardTitle>
-            <CardDescription>Le enviamos a su doctor un enlace propio y un código aparte. Usted puede pedir al centro que lo revoque.</CardDescription>
+            <CardDescription>Le enviamos a tu doctor un enlace propio y un código aparte. Puedes pedir al centro que lo revoque.</CardDescription>
           </CardHeader>
           <CardContent><CompartirDoctor token={token} /></CardContent>
         </Card>

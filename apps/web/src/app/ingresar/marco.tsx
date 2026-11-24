@@ -14,7 +14,7 @@ export function MarcoAcceso({ titulo, descripcion, children }: { titulo: string;
         </div>
         <Card>
           <CardHeader>
-            <CardTitle>{titulo}</CardTitle>
+            <CardTitle role="heading" aria-level={1}>{titulo}</CardTitle>
             <CardDescription>{descripcion}</CardDescription>
           </CardHeader>
           <CardContent>{children}</CardContent>

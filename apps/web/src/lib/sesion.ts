@@ -4,6 +4,8 @@ import { notFound, redirect } from "next/navigation";
 import { cache } from "react";
 import { auth } from "./auth";
 import { debeActivarMfa } from "./perfil";
+import { moduloHabilitado, type Modulo } from "./tipo-centro";
+import { tipoDeCentro } from "./tipo-centro-servidor";
 
 /** Sesión de Better Auth (una consulta por request). */
 export const obtenerSesion = cache(async () => auth.api.getSession({ headers: await headers() }));
@@ -44,4 +46,17 @@ export async function exigirSuperadmin() {
   if (sesion.user.role !== "admin") notFound();
   if (debeActivarMfa(sesion.user, null, !!sesion.session.impersonatedBy)) redirect("/perfil");
   return sesion.user;
+}
+
+/** Un módulo deshabilitado para el tipo del centro no existe: ocultarlo en el menú no basta, las acciones y rutas API también deben negarse. */
+export const modulosHabilitadoEnCentro = async (organizationId: string, modulo: Modulo) => moduloHabilitado(await tipoDeCentro(organizationId), modulo);
+
+/** Páginas y server actions: 404 si el módulo está deshabilitado en el centro del contexto (incluye al superadmin suplantando: sigue las reglas del centro). */
+export async function exigirModulo(ctx: { organizationId: string }, modulo: Modulo) {
+  if (!(await modulosHabilitadoEnCentro(ctx.organizationId, modulo))) notFound();
+}
+
+/** Rutas /api: Response 404 si el módulo está deshabilitado; null si puede seguir. */
+export async function respuestaSinModulo(ctx: { organizationId: string }, modulo: Modulo): Promise<Response | null> {
+  return (await modulosHabilitadoEnCentro(ctx.organizationId, modulo)) ? null : new Response(null, { status: 404 });
 }

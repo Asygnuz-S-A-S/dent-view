@@ -26,7 +26,7 @@ test("crear cita en una franja y verla en la agenda", async ({ page }) => {
   const dlg = await elegirPaciente(page, leerEstado().doc!);
   await dlg.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByText("Cita creada")).toBeVisible();
-  await expect(page.getByRole("button", { name: new RegExp(`${leerEstado().nombre!.toLowerCase()}, 09:00`) })).toBeVisible();
+  await expect(page.getByRole("button", { name: new RegExp(`${leerEstado().nombre!.toLowerCase()}[, ]+09:00`) })).toBeVisible();
 });
 
 test("cita cruzada en la misma sala y franja es rechazada", async ({ page }) => {

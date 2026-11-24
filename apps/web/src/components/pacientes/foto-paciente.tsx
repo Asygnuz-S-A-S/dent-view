@@ -44,7 +44,7 @@ export function FotoPaciente({ pacienteId, nombre, tieneFoto, editable }: { paci
     <div className="flex shrink-0 flex-col items-center gap-2">
       <Avatar className="size-20 text-xl">
         {tieneFoto && <AvatarImage src={url} alt={`Foto de ${nombre}`} />}
-        <AvatarFallback className="bg-primary/10 font-semibold text-primary">{iniciales(nombre)}</AvatarFallback>
+        <AvatarFallback className="bg-primary/10 font-semibold text-foreground">{iniciales(nombre)}</AvatarFallback>
       </Avatar>
       {editable && (
         <div className="flex gap-1">

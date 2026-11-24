@@ -36,10 +36,13 @@ describe("facturacion", () => {
     expect(motivoValido(" error de digitación ")).toBe("error de digitación");
   });
   it("validarNotaCredito: entero > 0 y no mayor a lo pagado", () => {
-    expect(validarNotaCredito(1000, 5000)).toBeNull();
-    expect(validarNotaCredito(5000, 5000)).toBeNull();
-    expect(validarNotaCredito(5001, 5000)).not.toBeNull();
-    expect(validarNotaCredito(0, 5000)).not.toBeNull();
-    expect(validarNotaCredito(1.5, 5000)).not.toBeNull();
+    expect(validarNotaCredito(1000, 5000, 5000)).toBeNull();
+    expect(validarNotaCredito(5000, 5000, 5000)).toBeNull();
+    expect(validarNotaCredito(5001, 5000, 5000)).not.toBeNull();
+    expect(validarNotaCredito(0, 5000, 5000)).not.toBeNull();
+    expect(validarNotaCredito(1.5, 5000, 5000)).not.toBeNull();
+    // Notas acumuladas: pagado 100 y total ya reducido a 0 por una nota previa de 100
+    expect(validarNotaCredito(100, 100, 0)).toMatch(/total vigente/);
+    expect(validarNotaCredito(40, 100, 30)).not.toBeNull();
   });
 });

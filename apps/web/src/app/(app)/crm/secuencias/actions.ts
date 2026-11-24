@@ -10,7 +10,7 @@ import { CID_LOGO, renderCorreo } from "@/lib/correo/plantilla";
 import { marcaDeCentro } from "@/lib/correo/marca";
 import { registrarEvento } from "@/lib/eventos";
 import { GESTION } from "@/lib/roles";
-import { exigirContexto } from "@/lib/sesion";
+import { exigirContexto, exigirModulo } from "@/lib/sesion";
 
 type R = { error?: string };
 const refrescar = () => revalidatePath("/crm/secuencias", "layout");
@@ -50,6 +50,7 @@ const datosPasos = (organizationId: string, secuenciaId: string, pasos: z.output
 
 export async function instalarPlantilla(clave: string): Promise<R & { id?: string }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const pl: PlantillaSecuencia | undefined = PLANTILLAS_SECUENCIA.find((p) => p.clave === clave);
   if (!pl) return { error: "Plantilla no encontrada" };
   const s = await prisma.secuenciaCRM.create({
@@ -67,6 +68,7 @@ export async function instalarPlantilla(clave: string): Promise<R & { id?: strin
 /** Crea (sin id) o actualiza una secuencia con todos sus pasos. Las secuencias nuevas nacen inactivas. */
 export async function guardarSecuencia(id: string | null, entrada: EntradaSecuencia): Promise<R & { id?: string }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const p = esquema.safeParse(entrada);
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Datos inválidos" };
   const d = p.data;
@@ -95,6 +97,7 @@ export async function guardarSecuencia(id: string | null, entrada: EntradaSecuen
 
 export async function activarSecuencia(id: string, activa: boolean): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const s = await prisma.secuenciaCRM.findFirst({ where: { id, organizationId: ctx.organizationId }, include: { _count: { select: { pasos: true } } } });
   if (!s) return { error: "Secuencia no encontrada" };
   if (activa && s._count.pasos === 0) return { error: "Agrega al menos un paso antes de activarla" };
@@ -106,6 +109,7 @@ export async function activarSecuencia(id: string, activa: boolean): Promise<R> 
 
 export async function eliminarSecuencia(id: string): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const { count } = await prisma.secuenciaCRM.deleteMany({ where: { id, organizationId: ctx.organizationId } });
   if (!count) return { error: "Secuencia no encontrada" };
   await registrarEvento({ organizationId: ctx.organizationId, actorId: ctx.usuario.id, tipo: "crm.secuencia_eliminada", detalle: { secuenciaId: id } });
@@ -115,6 +119,7 @@ export async function eliminarSecuencia(id: string): Promise<R> {
 
 export async function simular(id: string): Promise<R & { filas?: FilaSimulacion[]; total?: number }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const r = await simularSecuencia(ctx.organizationId, id);
   return r ?? { error: "Secuencia no encontrada" };
 }
@@ -122,6 +127,7 @@ export async function simular(id: string): Promise<R & { filas?: FilaSimulacion[
 /** Vista previa del correo con la marca del centro (HTML ya escapado por renderCorreo; el logo en línea se sirve como data URL). */
 export async function previsualizar(asunto: string, cuerpo: string, enlace?: string): Promise<{ html: string }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const marca = await marcaDeCentro(ctx.organizationId);
   const vars = { nombre: "Ana", centro: marca.nombre, enlace: enlace && /^https?:\/\/[^\s<>"']+$/i.test(enlace) ? enlace : "" };
   const a = renderVariables(String(asunto).slice(0, 150), vars), c = renderVariables(String(cuerpo).slice(0, 3000), vars);

@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 import { contraste } from "../marca";
-import { PLANTILLAS_DEFECTO, renderPlantilla } from "../notificaciones";
+import { PLANTILLAS_DEFECTO, renderPlantilla, TIPOS_MENSAJE, TONO_FORMAL_PROHIBIDO } from "../notificaciones";
 import { correoEnlaceClave, vistaMensaje } from "./vistas";
 import { decodificarLogo, MARCA_PLATAFORMA, renderCorreo, urlSegura, type Marca } from "./plantilla";
 
@@ -67,5 +67,17 @@ describe("renderCorreo", () => {
     const rec = correoEnlaceClave({ name: "Ana", email: "a@a.co" }, "https://x.co/r");
     expect(rec.vista.aviso).toMatch(/no solicitaste/i);
     expect(correoEnlaceClave({ name: "Ana", email: "a@a.co", debeCambiarClave: true }, "https://x.co/r").vista.titulo).toBe("Activa tu cuenta");
+  });
+});
+
+describe("tono de las vistas de correo", () => {
+  it("títulos, avisos y correo de clave tutean", () => {
+    const textos: string[] = [];
+    for (const t of TIPOS_MENSAJE) { const v = vistaMensaje(t, "x https://a.co/b"); textos.push(v.titulo ?? "", v.aviso ?? "", v.boton?.texto ?? ""); }
+    for (const debeCambiarClave of [true, false]) {
+      const c = correoEnlaceClave({ name: "Ana", email: "a@x.co", debeCambiarClave }, "https://a.co/b");
+      textos.push(c.asunto, c.cuerpo, c.vista.titulo ?? "", c.vista.aviso ?? "", c.vista.preheader ?? "");
+    }
+    for (const t of textos) expect(t.match(TONO_FORMAL_PROHIBIDO), t).toBeNull();
   });
 });

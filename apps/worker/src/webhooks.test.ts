@@ -54,4 +54,15 @@ describe('entrega de webhooks', { skip: !process.env.DATABASE_URL }, () => {
     assert.equal(envios, 0);
     assert.equal((await prisma.webhookEntrega.findUniqueOrThrow({ where: { id: e.id } })).estado, 'FALLIDO');
   });
+
+  it('un webhook reactivado no se desactiva por los fallos anteriores a la reactivación', async () => {
+    const w = await prisma.webhook.create({ data: { organizationId: org, nombre: 'r', url: 'https://x.example.com/h', secretoCifrado: cifrar('whsec_t', secreto), eventos: ['*'], activo: true } });
+    const antes = new Date(Date.now() - 3600_000);
+    await prisma.webhookEntrega.createMany({ data: Array.from({ length: 20 }, () => ({ webhookId: w.id, organizationId: org, evento: 'webhook.prueba', payload: { id: 'x' }, estado: 'FALLIDO' as const, creadoEn: antes })) });
+    await prisma.evento.create({ data: { organizationId: org, tipo: 'integracion.webhook_activado', detalle: { webhookId: w.id } } });
+    const e = await prisma.webhookEntrega.create({ data: { webhookId: w.id, organizationId: org, evento: 'webhook.prueba', payload: { id: 'x' }, intentos: 7 } });
+    await procesarEntregas(prisma, { secreto, enviar: (async () => ({ codigo: 500, respuesta: '' })) as never });
+    assert.equal((await prisma.webhookEntrega.findUniqueOrThrow({ where: { id: e.id } })).estado, 'FALLIDO');
+    assert.equal((await prisma.webhook.findUniqueOrThrow({ where: { id: w.id } })).activo, true);
+  });
 });

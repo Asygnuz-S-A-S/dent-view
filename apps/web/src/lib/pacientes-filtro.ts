@@ -1,7 +1,7 @@
 // Lógica pura de la lista de pacientes: parámetros de URL → filtro Prisma. Sin I/O para poder probarla.
 import type { Prisma } from "@dent-view/db";
 import { numeroDeBusqueda } from "./ordenes";
-import { normalizarDocumento } from "./pacientes";
+import { documentoDeBusqueda } from "./pacientes";
 
 export const ORDENES_LISTA = {
   nombre: "Nombre (A–Z)",
@@ -82,17 +82,18 @@ const enRango = (g?: Date, l?: Date): Prisma.EstudioWhereInput[] => {
   return [{ fechaEstudio: r }, { fechaEstudio: null, creadoEn: r }];
 };
 
-export function construirWhere(organizationId: string, usuario: { id: string; rol: string }, f: FiltrosPacientes): Prisma.PacienteTenantWhereInput {
+/** `idsNombre`: pacientes cuyo nombre coincide sin importar tildes (ver lib/busqueda); sin él se usa `contains` simple. */
+export function construirWhere(organizationId: string, usuario: { id: string; rol: string }, f: FiltrosPacientes, idsNombre?: string[]): Prisma.PacienteTenantWhereInput {
   const and: Prisma.PacienteTenantWhereInput[] = [filtroVisibles(organizationId, usuario.id, usuario.rol)];
   // El doctor remitente no puede ampliar su alcance con ?doctor=.
   if (f.doctor && usuario.rol !== "doctor_remitente") and.push(filtroDoctor(organizationId, f.doctor));
   if (f.especialidad) and.push(filtroEspecialidad(organizationId, f.especialidad));
   if (f.q) {
-    const doc = normalizarDocumento(f.q);
+    const doc = documentoDeBusqueda(f.q);
     const numero = numeroDeBusqueda(f.q);
     and.push({
       OR: [
-        { nombre: { contains: f.q, mode: "insensitive" } },
+        idsNombre ? { id: { in: idsNombre } } : { nombre: { contains: f.q, mode: "insensitive" } },
         ...(doc ? [{ persona: { numeroDocumento: { contains: doc } } }] : []),
         ...(numero !== null ? [{ ordenes: { some: { organizationId, numero } } }] : []),
       ],

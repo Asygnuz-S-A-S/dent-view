@@ -83,7 +83,7 @@ export function AgendaDia({ fecha, hoy, salas: todasSalas, salaFiltro, citas, pa
         <Button asChild variant="outline" size="icon" aria-label="Día siguiente"><Link href={`/agenda?fecha=${sumarDias(fecha, 1)}${sufijo}`}><ChevronRight /></Link></Button>
         <Popover open={calAbierto} onOpenChange={setCalAbierto}>
           <PopoverTrigger asChild>
-            <Button variant="outline" aria-label="Elegir fecha"><CalendarIcon /> <span className="first-letter:uppercase">{titulo}</span></Button>
+            <Button variant="outline" aria-label={`Elegir fecha: ${titulo}`}><CalendarIcon /> <span className="first-letter:uppercase">{titulo}</span></Button>
           </PopoverTrigger>
           <PopoverContent className="w-auto p-0" align="start">
             <Calendar
@@ -155,18 +155,18 @@ export function AgendaDia({ fecha, hoy, salas: todasSalas, salaFiltro, citas, pa
                         type="button"
                         onClick={() => setBorrador({ id: c.id, salaId: c.salaId, inicioMin: c.inicioMin, pacienteId: c.pacienteId, ordenId: c.ordenId ?? "", duracion: c.duracion, notas: c.notas ?? "", estado: c.estado })}
                         className={cn("block size-full px-2 py-1 text-left", pendienteLlegada && "pr-14")}
-                        aria-label={`${c.pacienteNombre.toLowerCase()}, ${horaTexto(c.inicioMin)}, ${ETIQUETA_ESTADO_CITA[c.estado as EstadoCita]}${c.alertas ? `. Alerta: ${c.alertas}` : ""}`}
                       >
                         <div className="flex items-center gap-1 font-medium">
                           {c.alertas && <TriangleAlert className="size-3.5 shrink-0 text-red-600 dark:text-red-400" aria-hidden />}
                           <span className="truncate capitalize">{c.pacienteNombre.toLowerCase()}</span>
                         </div>
                         <div className="truncate opacity-80">{horaTexto(c.inicioMin)} · {ETIQUETA_ESTADO_CITA[c.estado as EstadoCita]}</div>
+                        {c.alertas && c.duracion < 45 && <span className="sr-only">Alerta: {c.alertas}</span>}
                         {c.alertas && c.duracion >= 45 && <div className="truncate font-medium text-red-700 dark:text-red-300">{c.alertas}</div>}
                         {c.servicios.length > 0 && c.duracion >= 45 && <div className="truncate opacity-80">{c.servicios.join(", ")}</div>}
                       </button>
                       {pendienteLlegada && fecha === hoy && (
-                        <Button type="button" size="sm" variant="secondary" disabled={llegando} onClick={() => llego(c.id)} className="absolute right-1 top-1 h-5 px-1.5 text-[11px]" aria-label={`Marcar llegada de ${c.pacienteNombre.toLowerCase()}`}>
+                        <Button type="button" size="sm" variant="secondary" disabled={llegando} onClick={() => llego(c.id)} className="absolute right-1 top-1 h-6 min-w-6 px-2 text-[11px]" aria-label={`Llegó: marcar llegada de ${c.pacienteNombre.toLowerCase()}`}>
                           Llegó
                         </Button>
                       )}

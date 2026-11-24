@@ -8,7 +8,7 @@ import { Button } from "@/components/ui/button";
 import { Dialog, DialogContent, DialogDescription, DialogHeader, DialogTitle, DialogTrigger } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { MAX_FILAS_CSV, ORIGENES, ETIQUETA_ORIGEN } from "@/lib/crm";
+import { MAX_BYTES_CSV, MAX_FILAS_CSV, ORIGENES, ETIQUETA_ORIGEN } from "@/lib/crm";
 import { SelectNativo, useAccion } from "./comun";
 
 export type Responsable = { id: string; nombre: string };
@@ -54,7 +54,10 @@ export function ImportarCsv() {
   const [errores, setErrores] = useState<{ fila: number; motivo: string }[]>([]);
   const { pendiente, ejecutar } = useAccion();
   const importar = () => ejecutar(async () => {
-    const r = await importarLeads(texto);
+    // Next rechaza con excepción los cuerpos de más de 1 MB: se valida antes de enviar.
+    if (new Blob([texto]).size > MAX_BYTES_CSV) { setErrores([]); return { error: "El archivo es demasiado grande (máximo 900 KB). Divídelo en partes y vuelve a intentarlo." }; }
+    let r: Awaited<ReturnType<typeof importarLeads>>;
+    try { r = await importarLeads(texto); } catch { return { error: "No se pudo importar el archivo. Revisa que sea un CSV válido e inténtalo de nuevo." }; }
     setErrores(r.errores ?? []);
     if (r.error) return { error: r.error };
     toast.success(`${r.creados} leads creados${r.repetidos ? `, ${r.repetidos} ya existían` : ""}${r.errores?.length ? `, ${r.errores.length} filas con error` : ""}`);
@@ -67,7 +70,7 @@ export function ImportarCsv() {
       <DialogContent>
         <DialogHeader>
           <DialogTitle>Importar leads desde CSV</DialogTitle>
-          <DialogDescription>Columnas: nombre (obligatoria), telefono, correo, ciudad, origen, interes. Máximo {MAX_FILAS_CSV} filas. Los leads importados no traen consentimiento de mercadeo: solo reciben seguimiento manual hasta que lo den.</DialogDescription>
+          <DialogDescription>Columnas: nombre (obligatoria), telefono, correo, ciudad, origen, interes. Máximo {MAX_FILAS_CSV} filas y 900 KB. Los leads importados no traen consentimiento de mercadeo: solo reciben seguimiento manual hasta que lo den.</DialogDescription>
         </DialogHeader>
         <div className="grid gap-3">
           <div className="grid gap-1.5"><Label htmlFor="csv-archivo">Archivo .csv</Label><Input id="csv-archivo" type="file" accept=".csv,text/csv" onChange={async (e) => { const a = e.target.files?.[0]; if (a) setTexto(await a.text()); }} /></div>

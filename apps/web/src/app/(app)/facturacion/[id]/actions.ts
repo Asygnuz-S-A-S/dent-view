@@ -8,11 +8,13 @@ import { contarPeticion } from "@/lib/api-limite";
 import { descifrar, secretoCifrado } from "@/lib/cifrado";
 import { conectores } from "@/lib/conectores";
 import { marcaDeCentro } from "@/lib/correo/marca";
-import { numeroFactura, saldo, validarAbono } from "@/lib/facturacion";
+import { numeroFactura } from "@/lib/facturacion";
+import { fechaCorta } from "@/lib/fechas";
 import { renderPlantilla } from "@/lib/notificaciones";
 import { linkActivo } from "@/lib/pagos/decision";
-import { ErrorPasarela, type Llaves } from "@/lib/pagos/proveedor";
+import { ErrorPasarela, esLocal, type Llaves } from "@/lib/pagos/proveedor";
 import { ADAPTADORES, obtenerProveedor } from "@/lib/pagos/registro";
+import { reservarLinkPago } from "@/lib/pagos/reserva";
 import { conciliarLinks } from "@/lib/pagos/servicio";
 import { cop } from "@/lib/precios";
 import { GESTION } from "@/lib/roles";
@@ -38,14 +40,14 @@ const revalidar = (facturaId: string) => {
  * Genera un link de pago por la pasarela del centro. El monto sale SIEMPRE del servidor: el saldo pendiente de la cuenta
  * (o un abono parcial que no lo supere), descontando lo ya comprometido en otros links activos.
  */
-export async function generarLinkPago(facturaId: string, entrada: { pasarelaId: string; abono?: number }): Promise<R & { id?: string }> {
+export async function generarLinkPago(facturaId: string, entrada: { pasarelaId: string; abono?: number }): Promise<R & { id?: string; aviso?: string }> {
   const ctx = await exigirContexto(GESTION);
   if (!contarPeticion(limites, `gen:${ctx.usuario.id}`, Date.now(), 20).permitido) return { error: "Demasiados intentos, espera un minuto" };
   const ids = z.object({ f: idSchema, p: idSchema }).safeParse({ f: facturaId, p: entrada.pasarelaId });
   const abono = z.number().int().optional().safeParse(entrada.abono);
   if (!ids.success || !abono.success) return { error: "Datos inválidos" };
   const org = ctx.organizationId;
-  const f = await prisma.factura.findFirst({ where: { id: ids.data.f, organizationId: org }, include: { pagos: true, paciente: { include: { persona: true } }, linksPago: true } });
+  const f = await prisma.factura.findFirst({ where: { id: ids.data.f, organizationId: org }, include: { paciente: true } });
   if (!f) return { error: "Cuenta de cobro no encontrada" };
   if (f.estado !== "ABIERTA") return { error: "La cuenta no está abierta" };
   const pasarela = await prisma.pasarelaPago.findFirst({ where: { id: ids.data.p, organizationId: org, activa: true } });
@@ -53,20 +55,19 @@ export async function generarLinkPago(facturaId: string, entrada: { pasarelaId: 
   const adaptador = ADAPTADORES[pasarela.proveedor];
   if (pasarela.modo === "PRODUCCION" && adaptador.bloqueadoProduccion) return { error: `${adaptador.nombre} no está habilitada para producción` };
 
-  const pendiente = saldo(f.total, f.pagos);
-  const comprometido = f.linksPago.filter((l) => linkActivo(l)).reduce((t, l) => t + l.monto, 0);
-  const monto = abono.data ?? pendiente - comprometido;
-  const errorMonto = validarAbono(monto, pendiente - comprometido);
-  if (errorMonto) return { error: comprometido > 0 && monto <= 0 ? "Ya hay links activos que cubren el saldo: anúlalos primero" : errorMonto.replace("saldo", "saldo disponible para links") };
-
   const referencia = `dv${randomBytes(16).toString("base64url")}`; // 24 caracteres, no adivinable
   const expiraEn = new Date(Date.now() + VIGENCIA_DIAS * 86_400_000);
-  const link = await prisma.linkPago.create({ data: { organizationId: org, pasarelaId: pasarela.id, facturaId: f.id, referencia, monto, expiraEn, creadoPorId: ctx.usuario.id } });
+  const reserva = await reservarLinkPago(prisma, { organizationId: org, facturaId: f.id, pasarelaId: pasarela.id, abono: abono.data, referencia, expiraEn, creadoPorId: ctx.usuario.id });
+  if ("error" in reserva) return { error: reserva.error };
+  const { monto } = reserva;
+  const link = { id: reserva.id };
+  // Pasarela de pruebas en un servidor real: el link se crea, pero sus pagos no se aplican (ver procesarEvento) y queda marcado como prueba.
+  const prueba = pasarela.modo === "SANDBOX" && !esLocal();
   try {
     const llaves: Llaves = JSON.parse(descifrar(pasarela.llavesCifradas, secreto()));
     const https = baseUrl().startsWith("https://");
     const r = await obtenerProveedor(pasarela.proveedor, pasarela.modo).crearLink(llaves, pasarela.modo, {
-      referencia, monto, expiraEn, descripcion: `Cuenta de cobro ${numeroFactura(f.numero)}`,
+      referencia, monto, expiraEn, descripcion: `Cuenta de cobro ${numeroFactura(f.numero)}${prueba ? " (PRUEBA)" : ""}`,
       urlRetorno: https ? `${baseUrl()}/` : null, urlWebhook: `${baseUrl()}/api/pagos/${pasarela.proveedor.toLowerCase()}/${pasarela.id}`, correoPagador: f.paciente?.correo,
     });
     await prisma.linkPago.update({ where: { id: link.id }, data: { idExterno: r.idExterno, urlPago: r.urlPago, expiraEn: r.expiraEn } });
@@ -74,9 +75,9 @@ export async function generarLinkPago(facturaId: string, entrada: { pasarelaId: 
     await prisma.linkPago.delete({ where: { id: link.id } }); // sin id externo no hay nada que conciliar
     return { error: e instanceof ErrorPasarela ? e.message : "No se pudo generar el link con la pasarela" };
   }
-  await prisma.evento.create({ data: { organizationId: org, pacienteId: f.pacienteId, actorId: ctx.usuario.id, tipo: "pago.link_creado", detalle: { linkPagoId: link.id, facturaId: f.id, factura: numeroFactura(f.numero), monto, proveedor: pasarela.proveedor } } });
+  await prisma.evento.create({ data: { organizationId: org, pacienteId: f.pacienteId, actorId: ctx.usuario.id, tipo: "pago.link_creado", detalle: { linkPagoId: link.id, facturaId: f.id, factura: numeroFactura(f.numero), monto, proveedor: pasarela.proveedor, ...(prueba ? { prueba: true } : {}) } } });
   revalidar(f.id);
-  return { id: link.id };
+  return { id: link.id, ...(prueba ? { aviso: "Link de PRUEBA: la pasarela está en modo de pruebas y sus pagos no se aplican a la cuenta" } : {}) };
 }
 
 /** Anula el link en dent-view. Nota: algunas pasarelas no permiten cerrarlo por API; si el cliente pagara igual, el pago se aplica (el dinero ya llegó). */
@@ -101,19 +102,20 @@ export async function enviarLinkPorCorreo(linkId: string): Promise<R> {
   if (!id.success) return { error: "Identificador no válido" };
   const l = await prisma.linkPago.findFirst({
     where: { id: id.data, organizationId: ctx.organizationId },
-    include: { factura: { include: { paciente: { include: { persona: true } } } }, organization: { select: { name: true } } },
+    include: { factura: { include: { paciente: { include: { persona: true } } } } },
   });
   if (!l?.urlPago || !linkActivo(l)) return { error: "El link no está disponible para enviar" };
   const pac = l.factura?.paciente;
   if (!pac?.correo) return { error: "El paciente no tiene correo registrado" };
   const pref = await prisma.preferenciaContacto.findUnique({ where: { pacienteId: pac.id } });
   if (pref?.noContactar || pref?.correo === false) return { error: "El paciente no desea recibir correos" };
-  const vars = { centro: l.organization.name, paciente: pac.nombre, monto: cop(l.monto), enlace: l.urlPago, vence: l.expiraEn ? l.expiraEn.toLocaleDateString("es-CO") : "" };
+  const marca = await marcaDeCentro(ctx.organizationId);
+  const vars = { centro: marca.nombre, paciente: pac.nombre, monto: cop(l.monto), enlace: l.urlPago, vence: l.expiraEn ? fechaCorta(l.expiraEn) : "" };
   try {
     await conectores.CORREO.enviar({
       para: pac.correo,
       asunto: renderPlantilla("Tienes un pago pendiente en {{centro}}", vars),
-      marca: await marcaDeCentro(ctx.organizationId),
+      marca,
       vista: { titulo: "Tienes un pago pendiente", boton: { texto: "Pagar ahora", url: l.urlPago }, aviso: "Si no esperabas este mensaje, puedes ignorarlo." },
       cuerpo: renderPlantilla("Hola {{paciente}}, tienes un pago pendiente de {{monto}} en {{centro}}.\nPuedes pagarlo de forma segura en este enlace: {{enlace}}\nEl enlace vence el {{vence}}.", vars),
     });

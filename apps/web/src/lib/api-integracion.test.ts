@@ -118,6 +118,15 @@ describe.skipIf(!hayBD)("API pública contra la BD", () => {
     expect((await llamar(ruta.ordenes.POST, tokA, "/ordenes", { method: "POST", headers: { "idempotency-key": "x".repeat(81) }, body: "{}" })).status).toBe(400);
   });
 
+  it("búsqueda q: solo separadores no equivale a «todos» y la fecha de nacimiento futura se rechaza", async () => {
+    for (const q of ["---", ".", " . - "]) {
+      const j = await (await llamar(ruta.pacientes.GET, tokA, `/pacientes?limite=100&q=${encodeURIComponent(q.trim() || q)}`)).json();
+      expect(j.datos, `q=${q}`).toEqual([]);
+    }
+    const nuevo = (fechaNacimiento: string) => llamar(ruta.pacientes.POST, tokA, "/pacientes", { method: "POST", body: JSON.stringify({ tipoDocumento: "CC", numeroDocumento: "QAFN-1", nombre: "QA fecha nacimiento", fechaNacimiento }) });
+    for (const f of ["2999-01-01", "1800-01-01"]) expect((await nuevo(f)).status, f).toBe(422);
+  });
+
   it("paginación: recorrer con cursor no repite y respeta el límite; cursor falso → 400", async () => {
     const vistos: string[] = [];
     let cursor = "";

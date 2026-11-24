@@ -5,7 +5,7 @@ import { aObjeto, aPesos, aTexto, ErrorPasarela, igualesSeguro, llamarApi, type 
 const BASE = "https://integrations.api.bold.co";
 const cabecera = (llaves: Record<string, string>) => ({ Authorization: `x-api-key ${llaves.llaveIdentidad}` });
 
-/** Doc: HMAC-SHA256 (hex) del cuerpo en Base64 con la llave secreta; en pruebas la llave es la cadena vacía. */
+/** Doc: HMAC-SHA256 (hex) del cuerpo en Base64 con la llave secreta. */
 export const firmaBold = (cuerpo: string, secreto: string) => createHmac("sha256", secreto).update(Buffer.from(cuerpo, "utf8").toString("base64")).digest("hex");
 
 export const bold: ProveedorPago = {
@@ -42,10 +42,11 @@ export const bold: ProveedorPago = {
   async probarConexion(llaves) {
     return llaves.llaveIdentidad && llaves.llaveSecreta ? { ok: true, mensaje: "Llaves guardadas (Bold no ofrece una prueba liviana confirmada: genera un link de prueba)" } : { ok: false, mensaje: "Faltan llaves" };
   },
-  verificarWebhook({ headers, rawBody, llaves, modo }) {
+  verificarWebhook({ headers, rawBody, llaves }) {
     const recibido = headers.get("x-bold-signature");
-    const secreto = modo === "SANDBOX" ? "" : llaves.llaveSecreta;
-    if (!recibido || secreto === undefined || (modo === "PRODUCCION" && !secreto)) return false;
+    // Siempre se exige la llave secreta (también en SANDBOX): firmar con secreto vacío permitiría a cualquiera falsificar el webhook.
+    const secreto = llaves.llaveSecreta;
+    if (!recibido || !secreto) return false;
     return igualesSeguro(firmaBold(rawBody, secreto).toLowerCase(), recibido.trim().toLowerCase());
   },
   async mapearEvento(payload) {

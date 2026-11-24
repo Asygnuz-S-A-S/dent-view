@@ -101,7 +101,7 @@ export function FacturaForm({
             ) : (
               <>
                 {items.map((it, i) => (
-                  <div key={i} className="grid grid-cols-[1fr_5rem_8rem_auto] items-end gap-2">
+                  <div key={i} className="grid grid-cols-[minmax(0,1fr)_4rem_6.5rem_auto] items-end gap-2 sm:grid-cols-[minmax(0,1fr)_5rem_8rem_auto]">
                     <div className="space-y-1">
                       {i === 0 && <Label htmlFor="desc-0">Descripción</Label>}
                       <Input id={`desc-${i}`} aria-label={`Descripción del ítem ${i + 1}`} value={it.descripcion} onChange={(e) => editar(i, { descripcion: e.target.value })} />

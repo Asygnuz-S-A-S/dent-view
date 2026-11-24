@@ -139,6 +139,8 @@ export const ROLES_CREAR_VALORACION = ["admin_tenant", "recepcion"] as const;
 export const puedeValorar = (rol: string, esOdontologo: boolean) => rol === "especialista" || (rol === "admin_tenant" && esOdontologo);
 export const puedeCrearValoracion = (rol: string) => (ROLES_CREAR_VALORACION as readonly string[]).includes(rol);
 export const puedeVerValoraciones = (rol: string) => (ROLES_VER_VALORACIONES as readonly string[]).includes(rol);
+/** Solo quien valora ve el contenido clínico de la solicitud (motivo, cuestionario, fotos, video, mensajes y resultado). */
+export const puedeVerClinico = puedeValorar;
 /** Filtro Prisma: admin y recepción ven todas las del centro; el especialista solo las asignadas a él. */
 export function filtroValoraciones(organizationId: string, usuarioId: string, rol: string) {
   return rol === "especialista" ? { organizationId, doctorId: usuarioId } : { organizationId };

@@ -21,7 +21,7 @@ export type ItemPlan = { id: string; diente: number | null; superficie: string |
 export type ServicioOpcion = { id: string; nombre: string; valor: number };
 const NINGUNO = "ninguno";
 
-export function PlanTratamiento({ pacienteId, items, servicios }: { pacienteId: string; items: ItemPlan[]; servicios: ServicioOpcion[] }) {
+export function PlanTratamiento({ pacienteId, items, servicios, soloLectura = false }: { pacienteId: string; items: ItemPlan[]; servicios: ServicioOpcion[]; soloLectura?: boolean }) {
   const [pendiente, iniciar] = useTransition();
   const [servicioId, setServicioId] = useState(NINGUNO);
   const [superficie, setSuperficie] = useState(NINGUNO);
@@ -71,7 +71,7 @@ export function PlanTratamiento({ pacienteId, items, servicios }: { pacienteId: 
         ))}
       </div>
 
-      <Card><CardContent>
+      {!soloLectura && <Card><CardContent>
         <form onSubmit={agregar} className="grid gap-3 sm:grid-cols-6">
           <div className="grid gap-2 sm:col-span-3">
             <Label htmlFor="plan-servicio">Servicio del catálogo (opcional)</Label>
@@ -113,7 +113,7 @@ export function PlanTratamiento({ pacienteId, items, servicios }: { pacienteId: 
             <Button type="submit" disabled={pendiente} className="w-full"><Plus /> Agregar</Button>
           </div>
         </form>
-      </CardContent></Card>
+      </CardContent></Card>}
 
       <Card className="py-0"><CardContent className="px-0">
         {items.length === 0 ? (
@@ -123,7 +123,7 @@ export function PlanTratamiento({ pacienteId, items, servicios }: { pacienteId: 
             <TableHeader><TableRow>
               <TableHead className="pl-6">Diente</TableHead><TableHead>Descripción</TableHead>
               <TableHead className="text-right">Valor</TableHead><TableHead>Estado</TableHead>
-              <TableHead className="pr-6 text-right">Orden</TableHead>
+              {!soloLectura && <TableHead className="pr-6 text-right">Orden</TableHead>}
             </TableRow></TableHeader>
             <TableBody>
               {items.map((i, n) => (
@@ -136,18 +136,18 @@ export function PlanTratamiento({ pacienteId, items, servicios }: { pacienteId: 
                     {i.notas && <div className="text-xs text-muted-foreground">{i.notas}</div>}
                   </TableCell>
                   <TableCell className="text-right">{cop(i.valor)}</TableCell>
-                  <TableCell>
-                    <Select value={i.estado} disabled={pendiente} onValueChange={(v) => ejecutar(() => cambiarEstadoPlan(i.id, v))}>
+                  <TableCell className={soloLectura ? "pr-6" : undefined}>
+                    {soloLectura ? <Badge variant="secondary">{ETIQUETA_PLAN[i.estado]}</Badge> : <Select value={i.estado} disabled={pendiente} onValueChange={(v) => ejecutar(() => cambiarEstadoPlan(i.id, v))}>
                       <SelectTrigger className="w-36" aria-label={`Estado de ${i.descripcion}`}><SelectValue /></SelectTrigger>
                       <SelectContent>{ESTADOS_PLAN.map((e) => <SelectItem key={e} value={e}>{ETIQUETA_PLAN[e]}</SelectItem>)}</SelectContent>
-                    </Select>
+                    </Select>}
                   </TableCell>
-                  <TableCell className="pr-6">
+                  {!soloLectura && <TableCell className="pr-6">
                     <div className="flex justify-end gap-1">
                       <Button size="icon" variant="ghost" aria-label="Subir" disabled={pendiente || n === 0} onClick={() => ejecutar(() => moverItemPlan(i.id, -1))}><ArrowUp /></Button>
                       <Button size="icon" variant="ghost" aria-label="Bajar" disabled={pendiente || n === items.length - 1} onClick={() => ejecutar(() => moverItemPlan(i.id, 1))}><ArrowDown /></Button>
                     </div>
-                  </TableCell>
+                  </TableCell>}
                 </TableRow>
               ))}
             </TableBody>

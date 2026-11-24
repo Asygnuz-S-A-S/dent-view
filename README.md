@@ -68,13 +68,13 @@ Pruebas del worker: `MUESTRAS_DIR=$MUESTRAS_DIR npm test -w @dent-view/worker`.
 *MFA en E2E:* `auth.setup.ts` activa el MFA de los usuarios demo la primera vez y guarda cada secreto en `apps/web/tests/e2e/.auth/totp-<rol>.txt` (gitignored, 0600); después genera el código con él. Si se pierde ese archivo, desactiva el MFA de ese usuario en la base de pruebas y vuelve a correr:
 `DELETE FROM "TwoFactor" WHERE "userId" = (SELECT id FROM "User" WHERE email = 'admin@radex.demo'); UPDATE "User" SET "twoFactorEnabled" = false WHERE email = 'admin@radex.demo';`
 
-**Base de datos sin superusuario.** La app (web y worker) se conecta como `dentview_app` (`DATABASE_URL`): solo SELECT/INSERT/UPDATE/DELETE, sin DDL, y sin UPDATE/DELETE en `"Evento"` (bitácora inmutable). Solo `prisma migrate deploy` usa el dueño (`MIGRATE_DATABASE_URL`); al arrancar, web migra y vuelve a aplicar `infra/postgres/rol-app.sql`. Volumen nuevo: el rol se crea solo (`init-rol-app.sh`, clave `APP_DB_PASSWORD`). Instalación existente:
+**Base de datos sin superusuario.** La app (web y worker) se conecta como `dentview_app` (`DATABASE_URL`): solo SELECT/INSERT/UPDATE/DELETE, sin DDL, y sin UPDATE/DELETE en `"Evento"` (bitácora inmutable). Solo `prisma migrate deploy` usa el dueño (`MIGRATE_DATABASE_URL`) y lo corre el servicio `migrador` de compose (mismo build que web, un solo uso: migra y vuelve a aplicar `infra/postgres/rol-app.sql`); `web` espera a que termine (`service_completed_successfully`) y NO recibe `MIGRATE_DATABASE_URL`, `POSTGRES_PASSWORD` ni `APP_DB_PASSWORD`: su `environment` es una lista explícita con solo lo que la app lee (si añades una variable nueva al código, agrégala ahí). Verificación: `docker exec dent-view-web-1 env | grep -c MIGRATE` debe dar 0. Las tablas de historia clínica y consentimientos (`EvolucionClinica`, `NotaClinica`, `Autorizacion`, `OdontogramaHistorial`, etc.) son solo-inserción para `dentview_app`. Volumen nuevo: el rol se crea solo (`init-rol-app.sh`, clave `APP_DB_PASSWORD`). Instalación existente:
 
 ```sh
 set -a; . infra/.env; set +a
 docker compose -f infra/compose.yaml --env-file infra/.env exec -T postgres psql -U dentview -d dentview -f - < infra/postgres/rol-app.sql
 echo "ALTER ROLE dentview_app PASSWORD :'clave';" | docker compose -f infra/compose.yaml --env-file infra/.env exec -T postgres psql -U dentview -d dentview -v clave="$APP_DB_PASSWORD" -f -
-# luego DATABASE_URL=dentview_app y MIGRATE_DATABASE_URL=dentview en infra/.env, y recrear web y worker
+# luego DATABASE_URL=dentview_app y MIGRATE_DATABASE_URL=dentview en infra/.env, y recrear migrador, web y worker
 ```
 
 **Paso a producción.**
@@ -82,6 +82,8 @@ echo "ALTER ROLE dentview_app PASSWORD :'clave';" | docker compose -f infra/comp
 2. `BETTER_AUTH_URL=https://<dominio>`, `BETTER_AUTH_TRUSTED_ORIGINS` vacío, secretos nuevos (`BETTER_AUTH_SECRET`, `POSTGRES_PASSWORD`, `APP_DB_PASSWORD`, MinIO).
 3. SMTP real (`SMTP_HOST`, `SMTP_PORT` 465/587, `SMTP_USER`, `SMTP_PASS`, `SMTP_FROM` de un dominio con SPF/DKIM) y quitar `mailpit`.
 4. Activar el MFA de cada admin en su primer ingreso (lo exige la app).
+5. Despliegue automático (`.github/workflows/desplegar.yml`): el job `verificar` (tipos y pruebas unitarias sin base de datos) debe pasar antes de `desplegar`. La app nueva se extrae en `/opt/dent-view.nuevo`, se copian `infra/.env` e `infra/Caddyfile.produccion` desde `/opt/dent-view` (conservando `CRON_SECRET`) y se reemplaza el directorio con dos `mv` (`/opt/dent-view.anterior` se borra al terminar bien; si algo falla queda para recuperarlo a mano). Los volúmenes no dependen del directorio porque `compose.yaml` fija `name: dent-view`. Los cambios de compose, Dockerfile o workflow solo se prueban de verdad en el primer despliegue: vigílalo.
+6. Límites de subida (Caddy y app): imágenes del personal hasta 25 MB por archivo, 20 archivos y 150 MB por subida; foto del paciente 6 MB; ingesta DICOM/ZIP 2200 MB (en streaming, sin cargarla en memoria). Imágenes con más de 50 megapíxeles o 12000 px por lado se rechazan.
 
 ### Secreto de cifrado en reposo (`CIFRADO_SECRETO`)
 

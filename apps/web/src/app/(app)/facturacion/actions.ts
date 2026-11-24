@@ -11,11 +11,13 @@ import { conReintentoNumero } from "@/lib/ordenes";
 import { ADMIN, GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 
+const TOTAL_MAX = 2_000_000_000;
+
 const esquemaFactura = z.object({
   ordenId: z.string().optional(),
   pacienteId: z.string().optional(),
   items: z
-    .array(z.object({ descripcion: z.string().trim().min(1, "Falta la descripción"), cantidad: z.number().int().min(1), valorUnitario: z.number().int().min(0) }))
+    .array(z.object({ descripcion: z.string().trim().min(1, "Falta la descripción"), cantidad: z.number().int().min(1).max(10_000, "La cantidad máxima por ítem es 10.000"), valorUnitario: z.number().int().min(0).max(1_000_000_000, "El valor de un ítem no puede superar $ 1.000.000.000") }))
     .default([]),
   responsable: z.enum(["PACIENTE", "DOCTOR", "CONVENIO"]),
   responsableId: z.string().optional(),
@@ -57,6 +59,7 @@ export async function crearFactura(entrada: z.input<typeof esquemaFactura>): Pro
   }
   const total = totalItems(items);
   if (total <= 0) return { error: "El total debe ser mayor a 0" };
+  if (total > TOTAL_MAX) return { error: "El total de la cuenta no puede superar $ 2.000.000.000" }; // columnas Int4: más allá fallaría en la BD
 
   try {
     const factura = await conReintentoNumero(() =>
@@ -199,7 +202,7 @@ export async function anularPago(pagoId: string, motivo: string): Promise<{ erro
 /**
  * Nota crédito sobre una cuenta ya pagada (solo admin). Regla: la nota crédito REDUCE el total de la cuenta (Factura.total) en su valor,
  * así todas las sumas de saldo quedan correctas sin tocar a los consumidores; lo pagado que excede el nuevo total es saldo a favor (reembolso manual).
- * Valor <= lo pagado. Consecutivo por centro; la nota solo se inserta.
+ * Valor <= min(lo pagado, total vigente): varias notas no acumulan más que lo pagado ni dejan el total negativo. Consecutivo por centro; la nota solo se inserta.
  */
 export async function crearNotaCredito(facturaId: string, entrada: { valor: number; motivo: string }): Promise<{ error?: string }> {
   const ctx = await exigirContexto(ADMIN);
@@ -212,7 +215,7 @@ export async function crearNotaCredito(facturaId: string, entrada: { valor: numb
       const f = await tx.factura.findFirst({ where: { id: facturaId, organizationId: org }, include: { pagos: true } });
       if (!f) return "Cuenta de cobro no encontrada";
       if (f.estado !== "PAGADA") return "La nota crédito solo aplica a cuentas pagadas";
-      const error = validarNotaCredito(entrada.valor, totalPagado(f.pagos));
+      const error = validarNotaCredito(entrada.valor, totalPagado(f.pagos), f.total);
       if (error) return error;
       const max = await tx.notaCredito.aggregate({ where: { organizationId: org }, _max: { consecutivo: true } });
       const consecutivo = (max._max.consecutivo ?? 0) + 1;

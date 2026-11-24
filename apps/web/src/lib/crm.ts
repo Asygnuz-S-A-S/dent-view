@@ -80,41 +80,58 @@ export function enlaceWhatsapp(tel: string | null | undefined, mensaje: string) 
 
 // ---- Importación CSV ----
 export const MAX_FILAS_CSV = 500;
+/** Tope del archivo: el límite de las Server Actions de Next es 1 MB, así que se valida antes de enviar (cliente y servidor). */
+export const MAX_BYTES_CSV = 900_000;
 export type FilaLead = { nombre: string; telefono: string | null; correo: string | null; ciudad: string | null; origen: string; interes: string | null };
 const CORREO_RE = /^[^\s<>,;"']+@[^\s<>,;"']+\.[^\s<>,;"']+$/;
 
-/** Divide una línea CSV (coma o punto y coma; comillas dobles con "" como escape). */
-function celdas(linea: string, sep: string) {
-  const out: string[] = [];
-  let cur = "", q = false;
-  for (let i = 0; i < linea.length; i++) {
-    const c = linea[i]!;
+/** Divide el CSV en registros de celdas: comillas dobles con "" como escape; admite separadores y saltos de línea dentro de comillas. */
+function registros(texto: string, sep: string) {
+  const filas: string[][] = [];
+  let fila: string[] = [], cur = "", q = false;
+  const cerrar = () => { fila.push(cur.trim()); cur = ""; };
+  for (let i = 0; i < texto.length; i++) {
+    const c = texto[i]!;
     if (q) {
-      if (c === '"') { if (linea[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c;
+      if (c === '"') { if (texto[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += c;
     } else if (c === '"') q = true;
-    else if (c === sep) { out.push(cur); cur = ""; } else cur += c;
+    else if (c === sep) cerrar();
+    else if (c === "\n" || c === "\r") {
+      if (c === "\r" && texto[i + 1] === "\n") i++;
+      cerrar();
+      if (fila.some(Boolean)) filas.push(fila);
+      fila = [];
+    } else cur += c;
   }
-  out.push(cur);
-  return out.map((x) => x.trim());
+  cerrar();
+  if (fila.some(Boolean)) filas.push(fila);
+  return filas;
 }
+
+/** Teléfono comparable: solo dígitos y sin el 57 de Colombia ("+57 300 123 4567" y "3001234567" son el mismo). */
+export const claveTelefono = (t: string) => {
+  const d = t.replace(/\D/g, "");
+  return d.length === 12 && d.startsWith("57") ? d.slice(2) : d;
+};
 
 const sinTilde = (s: string) => s.normalize("NFD").replace(/[̀-ͯ]/g, "").toLowerCase();
 const ALIAS: Record<string, keyof FilaLead> = { nombre: "nombre", telefono: "telefono", celular: "telefono", correo: "correo", email: "correo", ciudad: "ciudad", origen: "origen", interes: "interes" };
 
 /** CSV simple con encabezado (nombre, telefono, correo, ciudad, origen, interes). Valida cada fila y topa en MAX_FILAS_CSV. */
 export function parsearCsvLeads(texto: string, max = MAX_FILAS_CSV) {
-  const lineas = texto.replace(/^﻿/, "").split(/\r?\n/).filter((l) => l.trim());
+  texto = texto.replace(/^﻿/, "");
+  const primera = texto.split(/\r?\n/, 1)[0]!;
+  const sep = (primera.match(/;/g)?.length ?? 0) > (primera.match(/,/g)?.length ?? 0) ? ";" : ",";
+  const lineas = registros(texto, sep);
   const errores: { fila: number; motivo: string }[] = [];
   const validos: FilaLead[] = [];
   if (lineas.length === 0) return { validos, errores: [{ fila: 0, motivo: "El archivo está vacío" }] };
-  const sep = (lineas[0]!.match(/;/g)?.length ?? 0) > (lineas[0]!.match(/,/g)?.length ?? 0) ? ";" : ",";
-  const cols = celdas(lineas[0]!, sep).map((h) => ALIAS[sinTilde(h)]);
+  const cols = lineas[0]!.map((h) => ALIAS[sinTilde(h)]);
   if (!cols.includes("nombre")) return { validos, errores: [{ fila: 1, motivo: "Falta la columna «nombre» en el encabezado" }] };
   if (lineas.length - 1 > max) return { validos, errores: [{ fila: 0, motivo: `Máximo ${max} filas por importación (el archivo trae ${lineas.length - 1})` }] };
   const vistos = new Set<string>();
-  lineas.slice(1).forEach((l, i) => {
+  lineas.slice(1).forEach((v, i) => {
     const fila = i + 2;
-    const v = celdas(l, sep);
     const r: Record<string, string> = {};
     cols.forEach((c, j) => { if (c && v[j]) r[c] = v[j]!; });
     if (!r.nombre || r.nombre.length < 2) return errores.push({ fila, motivo: "Falta el nombre" });
@@ -126,9 +143,9 @@ export function parsearCsvLeads(texto: string, max = MAX_FILAS_CSV) {
     if (!telefono && !correo) return errores.push({ fila, motivo: "Se necesita teléfono o correo" });
     const origen = r.origen ? r.origen.toUpperCase().replace(/\s+/g, "_") : "OTRO";
     if (!ORIGENES.includes(origen as Origen)) return errores.push({ fila, motivo: `Origen no válido (${r.origen})` });
-    const clave = correo ?? telefono!.replace(/\D/g, "");
-    if (vistos.has(clave)) return errores.push({ fila, motivo: "Repetido en el archivo" });
-    vistos.add(clave);
+    const claves = [correo, telefono && claveTelefono(telefono)].filter((x): x is string => !!x);
+    if (claves.some((k) => vistos.has(k))) return errores.push({ fila, motivo: "Repetido en el archivo" });
+    claves.forEach((k) => vistos.add(k));
     validos.push({ nombre: r.nombre, telefono, correo, ciudad: r.ciudad?.slice(0, 80) ?? null, origen, interes: r.interes?.slice(0, 120) ?? null });
   });
   return { validos, errores };

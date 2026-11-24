@@ -1,5 +1,7 @@
 // Implementación independiente (sala limpia) a partir de docs/sala-limpia/03-recordatorios-y-seguimiento.md
 // Lógica pura del seguimiento de pacientes: vocabularios, normalización del mes, efecto de los intentos y conversión.
+import { fechaIso } from "./fechas";
+
 
 export const MOTIVOS = ["CONTROL", "ENTREGA_PENDIENTE", "ESTUDIO_SIN_TOMAR", "REPETICION", "OTRO"] as const;
 export type Motivo = (typeof MOTIVOS)[number];
@@ -28,6 +30,9 @@ export function primerDiaMes(f: string | Date) {
   return new Date(Date.UTC(d.getUTCFullYear(), d.getUTCMonth(), 1));
 }
 export const sumarMeses = (mes: Date, n: number) => new Date(Date.UTC(mes.getUTCFullYear(), mes.getUTCMonth() + n, 1));
+/** Línea que se agrega a la nota al aplazar; la fecha es el día en Bogotá (no UTC). */
+export const notaAplazamiento = (nota: string | null, ahora: Date, usuario: string, meses: number) =>
+  [nota, `${fechaIso(ahora)} ${usuario}: aplazado ${meses} mes(es)`].filter(Boolean).join("\n");
 export const mesTexto = (mes: Date) => mes.toLocaleDateString("es-CO", { timeZone: "UTC", month: "long", year: "numeric" });
 
 /** Estado tras un intento de contacto. Sin respuesta/buzón/equivocado solo cambian a un pendiente. */

@@ -1,5 +1,7 @@
 // Validación pura de la foto del paciente: tipo real (por firma, no por lo que declara el cliente) y tamaño.
 export const FOTO_MAX_BYTES = 5 * 1024 * 1024;
+/** Tope del cuerpo de la petición (foto + formulario multipart); Caddy aplica el mismo. */
+export const FOTO_MAX_PETICION = 6 * 1024 * 1024;
 export const FOTO_TIPOS = ["image/jpeg", "image/png", "image/webp"] as const;
 
 /** Tipo de imagen según los primeros bytes; null si no es JPEG, PNG ni WebP. */

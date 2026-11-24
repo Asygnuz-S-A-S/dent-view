@@ -14,7 +14,7 @@ const esquema = z.object({
   estudioId: z.string().min(1).optional(),
   nombre: z.string().trim().min(2, "Escribe el nombre del destinatario").max(120),
   correo: z.union([z.literal(""), z.string().trim().email("Correo no válido").max(160)]),
-  dias: z.number().int().min(1, "El vencimiento es de 1 a 90 días").max(90, "El vencimiento es de 1 a 90 días").default(DIAS_VENCIMIENTO),
+  dias: z.number().int("El vencimiento debe ser un número entero de días").min(1, "El vencimiento es de 1 a 90 días").max(90, "El vencimiento es de 1 a 90 días").default(DIAS_VENCIMIENTO),
 });
 
 export type ResultadoEntrega = { error: string } | { enlace: string; codigo: string; enviado: boolean; venceEn: string };

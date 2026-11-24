@@ -41,10 +41,11 @@ export const MOTIVO_MIN = 5;
 /** Motivo obligatorio de anulaciones y notas crédito (mín. 5 caracteres); devuelve el texto limpio o null. */
 export const motivoValido = (m: unknown) => (typeof m === "string" && m.trim().length >= MOTIVO_MIN ? m.trim().slice(0, 500) : null);
 
-/** Valida una nota crédito sobre una cuenta pagada: entero > 0 y no mayor a lo realmente pagado. */
-export function validarNotaCredito(valor: number, pagado: number): string | null {
+/** Valida una nota crédito sobre una cuenta pagada: entero > 0 y no mayor a min(pagado, total vigente). `total` ya viene descontadas las notas anteriores: así varias notas no pueden dejar el total negativo. */
+export function validarNotaCredito(valor: number, pagado: number, total: number): string | null {
   if (!Number.isInteger(valor) || valor <= 0) return "El valor debe ser un entero mayor a 0";
   if (valor > pagado) return "La nota crédito no puede superar lo pagado";
+  if (valor > total) return "La nota crédito no puede superar el total vigente de la cuenta (ya hay notas crédito previas)";
   return null;
 }
 

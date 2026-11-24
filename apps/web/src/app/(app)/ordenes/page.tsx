@@ -8,20 +8,24 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { ESTADOS_ORDEN, ETIQUETA_ESTADO_ORDEN, numeroDeBusqueda, numeroOrden } from "@/lib/ordenes";
 import { cop, totalOrden } from "@/lib/precios";
 import { GESTION } from "@/lib/roles";
+import { idsPacientesPorNombre } from "@/lib/busqueda";
+import { documentoDeBusqueda } from "@/lib/pacientes";
 import { exigirContexto } from "@/lib/sesion";
 import { fechaCorta } from "@/lib/fechas";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { BadgeOrden } from "@/components/comunes/estado-badge";
 import { FiltrosUrl } from "@/components/comunes/filtros-url";
 import { bogotaAUtc, esFecha } from "@/lib/agenda";
+import { calcularPagina } from "@/lib/paginacion";
+import { Paginacion } from "@/components/comunes/paginacion";
 
 export const dynamic = "force-dynamic";
 
 const fecha = fechaCorta;
 
-export default async function Ordenes({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string; doctor?: string; desde?: string; hasta?: string }> }) {
+export default async function Ordenes({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string; doctor?: string; desde?: string; hasta?: string; pagina?: string }> }) {
   const ctx = await exigirContexto();
-  const { estado, q, doctor, desde: d0, hasta: h0 } = await searchParams;
+  const { estado, q, doctor, desde: d0, hasta: h0, pagina } = await searchParams;
   const estadoValido = ESTADOS_ORDEN.find((e) => e === estado);
   const busqueda = q?.trim();
   const desde = esFecha(d0) ? d0 : undefined;
@@ -43,16 +47,19 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
   if (busqueda) {
     const numero = numeroDeBusqueda(busqueda);
     where.OR = [
-      { paciente: { nombre: { contains: busqueda, mode: "insensitive" } } },
-      { paciente: { persona: { numeroDocumento: { contains: busqueda } } } },
+      { pacienteId: { in: await idsPacientesPorNombre(ctx.organizationId, busqueda) } },
+      { paciente: { persona: { numeroDocumento: { contains: documentoDeBusqueda(busqueda) || "#sin-documento#" } } } },
       ...(numero !== null ? [{ numero }] : []),
     ];
   }
+  const total = await prisma.orden.count({ where });
+  const pg = calcularPagina(pagina, total);
   const ordenes = await prisma.orden.findMany({
     where,
     include: { paciente: { include: { persona: true } }, doctorRemitente: true, items: true },
     orderBy: { numero: "desc" },
-    take: 200,
+    skip: pg.skip,
+    take: pg.take,
   });
   const puedeCrear = ctx.rol === "doctor_remitente" || (GESTION as readonly string[]).includes(ctx.rol);
   const extra = { ...(busqueda ? { q: busqueda } : {}), ...(doctorValido ? { doctor: doctorValido } : {}), ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) };
@@ -133,6 +140,8 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
           )}
         </CardContent>
       </Card>
+
+      <Paginacion ruta="/ordenes" params={{ ...(estadoValido ? { estado: estadoValido } : {}), ...extra }} {...pg} total={total} />
     </div>
   );
 }

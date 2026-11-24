@@ -8,7 +8,7 @@ import { registrarEvento } from "@/lib/eventos";
 import { ADMIN, GESTION } from "@/lib/roles";
 import { CANALES_DOCTOR, ESTADOS_ABIERTOS, ESTADOS_SEG_DOCTOR, MOTIVOS_SEG_DOCTOR, validarUmbrales, type EstadoSegDoctor } from "@/lib/seguimiento-doctores";
 import { generarSeguimientos } from "@/lib/seguimiento-doctores-datos";
-import { exigirContexto } from "@/lib/sesion";
+import { exigirContexto, exigirModulo } from "@/lib/sesion";
 
 type R = { error?: string };
 const ABIERTOS = [...ESTADOS_ABIERTOS] as EstadoSegDoctor[];
@@ -32,6 +32,7 @@ const esquemaNuevo = z.object({
 });
 export async function crearSeguimientoDoctor(entrada: z.input<typeof esquemaNuevo>): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "seguimiento-doctores");
   const r = esquemaNuevo.safeParse(entrada);
   if (!r.success) return { error: r.error.issues[0]?.message ?? "Datos inválidos" };
   const d = r.data, org = ctx.organizationId;
@@ -51,6 +52,7 @@ export async function crearSeguimientoDoctor(entrada: z.input<typeof esquemaNuev
 const esquemaCambio = z.object({ estado: z.enum(ESTADOS_SEG_DOCTOR), responsableId: z.string().nullish(), proximoContacto: fechaOpc, nota });
 export async function actualizarSeguimientoDoctor(id: string, entrada: z.input<typeof esquemaCambio>): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "seguimiento-doctores");
   const r = esquemaCambio.safeParse(entrada);
   if (!r.success) return { error: r.error.issues[0]?.message ?? "Datos inválidos" };
   const org = ctx.organizationId;
@@ -74,6 +76,7 @@ const esquemaContacto = z.object({
 /** Bitácora de gestiones con el doctor; si hay tarea pendiente la pasa a CONTACTADO. Auditado con Evento. */
 export async function registrarContactoDoctor(entrada: z.input<typeof esquemaContacto>): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "seguimiento-doctores");
   const r = esquemaContacto.safeParse(entrada);
   if (!r.success) return { error: "Datos inválidos" };
   const d = r.data, org = ctx.organizationId;
@@ -91,6 +94,7 @@ export async function registrarContactoDoctor(entrada: z.input<typeof esquemaCon
 
 export async function generarSeguimientosDoctores(): Promise<R & { creados?: number }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "seguimiento-doctores");
   const creados = await generarSeguimientos(ctx.organizationId, ctx.usuario.id);
   refrescar();
   return { creados };
@@ -99,6 +103,7 @@ export async function generarSeguimientosDoctores(): Promise<R & { creados?: num
 const esquemaUmbrales = z.object({ umbralRiesgoFactor: z.number(), diasInactivo: z.number(), diasInactivoCritico: z.number() });
 export async function guardarUmbralesDoctores(entrada: z.input<typeof esquemaUmbrales>): Promise<R> {
   const ctx = await exigirContexto(ADMIN);
+  await exigirModulo(ctx, "seguimiento-doctores");
   const r = esquemaUmbrales.safeParse(entrada);
   if (!r.success) return { error: "Datos inválidos" };
   const error = validarUmbrales(r.data);

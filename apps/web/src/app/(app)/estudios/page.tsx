@@ -100,7 +100,7 @@ export default async function Estudios({ searchParams }: { searchParams: Promise
                   <TableHead className="hidden lg:table-cell">Documento</TableHead>
                   <TableHead className="hidden lg:table-cell">Fecha</TableHead>
                   <TableHead className="hidden lg:table-cell">Modalidad</TableHead>
-                  <TableHead>Estado</TableHead>
+                  <TableHead className="hidden sm:table-cell">Estado</TableHead>
                   <TableHead className="pr-4 text-right sm:pr-6">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
@@ -114,7 +114,8 @@ export default async function Estudios({ searchParams }: { searchParams: Promise
                         {e.paciente ? <div className="truncate font-medium capitalize">{e.paciente.nombre.toLowerCase()}</div> : <div className="font-medium text-muted-foreground">Sin paciente</div>}
                         {compartidos.includes(e.studyInstanceUid) && e.doctorRemitenteId !== ctx.usuario.id && <Badge variant="secondary" className="mb-0.5">Compartido contigo</Badge>}
                         {e.descripcion && <div className="truncate text-xs text-muted-foreground">{e.descripcion}</div>}
-                        {/* En pantallas angostas los datos secundarios van bajo el paciente. */}
+                        {/* En pantallas angostas el estado y los datos secundarios van bajo el paciente (así el menú de acciones cabe en 390 px). */}
+                        <Badge variant={est.variante} className="mt-0.5 sm:hidden">{est.etiqueta}</Badge>
                         <div className="text-xs text-muted-foreground lg:hidden">{[e.modalidad, fecha(e.fechaEstudio)].filter(Boolean).join(" · ")}</div>
                         {e.orden && clinico && <Link href={`/ordenes/${e.orden.id}`} className="text-xs text-muted-foreground underline-offset-4 hover:underline">Orden {numeroOrden(e.orden.numero)}</Link>}
                       </TableCell>
@@ -123,7 +124,7 @@ export default async function Estudios({ searchParams }: { searchParams: Promise
                       </TableCell>
                       <TableCell className="hidden lg:table-cell">{fecha(e.fechaEstudio)}</TableCell>
                       <TableCell className="hidden lg:table-cell"><Badge variant="outline">{e.modalidad ?? "—"}</Badge></TableCell>
-                      <TableCell><Badge variant={est.variante}>{est.etiqueta}</Badge></TableCell>
+                      <TableCell className="hidden sm:table-cell"><Badge variant={est.variante}>{est.etiqueta}</Badge></TableCell>
                       <TableCell className="pr-4 sm:pr-6">
                         <div className="flex items-center justify-end gap-2">
                           {/* Pestaña nueva: la cookie de sesión viaja igual y Caddy autoriza cada petición del visor. /visor lo sirve Caddy, no Next. */}

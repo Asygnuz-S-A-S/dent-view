@@ -1,12 +1,14 @@
 // Cuerpos aceptados por los POST/PATCH de /api/v1. strictObject: un campo desconocido (p. ej. "precio") se rechaza con 422.
 import { z } from "zod";
+import { fechaIso } from "./fechas";
 import { esquemaNumeroDocumento, esquemaTipoDocumento } from "./pacientes";
 
 export const esquemaPacienteApi = z.strictObject({
   tipoDocumento: esquemaTipoDocumento,
   numeroDocumento: esquemaNumeroDocumento,
   nombre: z.string().trim().min(2).max(200),
-  fechaNacimiento: z.iso.date().optional(),
+  // Misma regla que el formulario: no puede ser futura (y se descarta lo anterior a 1900, que es un error de captura).
+  fechaNacimiento: z.iso.date().refine((f) => f >= "1900-01-01" && f <= fechaIso(new Date()), "Fecha de nacimiento inválida").optional(),
   celular: z.string().trim().max(30).optional(),
   correo: z.email().max(200).optional(),
   direccion: z.string().trim().max(300).optional(),

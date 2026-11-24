@@ -33,9 +33,11 @@ export default async function DetalleValoracion({ params }: { params: Promise<{ 
   }
   await registrarEvento({ organizationId: org, pacienteId: v.pacienteId, actorId: ctx.usuario.id, tipo: "acceso.valoracion", detalle: { valoracionId: id, accion: "ver" } });
 
+  // Lo clínico solo se consulta (y se muestra) para quien valora; recepción ve estado, contacto, fechas y asignado.
+  const clinico = ctx.puedeValorar;
   const [medios, mensajes, odontologos, doctor] = await Promise.all([
-    prisma.valoracionMedia.findMany({ where: { valoracionId: id, organizationId: org } }),
-    prisma.valoracionMensaje.findMany({ where: { valoracionId: id, organizationId: org }, orderBy: { creadoEn: "asc" } }),
+    clinico ? prisma.valoracionMedia.findMany({ where: { valoracionId: id, organizationId: org } }) : [],
+    clinico ? prisma.valoracionMensaje.findMany({ where: { valoracionId: id, organizationId: org }, orderBy: { creadoEn: "asc" } }) : [],
     ctx.puedeCrear ? odontologosDelCentro(org) : [],
     v.doctorId ? prisma.user.findUnique({ where: { id: v.doctorId }, select: { name: true } }) : null,
   ]);
@@ -57,6 +59,17 @@ export default async function DetalleValoracion({ params }: { params: Promise<{ 
         puedeAsignar={ctx.puedeCrear && !["COMPLETADA", "CANCELADA"].includes(v.estado)} puedeReenviar={(ctx.puedeCrear || ctx.puedeValorar) && espera}
         puedeCancelar={(ctx.puedeCrear || ctx.puedeValorar) && !["COMPLETADA", "CANCELADA"].includes(v.estado)} />
 
+      {!clinico && (
+        <Card>
+          <CardHeader><CardTitle>Contenido clínico</CardTitle>
+            <CardDescription>Motivo, cuestionario, fotos, video y valoración son datos de salud: solo los ve el odontólogo que valora. Aquí puedes dar seguimiento al estado, reenviar el acceso y asignar un odontólogo.</CardDescription></CardHeader>
+          <CardContent className="text-sm text-muted-foreground">
+            {v.consentimientoEn ? `El paciente aceptó el consentimiento el ${fechaHora(v.consentimientoEn)}.` : "El paciente aún no acepta el consentimiento."}
+          </CardContent>
+        </Card>
+      )}
+
+      {clinico && (<>
       <Card>
         <CardHeader><CardTitle>Motivo y cuestionario</CardTitle>
           <CardDescription>{v.consentimientoEn ? `Consentimiento aceptado el ${fechaHora(v.consentimientoEn)} (versión ${v.consentimientoVersion}).` : "El paciente aún no acepta el consentimiento."}</CardDescription></CardHeader>
@@ -111,6 +124,7 @@ export default async function DetalleValoracion({ params }: { params: Promise<{ 
             inicial={{ diagnosticoPreliminar: v.diagnosticoPreliminar ?? "", recomendaciones: v.recomendaciones ?? "", tratamientoSugerido: v.tratamientoSugerido ?? "", requierePresencial: v.requierePresencial, presupuestoEstimado: v.presupuestoEstimado }} />
         </CardContent>
       </Card>
+      </>)}
     </div>
   );
 }

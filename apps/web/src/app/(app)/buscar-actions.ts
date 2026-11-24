@@ -1,8 +1,9 @@
 "use server";
 
 import { prisma, type Prisma } from "@dent-view/db";
+import { idsPacientesPorNombre } from "@/lib/busqueda";
 import { numeroDeBusqueda, numeroOrden } from "@/lib/ordenes";
-import { normalizarDocumento } from "@/lib/pacientes";
+import { documentoDeBusqueda } from "@/lib/pacientes";
 import { CLINICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 
@@ -13,8 +14,9 @@ export async function buscarGlobal(texto: string): Promise<Resultado[]> {
   const ctx = await exigirContexto();
   const q = texto.trim().slice(0, 60);
   if (q.length < 2) return [];
-  const doc = normalizarDocumento(q);
+  const doc = documentoDeBusqueda(q);
   const numero = numeroDeBusqueda(q);
+  const idsNombre = await idsPacientesPorNombre(ctx.organizationId, q);
 
   const verPacientes = (CLINICOS as readonly string[]).includes(ctx.rol);
   const where: Prisma.OrdenWhereInput = {
@@ -22,7 +24,7 @@ export async function buscarGlobal(texto: string): Promise<Resultado[]> {
     ...(ctx.rol === "doctor_remitente" && { doctorRemitenteId: ctx.usuario.id }),
     OR: [
       ...(numero !== null ? [{ numero }] : []),
-      { paciente: { nombre: { contains: q, mode: "insensitive" as const } } },
+      { pacienteId: { in: idsNombre } },
     ],
   };
   const [pacientes, ordenes] = await Promise.all([
@@ -30,7 +32,7 @@ export async function buscarGlobal(texto: string): Promise<Resultado[]> {
       ? prisma.pacienteTenant.findMany({
           where: {
             organizationId: ctx.organizationId,
-            OR: [{ nombre: { contains: q, mode: "insensitive" } }, ...(doc.length >= 3 ? [{ persona: { numeroDocumento: { contains: doc } } }] : [])],
+            OR: [{ id: { in: idsNombre } }, ...(doc.length >= 3 ? [{ persona: { numeroDocumento: { contains: doc } } }] : [])],
           },
           include: { persona: true },
           orderBy: { nombre: "asc" },

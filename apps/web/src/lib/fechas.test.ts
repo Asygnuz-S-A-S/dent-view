@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { fechaCorta, fechaHoraCompleta, fechaHora, fechaIso, fechaLarga, fechaLargaDeIso } from "./fechas";
+import { fechaDeEstudio, fechaCorta, fechaHoraCompleta, fechaHora, fechaIso, fechaLarga, fechaLargaDeIso } from "./fechas";
 
 const d = new Date("2026-11-20T15:00:00Z"); // 10:00 en Bogotá
 
@@ -13,6 +13,10 @@ describe("fechas", () => {
   it("iso respeta la medianoche de Bogotá", () => {
     expect(fechaIso(new Date("2026-11-21T04:59:00Z"))).toBe("2026-11-20");
     expect(fechaIso(new Date("2026-11-21T05:00:00Z"))).toBe("2026-11-21");
+  });
+  it("fecha de estudio (medianoche UTC) no retrocede un día", () => {
+    expect(fechaDeEstudio({ fechaEstudio: new Date("2026-11-24T00:00:00Z"), creadoEn: new Date("2026-11-25T15:00:00Z") })).toBe("24/11/2026");
+    expect(fechaDeEstudio({ fechaEstudio: null, creadoEn: new Date("2026-11-25T02:00:00Z") })).toBe("24/11/2026");
   });
   it("nulos", () => expect(fechaCorta(null)).toBe("—"));
 });

@@ -1,5 +1,5 @@
 import { describe, expect, it } from "vitest";
-import { coincideFiltro, embudo, enlaceWhatsapp, leerFiltro, numeroWhatsapp, parsearCsvLeads, PLANTILLAS_SECUENCIA, segmentosDe, textoDuracion, tiempoMedioRespuestaHoras } from "./crm";
+import { claveTelefono, coincideFiltro, embudo, enlaceWhatsapp, leerFiltro, numeroWhatsapp, parsearCsvLeads, PLANTILLAS_SECUENCIA, segmentosDe, textoDuracion, tiempoMedioRespuestaHoras } from "./crm";
 
 describe("WhatsApp manual", () => {
   it("normaliza celulares colombianos", () => {
@@ -24,6 +24,17 @@ describe("importación CSV", () => {
   it("acepta punto y coma y rechaza sin encabezado de nombre", () => {
     expect(parsearCsvLeads("nombre;celular\nAna;3001234567").validos).toHaveLength(1);
     expect(parsearCsvLeads("a,b\n1,2").errores[0]!.motivo).toMatch(/nombre/);
+  });
+  it("respeta comillas con comas, saltos de línea y comillas escapadas", () => {
+    const r = parsearCsvLeads('nombre,telefono,interes\r\n"Pérez, Ana",3001234567,"Ortodoncia\ny blanqueamiento"\r\n"Luis ""El Rey"" Gómez",3109876543,x\r\n');
+    expect(r.errores).toEqual([]);
+    expect(r.validos.map((v) => [v.nombre, v.interes])).toEqual([["Pérez, Ana", "Ortodoncia\ny blanqueamiento"], ['Luis "El Rey" Gómez', "x"]]);
+  });
+  it("detecta repetidos por teléfono normalizado aunque cambie el correo", () => {
+    const r = parsearCsvLeads("nombre,telefono,correo\nAna Uno,300 123 4567,a@x.co\nAna Dos,+57 3001234567,b@x.co");
+    expect(r.validos).toHaveLength(1);
+    expect(r.errores[0]).toMatchObject({ fila: 3, motivo: expect.stringMatching(/Repetido/) });
+    expect(claveTelefono("+57 (300) 123-4567")).toBe(claveTelefono("3001234567"));
   });
   it("topa el número de filas", () => {
     const csv = "nombre,correo\n" + Array.from({ length: 6 }, (_, i) => `N${i}x,n${i}@x.co`).join("\n");

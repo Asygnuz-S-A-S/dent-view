@@ -8,7 +8,9 @@ const ARRENDAMIENTO_MS = 5 * 60_000; // mientras se envía, nadie más puede rec
 
 /** Tras 20 entregas FALLIDAS seguidas el webhook se desactiva solo y queda constancia en auditoría. */
 async function desactivarSiCorresponde(db: Cliente, webhookId: string, organizationId: string) {
-  const ultimos = await db.webhookEntrega.findMany({ where: { webhookId, estado: { in: ['ENTREGADO', 'FALLIDO'] } }, orderBy: { creadoEn: 'desc' }, take: FALLOS_PARA_DESACTIVAR, select: { estado: true } });
+  // Solo cuentan las entregas posteriores a la última reactivación manual (si no, un webhook reactivado se apagaría al primer fallo).
+  const reactivado = await db.evento.findFirst({ where: { organizationId, tipo: 'integracion.webhook_activado', detalle: { path: ['webhookId'], equals: webhookId } }, orderBy: { creadoEn: 'desc' }, select: { creadoEn: true } });
+  const ultimos = await db.webhookEntrega.findMany({ where: { webhookId, estado: { in: ['ENTREGADO', 'FALLIDO'] }, ...(reactivado && { creadoEn: { gt: reactivado.creadoEn } }) }, orderBy: { creadoEn: 'desc' }, take: FALLOS_PARA_DESACTIVAR, select: { estado: true } });
   if (!debeDesactivar(ultimos.map((u) => u.estado))) return;
   const { count } = await db.webhook.updateMany({ where: { id: webhookId, organizationId, activo: true }, data: { activo: false } });
   if (count === 1) await db.evento.create({ data: { organizationId, tipo: 'integracion.webhook_desactivado_auto', detalle: { webhookId, motivo: `${FALLOS_PARA_DESACTIVAR} entregas fallidas consecutivas` } } });

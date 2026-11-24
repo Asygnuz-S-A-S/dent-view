@@ -18,6 +18,7 @@ export function FiltrosUrl({ filtros }: { filtros: FiltroUrl[] }) {
   const ir = (clave: string, valor: string) => {
     const p = new URLSearchParams(params);
     valor ? p.set(clave, valor) : p.delete(clave);
+    p.delete("pagina"); // otro filtro, otra lista: vuelve a la primera página
     const q = p.toString();
     router.push(q ? `${pathname}?${q}` : pathname);
   };

@@ -3,14 +3,14 @@
 import { prisma } from "@dent-view/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { esEtapa, ORIGENES, parsearCsvLeads, TIPOS_CONTACTO, MAX_FILAS_CSV } from "@/lib/crm";
+import { esEtapa, ORIGENES, parsearCsvLeads, TIPOS_CONTACTO, MAX_FILAS_CSV, MAX_BYTES_CSV, claveTelefono } from "@/lib/crm";
 import { esGestion } from "@/lib/crm-datos";
 import { cambiarEtapaLead, cancelarInscripciones, inscribirManual } from "@/lib/crm-motor-datos";
 import { registrarEvento } from "@/lib/eventos";
 import { esquemaNumeroDocumento, esquemaTipoDocumento } from "@/lib/pacientes";
 import { crearPacienteEnCentro } from "@/lib/pacientes-centro";
 import { CLINICOS, GESTION } from "@/lib/roles";
-import { exigirContexto } from "@/lib/sesion";
+import { exigirContexto, exigirModulo } from "@/lib/sesion";
 
 type R = { error?: string };
 const refrescar = (leadId?: string) => { revalidatePath("/crm", "layout"); if (leadId) revalidatePath(`/crm/leads/${leadId}`); };
@@ -36,6 +36,7 @@ const esquemaLead = z.object({
 
 export async function crearLead(entrada: z.input<typeof esquemaLead>): Promise<R & { id?: string }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const p = esquemaLead.safeParse(entrada);
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Datos inválidos" };
   const d = p.data;
@@ -49,13 +50,16 @@ export async function crearLead(entrada: z.input<typeof esquemaLead>): Promise<R
 /** CSV simple: los leads importados NO traen consentimiento de mercadeo (solo seguimiento manual hasta que lo den). */
 export async function importarLeads(texto: string): Promise<R & { creados?: number; repetidos?: number; errores?: { fila: number; motivo: string }[] }> {
   const ctx = await exigirContexto(GESTION);
-  if (typeof texto !== "string" || texto.length > 2_000_000) return { error: "Archivo demasiado grande" };
+  await exigirModulo(ctx, "crm");
+  if (typeof texto !== "string" || Buffer.byteLength(texto) > MAX_BYTES_CSV) return { error: "El archivo es demasiado grande (máximo 900 KB). Divídelo en partes y vuelve a intentarlo." };
   const { validos, errores } = parsearCsvLeads(texto, MAX_FILAS_CSV);
   if (!validos.length) return { error: errores[0]?.motivo ?? "No hay filas válidas", errores };
   const correos = validos.flatMap((v) => (v.correo ? [v.correo] : []));
   const existentes = correos.length ? await prisma.lead.findMany({ where: { organizationId: ctx.organizationId, correo: { in: correos, mode: "insensitive" } }, select: { correo: true } }) : [];
   const ya = new Set(existentes.map((e) => e.correo!.toLowerCase()));
-  const nuevos = validos.filter((v) => !v.correo || !ya.has(v.correo));
+  const telefonos = validos.some((v) => v.telefono) ? await prisma.lead.findMany({ where: { organizationId: ctx.organizationId, telefono: { not: null } }, select: { telefono: true } }) : [];
+  const yaTel = new Set(telefonos.map((e) => claveTelefono(e.telefono!)));
+  const nuevos = validos.filter((v) => !(v.correo && ya.has(v.correo)) && !(v.telefono && yaTel.has(claveTelefono(v.telefono))));
   await prisma.lead.createMany({ data: nuevos.map((v) => ({ ...v, organizationId: ctx.organizationId })) });
   await registrarEvento({ organizationId: ctx.organizationId, actorId: ctx.usuario.id, tipo: "crm.leads_importados", detalle: { creados: nuevos.length, repetidos: validos.length - nuevos.length, errores: errores.length } });
   refrescar();
@@ -64,6 +68,7 @@ export async function importarLeads(texto: string): Promise<R & { creados?: numb
 
 export async function moverEtapa(leadId: string, etapa: string): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   if (!esEtapa(etapa) || etapa === "PERDIDO") return { error: "Para marcar como perdido indica el motivo en la ficha del lead" };
   const l = await cambiarEtapaLead(prisma, { organizationId: ctx.organizationId, leadId, etapa, autorId: ctx.usuario.id });
   if (!l) return { error: "Lead no encontrado" };
@@ -73,6 +78,7 @@ export async function moverEtapa(leadId: string, etapa: string): Promise<R> {
 
 export async function marcarPerdido(leadId: string, motivo: string): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const m = z.string().trim().min(3, "Escribe el motivo").max(200).safeParse(motivo);
   if (!m.success) return { error: m.error.issues[0]!.message };
   const l = await cambiarEtapaLead(prisma, { organizationId: ctx.organizationId, leadId, etapa: "PERDIDO", motivoPerdida: m.data, autorId: ctx.usuario.id });
@@ -87,6 +93,7 @@ const esquemaEdicion = z.object({
 });
 export async function actualizarLead(leadId: string, entrada: z.input<typeof esquemaEdicion>): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const p = esquemaEdicion.safeParse(entrada);
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Datos inválidos" };
   if (!(await responsableValido(ctx.organizationId, p.data.responsableId))) return { error: "Responsable inválido" };
@@ -100,6 +107,7 @@ const esquemaContacto = z.object({ tipo: z.enum(TIPOS_CONTACTO), texto: z.string
 /** Registrar un contacto marca el primer contacto: un lead «Nuevo» pasa a «Contactado» (y se cancelan las secuencias de «sin respuesta»). */
 export async function registrarContacto(leadId: string, entrada: z.input<typeof esquemaContacto>): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const p = esquemaContacto.safeParse(entrada);
   if (!p.success) return { error: "Datos inválidos" };
   const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: ctx.organizationId }, select: { id: true, etapa: true } });
@@ -116,6 +124,7 @@ export async function registrarContacto(leadId: string, entrada: z.input<typeof 
 /** Notas: gestión en cualquier lead; el especialista solo en los suyos. */
 export async function agregarNota(leadId: string, texto: string): Promise<R> {
   const ctx = await exigirContexto(CLINICOS);
+  await exigirModulo(ctx, "crm");
   const t = z.string().trim().min(1, "Escribe la nota").max(1000).safeParse(texto);
   if (!t.success) return { error: t.error.issues[0]!.message };
   if (!(await leadAccesible(ctx, leadId))) return { error: "Lead no encontrado" };
@@ -127,6 +136,7 @@ export async function agregarNota(leadId: string, texto: string): Promise<R> {
 const esquemaTarea = z.object({ leadId: z.string().min(1), titulo: z.string().trim().min(3, "Escribe el título").max(150), vence: fecha, asignadoId: opc(80) });
 export async function crearTarea(entrada: z.input<typeof esquemaTarea>): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const p = esquemaTarea.safeParse(entrada);
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Datos inválidos" };
   if (!(await leadAccesible(ctx, p.data.leadId))) return { error: "Lead no encontrado" };
@@ -139,6 +149,7 @@ export async function crearTarea(entrada: z.input<typeof esquemaTarea>): Promise
 
 export async function completarTarea(tareaId: string, hecha = true): Promise<R> {
   const ctx = await exigirContexto(CLINICOS);
+  await exigirModulo(ctx, "crm");
   const t = await prisma.tareaCRM.findFirst({ where: { id: tareaId, organizationId: ctx.organizationId } });
   if (!t || (!esGestion(ctx.rol) && t.asignadoId !== ctx.usuario.id)) return { error: "Tarea no encontrada" };
   await prisma.tareaCRM.update({ where: { id: t.id }, data: hecha ? { estado: "HECHA", completadaEn: new Date() } : { estado: "PENDIENTE", completadaEn: null } });
@@ -148,6 +159,7 @@ export async function completarTarea(tareaId: string, hecha = true): Promise<R> 
 
 export async function fijarNoContactar(leadId: string, noContactar: boolean): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const l = await prisma.lead.findFirst({ where: { id: leadId, organizationId: ctx.organizationId }, select: { id: true } });
   if (!l) return { error: "Lead no encontrado" };
   await prisma.$transaction(async (tx) => {
@@ -163,6 +175,7 @@ export async function fijarNoContactar(leadId: string, noContactar: boolean): Pr
 /** Registra que la persona aceptó recibir información comercial (consentimiento de mercadeo del lead). */
 export async function fijarConsentimiento(leadId: string, otorgado: boolean): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const { count } = await prisma.lead.updateMany({ where: { id: leadId, organizationId: ctx.organizationId, noContactar: false }, data: { consentimientoMercadeo: otorgado, consentimientoEn: otorgado ? new Date() : null } });
   if (!count) return { error: "No se pudo actualizar (¿está marcado como «no contactar»?)" };
   await prisma.actividadLead.create({ data: { organizationId: ctx.organizationId, leadId, tipo: "NOTA", texto: otorgado ? "Se registró el consentimiento de mercadeo" : "Se retiró el consentimiento de mercadeo", autorId: ctx.usuario.id } });
@@ -175,6 +188,7 @@ const esquemaConversion = z.object({ tipoDocumento: esquemaTipoDocumento, numero
 /** Convierte el lead en paciente reutilizando crearPacienteEnCentro (misma lógica de alta que /pacientes). Si ya existía, lo vincula. */
 export async function convertirEnPaciente(leadId: string, entrada: z.input<typeof esquemaConversion>): Promise<R & { pacienteId?: string; vinculado?: boolean }> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   const p = esquemaConversion.safeParse(entrada);
   if (!p.success) return { error: p.error.issues[0]?.message ?? "Documento inválido" };
   const lead = await prisma.lead.findFirst({ where: { id: leadId, organizationId: ctx.organizationId } });
@@ -199,6 +213,7 @@ export async function convertirEnPaciente(leadId: string, entrada: z.input<typeo
 
 export async function inscribirEnSecuencia(secuenciaId: string, ref: { leadId?: string; pacienteId?: string }): Promise<R> {
   const ctx = await exigirContexto(GESTION);
+  await exigirModulo(ctx, "crm");
   if (!!ref.leadId === !!ref.pacienteId) return { error: "Datos inválidos" };
   const r = await inscribirManual(ctx.organizationId, secuenciaId, ref);
   if ("error" in r) return r;

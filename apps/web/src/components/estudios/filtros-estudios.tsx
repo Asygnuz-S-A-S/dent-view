@@ -28,8 +28,8 @@ export function FiltrosEstudios({ tab, q, modalidad, modalidades, porAsignar, es
     <div className="flex flex-wrap items-center gap-3">
       <Tabs value={tab}>
         <TabsList>
-          <TabsTrigger value="todos" asChild><Link href={url({ tab: "" })}>Todos</Link></TabsTrigger>
-          <TabsTrigger value="por-asignar" asChild>
+          <TabsTrigger value="todos" asChild aria-controls={undefined}><Link href={url({ tab: "" })}>Todos</Link></TabsTrigger>
+          <TabsTrigger value="por-asignar" asChild aria-controls={undefined}>
             <Link href={url({ tab: "por-asignar" })}>Por asignar ({porAsignar})</Link>
           </TabsTrigger>
         </TabsList>

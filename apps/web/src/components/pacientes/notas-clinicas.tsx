@@ -13,7 +13,7 @@ import { EstadoVacio } from "@/components/comunes/estado-vacio";
 
 export type NotaVista = { id: string; texto: string; fecha: string; autor: string};
 
-function Nota({ nota, pacienteId }: { nota: NotaVista; pacienteId: string }) {
+function Nota({ nota, pacienteId, soloLectura }: { nota: NotaVista; pacienteId: string; soloLectura: boolean }) {
   const [editando, setEditando] = useState(false);
   const [texto, setTexto] = useState("");
   const [pendiente, iniciar] = useTransition();
@@ -29,7 +29,7 @@ function Nota({ nota, pacienteId }: { nota: NotaVista; pacienteId: string }) {
     <li className="space-y-2 rounded-lg border p-4">
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>{nota.autor} · {nota.fecha}</span>
-        {!editando && <Button size="sm" variant="ghost" onClick={() => setEditando(true)}><Replace /> Corregir</Button>}
+        {!editando && !soloLectura && <Button size="sm" variant="ghost" onClick={() => setEditando(true)}><Replace /> Corregir</Button>}
       </div>
       {editando ? (
         <div className="space-y-2">
@@ -46,7 +46,7 @@ function Nota({ nota, pacienteId }: { nota: NotaVista; pacienteId: string }) {
   );
 }
 
-export function NotasClinicas({ pacienteId, notas }: { pacienteId: string; notas: NotaVista[] }) {
+export function NotasClinicas({ pacienteId, notas, soloLectura = false }: { pacienteId: string; notas: NotaVista[]; soloLectura?: boolean }) {
   const [texto, setTexto] = useState("");
   const [pendiente, iniciar] = useTransition();
   function agregar(e: React.FormEvent) {
@@ -60,17 +60,17 @@ export function NotasClinicas({ pacienteId, notas }: { pacienteId: string; notas
   }
   return (
     <div className="space-y-4">
-      <Card><CardContent>
+      {!soloLectura && <Card><CardContent>
         <form onSubmit={agregar} className="grid gap-3">
           <Label htmlFor="nota-nueva">Nueva nota clínica</Label>
           <Textarea id="nota-nueva" rows={3} maxLength={5000} value={texto} onChange={(e) => setTexto(e.target.value)} placeholder="Evolución, hallazgos, indicaciones…" />
           <div><Button type="submit" disabled={pendiente || !texto.trim()}>Agregar nota</Button></div>
         </form>
-      </CardContent></Card>
+      </CardContent></Card>}
       {notas.length === 0 ? (
         <EstadoVacio titulo="Este paciente no tiene notas clínicas" />
       ) : (
-        <ul className="space-y-3">{notas.map((n) => <Nota key={n.id} nota={n} pacienteId={pacienteId} />)}</ul>
+        <ul className="space-y-3">{notas.map((n) => <Nota key={n.id} nota={n} pacienteId={pacienteId} soloLectura={soloLectura} />)}</ul>
       )}
       <p className="text-xs text-muted-foreground">Las notas son parte del registro clínico: no se pueden editar ni eliminar; una corrección se guarda como nota nueva.</p>
     </div>

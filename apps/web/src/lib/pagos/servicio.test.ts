@@ -39,13 +39,25 @@ const pasarela = { id: "P1", organizationId: "O1", proveedor: "WOMPI" as const, 
 const ev = (over = {}) => ({ referencia: null, idExterno: "LINK", estado: "APROBADO" as const, monto: 50000, moneda: "COP", idEventoExterno: "T1:APPROVED", idTransaccion: "T1", ...over });
 
 describe("procesarEvento", () => {
-  beforeEach(() => { Object.assign(estado.link, { facturaId: "F1", citaId: null, monto: 50000 }); estado.eventos.clear(); estado.pagos.length = 0; estado.link.estado = "CREADO"; estado.factura.estado = "ABIERTA"; });
+  beforeEach(() => { process.env.BETTER_AUTH_URL = "https://localhost:8443"; Object.assign(estado.link, { facturaId: "F1", citaId: null, monto: 50000 }); estado.eventos.clear(); estado.pagos.length = 0; estado.link.estado = "CREADO"; estado.factura.estado = "ABIERTA"; });
 
   it("aprobado: crea un Pago PASARELA y deja la cuenta pagada", async () => {
     expect(await procesarEvento(pasarela, ev())).toBe("aplicado");
     expect(estado.pagos[0]).toMatchObject({ valor: 50000, medio: "PASARELA", linkPagoId: "L1", referenciaExterna: "T1" });
     expect(estado.link.estado).toBe("APROBADO");
     expect(estado.factura.estado).toBe("PAGADA");
+  });
+  it("SANDBOX fuera de localhost: solo audita pago.prueba, sin Pago, Anticipo ni cambio en la cuenta", async () => {
+    process.env.BETTER_AUTH_URL = "https://dentview.asygnuz.com";
+    const { registrarEvento } = await import("@/lib/eventos");
+    vi.mocked(registrarEvento).mockClear();
+    expect(await procesarEvento(pasarela, ev())).toBe("ignorado");
+    expect(estado.pagos).toHaveLength(0);
+    expect(estado.link.estado).toBe("CREADO");
+    expect(estado.factura.estado).toBe("ABIERTA");
+    expect(registrarEvento).toHaveBeenCalledWith(expect.objectContaining({ tipo: "pago.prueba" }), expect.anything());
+    // En PRODUCCION sí se aplica aunque no sea localhost
+    expect(await procesarEvento({ ...pasarela, modo: "PRODUCCION" }, ev({ idEventoExterno: "T9" }))).toBe("aplicado");
   });
   it("el mismo evento repetido no duplica el pago", async () => {
     await procesarEvento(pasarela, ev());

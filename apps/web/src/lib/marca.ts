@@ -68,7 +68,8 @@ export type TemaMarca = {
 /** Paleta claro/oscuro del centro. El texto siempre cumple AA; en oscuro el color se aclara para leerse sobre el fondo. */
 export function temaMarca(hex: string): TemaMarca {
   const texto = textoSobre(hex);
-  const primarioOscuro = ajustarContraste(hex, FONDO_OSCURO, 4.5);
+  // 6:1 (no 4.5): el texto en color primario también se pinta sobre su propio tinte (bg-primary/10) y sobre tarjetas más claras que el fondo.
+  const primarioOscuro = ajustarContraste(hex, FONDO_OSCURO, 6);
   const contrasteFondo = contraste(hex, BLANCO);
   return {
     claro: { primario: hex, texto },

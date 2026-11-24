@@ -6,7 +6,7 @@ import { generarCodigoAcceso, generarToken, hashCodigo, hashToken, firmarCookie,
 import { despachar, encolarMensaje } from "./notificar";
 import { secreto, urlBase } from "./resultados";
 import { s3 } from "./s3";
-import { contextoActivo } from "./sesion";
+import { contextoActivo, modulosHabilitadoEnCentro } from "./sesion";
 import {
   COOKIE_VALORACION, DIAS_VENCIMIENTO, filtroValoraciones, puedeCrearValoracion, puedeValorar, puedeVerValoraciones, truncarIp, vencimiento, IP_DESCONOCIDA,
 } from "./valoraciones";
@@ -19,7 +19,11 @@ export async function ipCliente() {
 }
 export const ipGuardada = async () => truncarIp(await ipCliente());
 
-/** Contexto del personal para valoraciones (null si no hay sesión o el rol no aplica). Sin redirecciones: sirve a las rutas API. */
+/**
+ * Contexto del personal para valoraciones (null si no hay sesión o el rol no aplica). Sin redirecciones: sirve a las rutas API.
+ * `puedeValorar` (especialista o admin marcado como odontólogo) es también el permiso de ver lo CLÍNICO (cuestionario, fotos, video, mensajes, diagnóstico):
+ * recepción y los demás ven solo estado, contacto, fechas y asignado (datos de salud, Ley 1581).
+ */
 export async function contextoValoraciones() {
   const ctx = await contextoActivo();
   if (!ctx || ctx.usuario.debeCambiarClave || !puedeVerValoraciones(ctx.rol)) return null;
@@ -107,6 +111,7 @@ export async function valoracionDelPaciente(token: string) {
   if (!dueno) return null;
   const v = await prisma.valoracion.findUnique({ where: { tokenHash: hashToken(token) } });
   if (!v || sujeto(v) !== dueno || v.estado === "CANCELADA" || v.estado === "BORRADOR" || v.expiraEn <= new Date()) return null;
+  if (!(await modulosHabilitadoEnCentro(v.organizationId, "valoraciones"))) return null; // centro sin el módulo: el enlace no sirve
   return v;
 }
 

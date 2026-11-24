@@ -10,7 +10,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
-import { fechaCorta } from "@/lib/fechas";
+import { fechaCorta, fechaDeEstudio } from "@/lib/fechas";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 
@@ -99,7 +99,7 @@ export default async function DetalleDoctor({ params }: { params: Promise<{ id: 
                 {estudios.map((e) => (
                   <TableRow key={e.id}>
                     <TableCell className="pl-6">{e.paciente?.nombre ?? "Sin paciente"}</TableCell>
-                    <TableCell>{fecha(e.fechaEstudio ?? e.creadoEn)}</TableCell>
+                    <TableCell>{fechaDeEstudio(e)}</TableCell>
                     <TableCell><Badge variant="outline">{e.modalidad ?? "—"}</Badge></TableCell>
                     <TableCell className="pr-6 text-right">
                       <Button asChild size="sm"><a href={`/visor/viewer?StudyInstanceUIDs=${encodeURIComponent(e.studyInstanceUid)}`} target="_blank" rel="noopener"><Eye /> Abrir visor</a></Button>

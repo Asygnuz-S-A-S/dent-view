@@ -16,5 +16,6 @@ services:
   minio: {restart: unless-stopped}
   orthanc: {restart: unless-stopped}
   visor: {restart: unless-stopped}
+  migrador: {restart: "no"}
   web: {restart: unless-stopped}
   worker: {restart: unless-stopped}

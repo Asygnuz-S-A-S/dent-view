@@ -8,6 +8,7 @@ import { ConfirmarAccion } from "@/components/comunes/confirmar-accion";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { hoyBogota } from "@/lib/agenda";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 
 export type DoctorDerivado = { doctorId: string; nombre: string; especialidad: string | null; ordenes: number; estudios: number; primera: string; ultima: string; servicios: string[] };
@@ -20,7 +21,7 @@ export function EquipoTratante({ pacienteId, derivados, manuales, doctores, gest
   const [pendiente, iniciar] = useTransition();
   const [doctorId, setDoctorId] = useState("");
   const [especialidad, setEspecialidad] = useState("");
-  const [desde, setDesde] = useState(() => new Date().toISOString().slice(0, 10));
+  const [desde, setDesde] = useState(() => hoyBogota());
   const [nota, setNota] = useState("");
 
   const agregar = (e: React.FormEvent) => {

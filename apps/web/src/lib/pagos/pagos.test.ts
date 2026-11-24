@@ -73,15 +73,20 @@ describe("Mercado Pago", () => {
 
 describe("Bold", () => {
   const CUERPO = '{"id":"abc-123","type":"SALE_APPROVED","subject":"TX1","data":{"payment_id":"TX1","amount":{"total":50000},"metadata":{"reference":"dvREF"}}}';
-  it("firma HMAC-SHA256 del cuerpo en Base64 (llave vacía en pruebas)", () => {
+  it("firma HMAC-SHA256 del cuerpo en Base64 ", () => {
     expect(firmaBold(CUERPO, "")).toBe("4475ce01947f8c95c81464ec67a1bd9906175c091e085bf545984182f1741f36");
     expect(firmaBold(CUERPO, "llave_secreta_bold")).toBe("bdc402f6c771cf749528432f1f572c22940cd5e1617c58315c4201a486476053");
   });
   it("verifica según el modo y rechaza firma ajena", () => {
-    expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": "4475ce01947f8c95c81464ec67a1bd9906175c091e085bf545984182f1741f36" }, modo: "SANDBOX" }))).toBe(true);
+    expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": "bdc402f6c771cf749528432f1f572c22940cd5e1617c58315c4201a486476053" }, llaves: { llaveSecreta: "llave_secreta_bold" }, modo: "SANDBOX" }))).toBe(true);
     expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": "bdc402f6c771cf749528432f1f572c22940cd5e1617c58315c4201a486476053" }, llaves: { llaveSecreta: "llave_secreta_bold" }, modo: "PRODUCCION" }))).toBe(true);
     expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": "00" }, llaves: { llaveSecreta: "llave_secreta_bold" }, modo: "PRODUCCION" }))).toBe(false);
     expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": "4475ce01947f8c95c81464ec67a1bd9906175c091e085bf545984182f1741f36" }, llaves: { llaveSecreta: "llave_secreta_bold" }, modo: "PRODUCCION" }))).toBe(false);
+  });
+  it("exige llave secreta también en SANDBOX: no firma con secreto vacío", () => {
+    const firmaVacia = "4475ce01947f8c95c81464ec67a1bd9906175c091e085bf545984182f1741f36";
+    expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": firmaVacia }, modo: "SANDBOX" }))).toBe(false);
+    expect(bold.verificarWebhook(entrada({ rawBody: CUERPO, headers: { "x-bold-signature": firmaVacia }, llaves: { llaveSecreta: "" }, modo: "SANDBOX" }))).toBe(false);
   });
   it("mapea ventas aprobadas y rechazadas; ignora el resto", async () => {
     expect(await bold.mapearEvento(JSON.parse(CUERPO), entrada({}))).toMatchObject({ estado: "APROBADO", referencia: "dvREF", monto: 50000, idEventoExterno: "abc-123" });

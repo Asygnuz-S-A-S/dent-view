@@ -41,6 +41,7 @@ export function Graficos({ d, p, dias }: { d: DatosGraficos; p: DatosGraficos; d
   const noVino = d.citasPorEstado.find((x) => x.nombre === "NO_ASISTIO")?.total ?? 0;
   const estudios = suma(d.estudiosPorModalidad);
   const modalidades = [...d.estudiosPorModalidad].sort((a, b) => b.total - a.total);
+  const empatadas = modalidades.filter((m) => m.total === modalidades[0]?.total);
   const totalDoctores = d.topDoctores.reduce((t, x) => t + x.valor, 0);
   const topDoctor = d.topDoctores[0];
 
@@ -80,7 +81,7 @@ export function Graficos({ d, p, dias }: { d: DatosGraficos; p: DatosGraficos; d
       </TarjetaGrafica>
 
       <TarjetaGrafica
-        titulo={estudios === 0 ? "No hay estudios en el periodo" : `${modalidades[0]!.nombre} es el estudio más frecuente: ${pct(modalidades[0]!.total, estudios)} % del total`}
+        titulo={estudios === 0 ? "No hay estudios en el periodo" : (empatadas.length > 1 ? `${empatadas.map((m) => m.nombre).join(" y ")} empatan como los estudios más frecuentes: ${pct(modalidades[0]!.total, estudios)} % del total cada uno` : `${modalidades[0]!.nombre} es el estudio más frecuente: ${pct(modalidades[0]!.total, estudios)} % del total`)}
         cifra={String(estudios)}
         delta={<Delta actual={estudios} anterior={suma(p.estudiosPorModalidad)} />}
         vacio={estudios === 0 ? "Los estudios llegan solos desde los equipos del centro; prueba con otro rango." : undefined}

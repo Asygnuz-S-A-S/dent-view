@@ -29,10 +29,11 @@ const tx = {
 const prisma = {
   $transaction: (f: (t: typeof tx) => unknown) => f(tx),
   pago: { findFirst: vi.fn(async () => ({ facturaId: "F1" })) },
+  pacienteTenant: { findFirst: vi.fn(async () => ({ id: "P1" })) },
 };
 vi.mock("@dent-view/db", () => ({ prisma }));
 
-const { anularFactura, anularPago, crearNotaCredito } = await import("./actions");
+const { anularFactura, anularPago, crearFactura, crearNotaCredito } = await import("./actions");
 const pago = (over = {}) => ({ id: "G1", valor: 100000, medio: "EFECTIVO", anuladoEn: null, anticipoId: null, ...over });
 
 beforeEach(() => {
@@ -102,5 +103,25 @@ describe("crearNotaCredito", () => {
     expect(await crearNotaCredito("F1", { valor: 30000, motivo: "Descuento pactado" })).toEqual({});
     expect(notas[0]).toMatchObject({ consecutivo: 1, valor: 30000, motivo: "Descuento pactado" });
     expect(factura.total).toBe(70000);
+  });
+});
+
+describe("notas crédito acumulables", () => {
+  it("dos notas de 100 sobre una cuenta pagada de 100: la segunda falla y el total no queda negativo", async () => {
+    factura.estado = "PAGADA"; factura.pagos = [pago({ valor: 100 })]; factura.total = 100;
+    expect(await crearNotaCredito("F1", { valor: 100, motivo: "Descuento pactado" })).toEqual({});
+    expect(await crearNotaCredito("F1", { valor: 100, motivo: "Descuento repetido" })).toEqual({ error: expect.stringContaining("total vigente") });
+    expect(notas).toHaveLength(1);
+    expect(factura.total).toBe(0);
+  });
+});
+
+describe("crearFactura con valores extremos", () => {
+  const base = { pacienteId: "P1", responsable: "PACIENTE" as const };
+  it("un ítem por encima de mil millones se rechaza con mensaje en español (no revienta la BD)", async () => {
+    expect(await crearFactura({ ...base, items: [{ descripcion: "x", cantidad: 1, valorUnitario: 3_000_000_000 }] })).toEqual({ error: expect.stringContaining("no puede superar") });
+  });
+  it("un total que no cabe en Int4 se rechaza", async () => {
+    expect(await crearFactura({ ...base, items: [{ descripcion: "x", cantidad: 3, valorUnitario: 1_000_000_000 }] })).toEqual({ error: expect.stringContaining("2.000.000.000") });
   });
 });

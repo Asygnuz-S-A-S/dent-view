@@ -22,7 +22,7 @@ export function GraficoBarrasDia({ datos, moneda = false, unidad = ["estudio", "
   const texto = (v: number) => (moneda ? cop(v) : `${v} ${v === 1 ? unidad[0] : unidad[1]}`);
   return (
     <ChartContainer config={config} className="w-full" style={{ height: alto }}>
-      <BarChart data={datos} margin={{ top: 22, left: 0, right: 0 }} barCategoryGap="22%">
+      <BarChart accessibilityLayer={false} data={datos} margin={{ top: 22, left: 0, right: 0 }} barCategoryGap="22%">
         <CartesianGrid vertical={false} stroke="var(--border)" />
         <XAxis dataKey="dia" tickLine={false} axisLine={false} minTickGap={28} tickMargin={8} tickFormatter={corto} />
         <YAxis hide domain={[0, "dataMax"]} />
