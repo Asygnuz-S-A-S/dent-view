@@ -14,8 +14,8 @@ export async function datosReporte(organizationId: string, r: Rango) {
 
   const [produccion, pagos, abiertas, porEstado, porModalidad, ordenesDoctor, porEstadoCita] = await Promise.all([
     prisma.ordenItem.aggregate({ _sum: { precio: true }, where: { orden: ordenVigente } }),
-    prisma.pago.findMany({ where: { factura: { organizationId: org }, fecha: creadoEn }, select: { fecha: true, valor: true } }),
-    prisma.factura.findMany({ where: { organizationId: org, estado: "ABIERTA" }, select: { total: true, pagos: { select: { valor: true } } } }),
+    prisma.pago.findMany({ where: { factura: { organizationId: org }, fecha: creadoEn, anuladoEn: null }, select: { fecha: true, valor: true } }),
+    prisma.factura.findMany({ where: { organizationId: org, estado: "ABIERTA" }, select: { total: true, pagos: { where: { anuladoEn: null }, select: { valor: true } } } }),
     prisma.orden.groupBy({ by: ["estado"], where: { organizationId: org, creadoEn }, _count: { _all: true } }),
     prisma.estudio.groupBy({ by: ["modalidad"], where: { organizationId: org, creadoEn }, _count: { _all: true } }),
     prisma.orden.findMany({

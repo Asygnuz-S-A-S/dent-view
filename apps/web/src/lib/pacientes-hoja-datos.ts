@@ -26,7 +26,7 @@ export async function cargarHojaDeVida(organizationId: string, pacienteId: strin
     prisma.estudio.findMany({ where: base, select: { id: true, modalidad: true, descripcion: true, studyInstanceUid: true, fechaEstudio: true, creadoEn: true }, orderBy: { creadoEn: "desc" }, take }),
     prisma.informe.findMany({ where: { ...base, estado: "EMITIDO", emitidoEn: { not: null } }, select: { id: true, version: true, emitidoEn: true, firmanteNombre: true }, orderBy: { emitidoEn: "desc" }, take }),
     prisma.enlaceEntrega.findMany({ where: base, select: { id: true, destinatarioTipo: true, destinatarioNombre: true, creadoEn: true }, orderBy: { creadoEn: "desc" }, take }),
-    prisma.pago.findMany({ where: { factura: base }, select: { id: true, valor: true, medio: true, fecha: true, factura: { select: { id: true, numero: true } } }, orderBy: { fecha: "desc" }, take }),
+    prisma.pago.findMany({ where: { factura: base, anuladoEn: null }, select: { id: true, valor: true, medio: true, fecha: true, factura: { select: { id: true, numero: true } } }, orderBy: { fecha: "desc" }, take }),
     prisma.autorizacion.findMany({ where: base, select: { id: true, tipo: true, finalidad: true, otorgada: true, creadoEn: true }, orderBy: { creadoEn: "desc" }, take }),
     prisma.seguimiento.findMany({ where: base, select: { id: true, motivo: true, estado: true, nota: true, creadoEn: true }, orderBy: { creadoEn: "desc" }, take }),
     prisma.evento.findMany({ where: { ...base, tipo: { in: Object.keys(ETIQUETA_EVENTO) } }, select: { id: true, tipo: true, creadoEn: true }, orderBy: { creadoEn: "desc" }, take }),

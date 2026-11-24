@@ -13,6 +13,7 @@ model Convenio {
   creadoEn         DateTime         @default(now())
   tarifas          TarifaEspecial[]
   ordenes          Orden[]
+  facturas         Factura[]
 
   @@index([organizationId])
 }

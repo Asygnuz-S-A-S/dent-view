@@ -31,11 +31,11 @@ export const CUENTA: Record<EstadoCuenta, { texto: string; variante: Variante }>
   PARCIAL: { texto: "Parcial", variante: "warning" },
   ABIERTA: { texto: "Abierta", variante: "info" },
 };
-type FacturaEstado = { estado: string; total: number; vence: Date | null; pagos: { valor: number }[] };
+type FacturaEstado = { estado: string; total: number; vence: Date | null; pagos: { valor: number; anuladoEn?: Date | null }[] };
 /** Estado efectivo de una cuenta de cobro: la abierta se afina en vencida / parcial según vencimiento y abonos. */
 export function estadoCuenta(f: FacturaEstado, ahora = new Date()): EstadoCuenta {
   if (f.estado === "PAGADA" || f.estado === "ANULADA") return f.estado;
   if (f.vence && f.vence < ahora && saldo(f.total, f.pagos) > 0) return "VENCIDA";
-  return f.pagos.length > 0 ? "PARCIAL" : "ABIERTA";
+  return f.pagos.some((p) => !p.anuladoEn) ? "PARCIAL" : "ABIERTA";
 }
 export const BadgeCuenta = ({ estado }: { estado: EstadoCuenta }) => <Badge variant={CUENTA[estado].variante}>{CUENTA[estado].texto}</Badge>;

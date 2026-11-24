@@ -1,6 +1,7 @@
 import { beforeEach, describe, expect, it, vi } from "vitest";
 
 // Doble en memoria de lo que usa procesarEvento: reproduce la restricción única de EventoPasarela y el bloqueo del link.
+const anticipos: { linkPagoId: string; valor: number; citaId: string | null; pacienteId: string | null; reservaId: string | null; estado?: string }[] = [];
 const estado = { eventos: new Set<string>(), pagos: [] as { valor: number; medio: string }[], link: { id: "L1", facturaId: "F1", monto: 50000, moneda: "COP", estado: "CREADO" }, factura: { id: "F1", pacienteId: null, numero: 1, total: 50000, estado: "ABIERTA" } };
 const tx = {
   eventoPasarela: {
@@ -17,6 +18,15 @@ const tx = {
     update: vi.fn(async ({ data }: { data: { estado: string } }) => { estado.link.estado = data.estado; }),
   },
   factura: { findFirst: vi.fn(async () => ({ ...estado.factura, pagos: estado.pagos })), update: vi.fn(async ({ data }: { data: { estado: string } }) => { estado.factura.estado = data.estado; }) },
+  cita: { findFirst: vi.fn(async () => ({ pacienteId: "PAC1", reservaPublica: { id: "RES1" } })) },
+  configAgendaPublica: { findUnique: vi.fn(async () => ({ anticipoReembolsable: false, horasLimiteReembolso: 12, retieneSiNoAsiste: false })) },
+  anticipo: {
+    create: vi.fn(async ({ data }: { data: (typeof anticipos)[number] }) => {
+      if (anticipos.some((a) => a.linkPagoId === data.linkPagoId)) throw Object.assign(new Error("unique"), { code: "P2002" });
+      anticipos.push(data);
+      return { id: "A" + anticipos.length };
+    }),
+  },
   pago: { create: vi.fn(async ({ data }: { data: { valor: number; medio: string } }) => { estado.pagos.push(data); }) },
   evento: { create: vi.fn(async () => ({})) },
   $queryRaw: vi.fn(async () => []),
@@ -29,7 +39,7 @@ const pasarela = { id: "P1", organizationId: "O1", proveedor: "WOMPI" as const, 
 const ev = (over = {}) => ({ referencia: null, idExterno: "LINK", estado: "APROBADO" as const, monto: 50000, moneda: "COP", idEventoExterno: "T1:APPROVED", idTransaccion: "T1", ...over });
 
 describe("procesarEvento", () => {
-  beforeEach(() => { estado.eventos.clear(); estado.pagos.length = 0; estado.link.estado = "CREADO"; estado.factura.estado = "ABIERTA"; });
+  beforeEach(() => { Object.assign(estado.link, { facturaId: "F1", citaId: null, monto: 50000 }); estado.eventos.clear(); estado.pagos.length = 0; estado.link.estado = "CREADO"; estado.factura.estado = "ABIERTA"; });
 
   it("aprobado: crea un Pago PASARELA y deja la cuenta pagada", async () => {
     expect(await procesarEvento(pasarela, ev())).toBe("aplicado");
@@ -57,5 +67,26 @@ describe("procesarEvento", () => {
     expect(await procesarEvento(pasarela, ev({ monto: 20000 }))).toBe("aplicado");
     expect(estado.factura.estado).toBe("ABIERTA");
     estado.link.monto = 50000;
+  });
+
+  describe("link de cita sin cuenta (anticipo)", () => {
+    beforeEach(() => { anticipos.length = 0; Object.assign(estado.link, { facturaId: null, citaId: "C1", monto: 30000 }); });
+    it("aprobado: registra un Anticipo DISPONIBLE (no queda sin libro) y no crea Pago", async () => {
+      expect(await procesarEvento(pasarela, ev({ monto: 30000 }))).toBe("aplicado");
+      expect(anticipos).toHaveLength(1);
+      expect(anticipos[0]).toMatchObject({ linkPagoId: "L1", valor: 30000, citaId: "C1", pacienteId: "PAC1", reservaId: "RES1", medio: "PASARELA", reembolsable: false, horasLimiteReembolso: 12 });
+      expect(estado.pagos).toHaveLength(0);
+      expect(estado.link.estado).toBe("APROBADO");
+    });
+    it("el mismo evento dos veces no duplica el anticipo", async () => {
+      await procesarEvento(pasarela, ev({ monto: 30000 }));
+      expect(await procesarEvento(pasarela, ev({ monto: 30000 }))).toBe("duplicado");
+      expect(anticipos).toHaveLength(1);
+    });
+    it("otro evento aprobado del mismo link tampoco duplica", async () => {
+      await procesarEvento(pasarela, ev({ monto: 30000 }));
+      expect(await procesarEvento(pasarela, ev({ monto: 30000, idEventoExterno: "T2:APPROVED" }))).toBe("ignorado");
+      expect(anticipos).toHaveLength(1);
+    });
   });
 });

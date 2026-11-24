@@ -7,7 +7,7 @@ vi.mock("react", () => ({ cache: <T,>(f: T) => f }));
 
 describe("matriz de módulos", () => {
   it("radiológico: flujo completo sin laboratorio; seguimiento de doctores solo aquí", () => {
-    const SIN = ["laboratorio", "valoraciones", "crm"]; // exclusivos de odontología
+    const SIN = ["laboratorio", "valoraciones", "crm", "evolucion"]; // exclusivos de odontología (evolucion: historia clínica)
     for (const m of SIN) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m as never)).toBe(false);
     for (const m of MODULOS.filter((m) => !SIN.includes(m))) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m)).toBe(true);
     for (const t of ["CENTRO_ODONTOLOGICO", "CLINICA_ODONTOLOGICA", "ODONTOLOGO_PARTICULAR"] as const) {
@@ -28,6 +28,13 @@ describe("matriz de módulos", () => {
     for (const m of ["usuarios", "doctores", "cartera", "reportes"] as const) expect(moduloHabilitado("ODONTOLOGO_PARTICULAR", m)).toBe(false);
     for (const m of ["pacientes", "agenda", "estudios", "facturacion"] as const) expect(moduloHabilitado("ODONTOLOGO_PARTICULAR", m)).toBe(true);
   });
+  it("módulos nuevos: agenda pública, inventario, gastos y presupuestos en todos; caja no en el particular; evolucion no en radiología", () => {
+    for (const t of ["CENTRO_RADIOLOGICO", "CENTRO_ODONTOLOGICO", "CLINICA_ODONTOLOGICA", "ODONTOLOGO_PARTICULAR"] as const) {
+      for (const m of ["agenda-publica", "inventario", "gastos", "presupuestos"] as const) expect(moduloHabilitado(t, m)).toBe(true);
+      expect(moduloHabilitado(t, "caja")).toBe(t !== "ODONTOLOGO_PARTICULAR");
+      expect(moduloHabilitado(t, "evolucion")).toBe(t !== "CENTRO_RADIOLOGICO");
+    }
+  });
   it("etiqueta de doctores según tipo", () => {
     expect(etiquetaModulo("CENTRO_RADIOLOGICO", "doctores", "Doctores remitentes")).toBe("Doctores remitentes");
     expect(etiquetaModulo("CLINICA_ODONTOLOGICA", "doctores", "Doctores remitentes")).toBe("Odontólogos");
@@ -42,6 +49,9 @@ describe("moduloDeRuta / rutaBloqueada", () => {
     expect(moduloDeRuta("/seguimiento")).toBe("seguimiento");
     expect(moduloDeRuta("/integraciones/pasarelas/")).toBe("pasarelas");
     expect(moduloDeRuta("/integraciones/api")).toBe("integraciones");
+    expect(moduloDeRuta("/ajustes/agenda-publica")).toBe("agenda-publica");
+    expect(moduloDeRuta("/ajustes/marca")).toBe("ajustes");
+    for (const m of ["inventario", "caja", "gastos", "presupuestos"] as const) expect(moduloDeRuta(`/${m}/x`)).toBe(m);
   });
   it("no confunde prefijos parciales ni rutas libres", () => {
     expect(moduloDeRuta("/pacientesx")).toBeNull();

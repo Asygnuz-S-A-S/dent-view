@@ -1,0 +1,157 @@
+// Autoagendamiento público (/agendar/[slug], /cita/[token]). Todas las tablas llevan organizationId.
+// Los ids de usuario (profesionalId) son User.id sin FK, igual que firmanteId/doctorId en el resto del esquema.
+
+enum AnticipoTipo {
+  NINGUNO
+  FIJO // anticipoValor = pesos
+  PORCENTAJE // anticipoValor = 0-100 sobre el precio del servicio
+}
+
+enum OrigenCita {
+  INTERNA
+  PUBLICA
+  API
+}
+
+enum EstadoReservaPublica {
+  PENDIENTE_CODIGO // esperando el código enviado por correo
+  PENDIENTE_ORDEN // radiología ruta A: recepción valida la orden subida
+  PENDIENTE_PAGO // esperando el anticipo
+  CONFIRMADA // ya existe la Cita (citaId)
+  RECHAZADA
+  EXPIRADA
+  CANCELADA
+}
+
+// Franja semanal en que se atiende. salaId y profesionalId opcionales: ambos null = horario general del centro.
+model HorarioAtencion {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salaId         String?
+  sala           Sala?        @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  profesionalId  String?
+  diaSemana      Int // 1 = lunes … 7 = domingo (ISO)
+  inicioMin      Int // minutos desde las 00:00 hora de Bogotá (como INICIO_DIA_MIN en lib/agenda.ts)
+  finMin         Int
+  activo         Boolean      @default(true)
+  creadoEn       DateTime     @default(now())
+
+  @@index([organizationId, diaSemana])
+  @@index([salaId])
+  @@index([profesionalId])
+}
+
+// Festivo, cierre o apertura especial de una fecha. cerrado = true ignora inicioMin/finMin.
+model ExcepcionHorario {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salaId         String?
+  sala           Sala?        @relation(fields: [salaId], references: [id], onDelete: Cascade)
+  profesionalId  String?
+  fecha          DateTime     @db.Date
+  cerrado        Boolean      @default(true)
+  inicioMin      Int?
+  finMin         Int?
+  motivo         String?
+  creadoEn       DateTime     @default(now())
+
+  @@index([organizationId, fecha])
+}
+
+// Una por centro (organizationId es la llave).
+model ConfigAgendaPublica {
+  organizationId       String       @id
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  activa               Boolean      @default(false)
+  horasMinAnticipacion Int          @default(2) // no se reserva con menos de N horas
+  diasVentana          Int          @default(30) // hasta cuántos días adelante se ofrece
+  horasMinCancelar     Int          @default(24) // el paciente no cancela/reprograma con menos de N horas
+  mensajeBienvenida    String?
+  versionPolitica      String? // versión del texto de tratamiento de datos que aceptó el paciente
+  captchaActivo        Boolean      @default(false)
+  // Política de anticipo del centro (se copia a cada Anticipo al cobrarlo).
+  anticipoReembolsable Boolean      @default(true)
+  horasLimiteReembolso Int          @default(24) // cancelando con al menos N horas se reembolsa
+  retieneSiNoAsiste    Boolean      @default(true)
+}
+
+model ServicioSala {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  salaId         String
+  sala           Sala         @relation(fields: [salaId], references: [id], onDelete: Cascade)
+
+  @@unique([servicioId, salaId])
+  @@index([organizationId])
+}
+
+model ServicioProfesional {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  profesionalId  String
+
+  @@unique([servicioId, profesionalId])
+  @@index([organizationId])
+  @@index([profesionalId])
+}
+
+// La Cita real se crea DESPUÉS de verificar el código (citaId). Hasta entonces el hueco se retiene con expiraEn.
+model ReservaPublica {
+  id                     String               @id @default(cuid())
+  organizationId         String
+  organization           Organization         @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  estado                 EstadoReservaPublica @default(PENDIENTE_CODIGO)
+  servicioId             String
+  servicio               Servicio             @relation(fields: [servicioId], references: [id])
+  salaId                 String
+  sala                   Sala                 @relation(fields: [salaId], references: [id])
+  profesionalId          String?
+  inicio                 DateTime             @db.Timestamptz(3)
+  fin                    DateTime             @db.Timestamptz(3)
+  // Datos que dio el paciente (se vuelven PacienteTenant al confirmar).
+  nombre                 String
+  tipoDocumento          String               @default("CC")
+  numeroDocumento        String
+  correo                 String
+  celular                String?
+  // Verificación y gestión sin cuenta.
+  tokenGestionHash       String               @unique // SHA-256 del token de /cita/[token]; el token en claro solo va por correo
+  codigoHash             String?
+  codigoExpiraEn         DateTime?
+  intentos               Int                  @default(0) // máx. 5
+  expiraEn               DateTime // vence la retención del hueco
+  // Consentimientos (Ley 1581): AGENDAMIENTO es obligatorio; mercadeo es aparte.
+  consentimientoDatos    Boolean              @default(false)
+  consentimientoMercadeo Boolean              @default(false)
+  consentimientoEn       DateTime?
+  versionPolitica        String?
+  // Radiología: ruta A (foto/PDF de la orden) o ruta B (ordenId creada por el doctor).
+  ordenArchivoKey        String?
+  ordenId                String?
+  orden                  Orden?               @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  citaId                 String?              @unique
+  cita                   Cita?                @relation(fields: [citaId], references: [id], onDelete: SetNull)
+  leadId                 String?
+  lead                   Lead?                @relation(fields: [leadId], references: [id], onDelete: SetNull)
+  pacienteId             String?
+  paciente               PacienteTenant?      @relation(fields: [pacienteId], references: [id], onDelete: SetNull)
+  ipHash                 String? // hash con sal de la IP, para límites anti-abuso
+  motivoRechazo          String?
+  creadoEn               DateTime             @default(now())
+  actualizadoEn          DateTime             @updatedAt
+  anticipos              Anticipo[]
+
+  @@index([organizationId, estado])
+  @@index([organizationId, inicio])
+  @@index([organizationId, ipHash, creadoEn])
+  @@index([organizationId, correo, creadoEn])
+  @@index([organizationId, numeroDocumento, creadoEn])
+}

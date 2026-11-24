@@ -1,43 +1,42 @@
 "use client";
 
 // Adaptado de OpenDentist (MIT, © 2026 Clawnify) — https://github.com/clawnify/OpenDentist
-import { Pencil } from "lucide-react";
+import { Replace } from "lucide-react";
 import { useState, useTransition } from "react";
 import { toast } from "sonner";
-import { crearNota, editarNota } from "@/app/(app)/pacientes/clinico-actions";
+import { crearNota } from "@/app/(app)/pacientes/clinico-actions";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 
-export type NotaVista = { id: string; texto: string; fecha: string; autor: string; editable: boolean };
+export type NotaVista = { id: string; texto: string; fecha: string; autor: string};
 
-function Nota({ nota }: { nota: NotaVista }) {
+function Nota({ nota, pacienteId }: { nota: NotaVista; pacienteId: string }) {
   const [editando, setEditando] = useState(false);
-  const [texto, setTexto] = useState(nota.texto);
+  const [texto, setTexto] = useState("");
   const [pendiente, iniciar] = useTransition();
   const guardar = () =>
     iniciar(async () => {
-      const r = await editarNota(nota.id, texto);
+      const r = await crearNota(pacienteId, texto, nota.id);
       if (r.error) { toast.error(r.error); return; }
-      toast.success("Nota actualizada");
+      toast.success("Corrección agregada como nota nueva");
       setEditando(false);
+      setTexto("");
     });
   return (
     <li className="space-y-2 rounded-lg border p-4">
       <div className="flex items-center justify-between gap-2 text-xs text-muted-foreground">
         <span>{nota.autor} · {nota.fecha}</span>
-        {nota.editable && !editando && (
-          <Button size="sm" variant="ghost" onClick={() => setEditando(true)}><Pencil /> Editar</Button>
-        )}
+        {!editando && <Button size="sm" variant="ghost" onClick={() => setEditando(true)}><Replace /> Corregir</Button>}
       </div>
       {editando ? (
         <div className="space-y-2">
-          <Textarea aria-label="Texto de la nota" value={texto} onChange={(e) => setTexto(e.target.value)} rows={4} />
+          <Textarea aria-label="Texto de la corrección" placeholder="La nota original no se modifica: esto se guarda como una nota nueva que la cita." value={texto} onChange={(e) => setTexto(e.target.value)} rows={4} />
           <div className="flex gap-2">
-            <Button size="sm" disabled={pendiente} onClick={guardar}>Guardar</Button>
-            <Button size="sm" variant="outline" onClick={() => { setTexto(nota.texto); setEditando(false); }}>Cancelar</Button>
+            <Button size="sm" disabled={pendiente || !texto.trim()} onClick={guardar}>Guardar corrección</Button>
+            <Button size="sm" variant="outline" onClick={() => { setTexto(""); setEditando(false); }}>Cancelar</Button>
           </div>
         </div>
       ) : (
@@ -71,9 +70,9 @@ export function NotasClinicas({ pacienteId, notas }: { pacienteId: string; notas
       {notas.length === 0 ? (
         <EstadoVacio titulo="Este paciente no tiene notas clínicas" />
       ) : (
-        <ul className="space-y-3">{notas.map((n) => <Nota key={n.id} nota={n} />)}</ul>
+        <ul className="space-y-3">{notas.map((n) => <Nota key={n.id} nota={n} pacienteId={pacienteId} />)}</ul>
       )}
-      <p className="text-xs text-muted-foreground">Las notas son parte del registro clínico: no se pueden eliminar.</p>
+      <p className="text-xs text-muted-foreground">Las notas son parte del registro clínico: no se pueden editar ni eliminar; una corrección se guarda como nota nueva.</p>
     </div>
   );
 }

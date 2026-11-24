@@ -1,0 +1,153 @@
+// Evolutivos clínicos (Res. 1995/1999 art. 18: inmodificables; Res. 839/2017: conservación 15 años).
+// Solo se insertan: EvolucionClinica, AdendaEvolucion, AdjuntoEvolucion, RegistroToma (rol-app.sql revoca UPDATE/DELETE).
+// Las correcciones son adendas. FKs con Restrict: nada se borra en cascada. Ids de usuario (firmanteId…) = User.id sin FK.
+
+enum MetodoFirma {
+  CLAVE // reautenticación con contraseña
+  TOTP
+  CLAVE_TOTP
+}
+
+model PlantillaEvolucion {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  version        Int                 @default(1) // cambiar una plantilla = insertar versión nueva
+  campos         Json // definición de secciones/campos
+  activa         Boolean             @default(true)
+  creadaPorId    String?
+  creadoEn       DateTime            @default(now())
+  evoluciones    EvolucionClinica[]
+  borradores     BorradorEvolucion[]
+
+  @@unique([organizationId, nombre, version])
+}
+
+// Editable y borrable: es el trabajo en curso antes de firmar.
+model BorradorEvolucion {
+  id             String              @id @default(cuid())
+  organizationId String
+  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId     String
+  paciente       PacienteTenant      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
+  autorId        String
+  citaId         String?
+  plantillaId    String?
+  plantilla      PlantillaEvolucion? @relation(fields: [plantillaId], references: [id], onDelete: SetNull)
+  contenido      Json
+  creadoEn       DateTime            @default(now())
+  actualizadoEn  DateTime            @updatedAt
+
+  @@index([organizationId, pacienteId, autorId])
+}
+
+model EvolucionClinica {
+  id                  String              @id @default(cuid())
+  organizationId      String
+  organization        Organization        @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  pacienteId          String
+  paciente            PacienteTenant      @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
+  folio               Int // consecutivo por paciente y centro
+  citaId              String?
+  cita                Cita?               @relation(fields: [citaId], references: [id], onDelete: Restrict)
+  plantillaId         String?
+  plantilla           PlantillaEvolucion? @relation(fields: [plantillaId], references: [id], onDelete: Restrict)
+  plantillaVersion    Int?
+  motivoConsulta      String?
+  hallazgos           String?
+  procedimiento       String?
+  serviciosRealizados Json? // [{ servicioId, cantidad, diente? }]: base del consumo por receta
+  diagnosticosCie10   Json? // [{ codigo, descripcion }]
+  plan                String?
+  indicaciones        String?
+  proximaCita         DateTime?           @db.Date
+  odontogramaSnapshot Json?
+  // Firma
+  firmanteId          String
+  firmanteNombre      String
+  firmanteTarjeta     String?
+  hashContenido       String // SHA-256 del contenido canónico
+  metodoFirma         MetodoFirma
+  firmadaEn           DateTime            @default(now())
+  adendas             AdendaEvolucion[]
+  adjuntos            AdjuntoEvolucion[]
+
+  @@unique([organizationId, pacienteId, folio])
+  @@index([organizationId, pacienteId, firmadaEn])
+}
+
+model AdendaEvolucion {
+  id              String           @id @default(cuid())
+  organizationId  String
+  organization    Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  evolucionId     String
+  evolucion       EvolucionClinica @relation(fields: [evolucionId], references: [id], onDelete: Restrict)
+  texto           String
+  firmanteId      String
+  firmanteNombre  String
+  firmanteTarjeta String?
+  hashContenido   String
+  metodoFirma     MetodoFirma
+  firmadaEn       DateTime         @default(now())
+
+  @@index([evolucionId])
+  @@index([organizationId])
+}
+
+model AdjuntoEvolucion {
+  id             String           @id @default(cuid())
+  organizationId String
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  evolucionId    String
+  evolucion      EvolucionClinica @relation(fields: [evolucionId], references: [id], onDelete: Restrict)
+  key            String // clave S3
+  nombre         String
+  mime           String
+  tamano         Int
+  hash           String? // SHA-256 del archivo
+  subidoPorId    String?
+  creadoEn       DateTime         @default(now())
+
+  @@index([evolucionId])
+  @@index([organizationId])
+}
+
+// Toma de un estudio radiológico (técnico, sala, repeticiones). Solo se inserta.
+model RegistroToma {
+  id               String          @id @default(cuid())
+  organizationId   String
+  organization     Organization    @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  pacienteId       String?
+  paciente         PacienteTenant? @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
+  estudioId        String?
+  estudio          Estudio?        @relation(fields: [estudioId], references: [id], onDelete: Restrict)
+  ordenId          String?
+  orden            Orden?          @relation(fields: [ordenId], references: [id], onDelete: Restrict)
+  tecnicoId        String
+  salaId           String?
+  sala             Sala?           @relation(fields: [salaId], references: [id], onDelete: Restrict)
+  tomadoEn         DateTime        @default(now())
+  repeticiones     Int             @default(0)
+  motivoRepeticion String?
+  incidencias      String?
+
+  @@index([organizationId, tomadoEn])
+  @@index([estudioId])
+  @@index([ordenId])
+}
+
+// Foto del odontograma por cambio (hoy CondicionDental se sobrescribe). Solo se deja la tabla; aún nada la escribe.
+model OdontogramaHistorial {
+  id             String         @id @default(cuid())
+  organizationId String
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  pacienteId     String
+  paciente       PacienteTenant @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
+  autorId        String?
+  snapshot       Json
+  motivo         String?
+  creadoEn       DateTime       @default(now())
+
+  @@index([organizationId, pacienteId, creadoEn])
+}

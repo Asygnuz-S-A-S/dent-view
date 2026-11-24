@@ -30,9 +30,12 @@ export default async function Cartera({ searchParams }: { searchParams: Promise<
   const sp = await searchParams;
   const todas = await prisma.factura.findMany({
     where: { organizationId: ctx.organizationId, estado: "ABIERTA" },
-    include: { paciente: { include: { persona: true } }, pagos: { orderBy: { fecha: "asc" } } },
+    include: { paciente: { include: { persona: true } }, pagos: { where: { anuladoEn: null }, orderBy: { fecha: "asc" } } },
   });
   const ahora = new Date();
+  // Saldo a favor (solo lectura): anticipos cobrados que aún no se aplican a ninguna cuenta. No entra en la cartera.
+  const anticiposLibres = await prisma.anticipo.findMany({ where: { organizationId: ctx.organizationId, estado: "DISPONIBLE" }, select: { valor: true, valorAplicado: true } });
+  const saldoAFavor = anticiposLibres.reduce((t, a) => t + a.valor - a.valorAplicado, 0);
   const doctores = await nombresDoctores(ctx.organizationId, todas.map((f) => f.responsableId));
   // Opciones de los filtros: salen de lo que realmente hay en cartera (siempre del centro activo).
   const opcDoctores = [...new Set(todas.flatMap((f) => (f.responsable === "DOCTOR" && f.responsableId ? [f.responsableId] : [])))]
@@ -73,6 +76,7 @@ export default async function Cartera({ searchParams }: { searchParams: Promise<
         <Kpi titulo="Cartera total" valor={cop(totalCartera)} nota={`${filas.length} ${filas.length === 1 ? "cuenta" : "cuentas"} con saldo`} icono={Wallet} tono="primary" />
         <Kpi titulo="Vencida" valor={cop(vencida)} nota="Pasó su fecha de vencimiento" icono={AlertTriangle} tono={vencida > 0 ? "danger" : "primary"} />
         <Kpi titulo="Vigente" valor={cop(totalCartera - vencida)} nota="Aún dentro de plazo" icono={Clock} tono="info" />
+        {saldoAFavor > 0 && <Kpi titulo="Saldo a favor" valor={cop(saldoAFavor)} nota={`${anticiposLibres.length} ${anticiposLibres.length === 1 ? "anticipo" : "anticipos"} sin aplicar`} icono={Wallet} tono="info" />}
         <Kpi titulo="A cargo de doctores" valor={cop(aCargoDoctores)} nota="Responsable: doctor remitente" icono={HandCoins} tono="violet" />
       </section>
 

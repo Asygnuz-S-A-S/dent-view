@@ -53,6 +53,13 @@ model PacienteTenant {
   actividadesCrm         ActividadLead[]
   tareasCrm              TareaCRM[]
   inscripcionesSecuencia InscripcionSecuencia[]
+  reservasPublicas       ReservaPublica[]
+  borradoresEvolucion    BorradorEvolucion[]
+  evolucionesClinicas    EvolucionClinica[]
+  registrosToma          RegistroToma[]
+  odontogramaHistorial   OdontogramaHistorial[]
+  anticipos              Anticipo[]
+  presupuestos           Presupuesto[]
 
   @@unique([organizationId, personaId])
   @@index([organizationId])
@@ -84,6 +91,7 @@ model Estudio {
   creadoEn          DateTime        @default(now())
   actualizadoEn     DateTime        @updatedAt
   imagenes          ImagenEstudio[]
+  registrosToma     RegistroToma[]
 
   @@index([organizationId])
 }
@@ -100,19 +108,34 @@ model PerfilDoctor {
 
 // Catálogo de servicios y precios del centro. Valores en pesos colombianos (COP).
 model Servicio {
-  id             String           @id @default(cuid())
-  organizationId String
-  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  categoria      String // ESTUDIO_2D | TOMOGRAFIA | PAQUETE | ESCANEO | OTRO
-  nombre         String
-  descripcion    String?
-  precioImpreso  Int?
-  precioDigital  Int?
-  descuento      Int              @default(0)
-  activo         Boolean          @default(true)
-  creadoEn       DateTime         @default(now())
-  items          OrdenItem[]
-  tarifas        TarifaEspecial[]
+  id                     String                  @id @default(cuid())
+  organizationId         String
+  organization           Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  categoria              String // ESTUDIO_2D | TOMOGRAFIA | PAQUETE | ESCANEO | OTRO
+  nombre                 String
+  descripcion            String?
+  precioImpreso          Int?
+  precioDigital          Int?
+  descuento              Int                     @default(0)
+  activo                 Boolean                 @default(true)
+  // Agenda en línea y anticipo.
+  duracionMin            Int                     @default(30)
+  holguraMin             Int                     @default(0) // pausa tras la cita (limpieza, preparación)
+  reservableEnLinea      Boolean                 @default(false)
+  requiereOrden          Boolean                 @default(false) // radiología: solo con orden
+  anticipoTipo           AnticipoTipo            @default(NINGUNO)
+  anticipoValor          Int?
+  creadoEn               DateTime                @default(now())
+  items                  OrdenItem[]
+  tarifas                TarifaEspecial[]
+  serviciosSala          ServicioSala[]
+  serviciosProfesional   ServicioProfesional[]
+  reservasPublicas       ReservaPublica[]
+  recetasServicio        RecetaServicio[]
+  citas                  Cita[]
+  itemsFactura           FacturaItem[]
+  itemsPresupuesto       ItemPresupuesto[]
+  reglasComisionServicio ReglaComisionServicio[]
 
   @@index([organizationId])
 }
@@ -156,6 +179,8 @@ model Orden {
   citas             Cita[]
   facturas          Factura[]
   casosLab          CasoLaboratorio[]
+  reservasPublicas  ReservaPublica[]
+  registrosToma     RegistroToma[]
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])
@@ -175,13 +200,18 @@ model OrdenItem {
 
 // Sala o equipo donde se toman los estudios (p. ej. "CS 9600", "Panorámico").
 model Sala {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  nombre         String
-  color          String       @default("teal")
-  activa         Boolean      @default(true)
-  citas          Cita[]
+  id                 String             @id @default(cuid())
+  organizationId     String
+  organization       Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre             String
+  color              String             @default("teal")
+  activa             Boolean            @default(true)
+  citas              Cita[]
+  horariosAtencion   HorarioAtencion[]
+  excepcionesHorario ExcepcionHorario[]
+  serviciosSala      ServicioSala[]
+  reservasPublicas   ReservaPublica[]
+  registrosToma      RegistroToma[]
 
   @@index([organizationId])
 }
@@ -197,23 +227,34 @@ enum EstadoCita {
 }
 
 model Cita {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  salaId         String
-  sala           Sala            @relation(fields: [salaId], references: [id])
-  pacienteId     String?
-  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id])
-  ordenId        String?
-  orden          Orden?          @relation(fields: [ordenId], references: [id])
-  inicio         DateTime        @db.Timestamptz(3)
-  fin            DateTime        @db.Timestamptz(3)
-  estado         EstadoCita      @default(PROGRAMADA)
-  notas          String?
-  creadoEn       DateTime        @default(now())
-  linksPago      LinkPago[]
+  id                  String             @id @default(cuid())
+  organizationId      String
+  organization        Organization       @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  salaId              String
+  sala                Sala               @relation(fields: [salaId], references: [id])
+  pacienteId          String?
+  paciente            PacienteTenant?    @relation(fields: [pacienteId], references: [id])
+  ordenId             String?
+  orden               Orden?             @relation(fields: [ordenId], references: [id])
+  inicio              DateTime           @db.Timestamptz(3)
+  fin                 DateTime           @db.Timestamptz(3)
+  estado              EstadoCita         @default(PROGRAMADA)
+  notas               String?
+  profesionalId       String? // User.id del profesional que atiende (sin FK)
+  servicioId          String?
+  servicio            Servicio?          @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  origen              OrigenCita         @default(INTERNA)
+  // Citas anteriores a la restricción EXCLUDE que ya se cruzaban: quedan fuera de ella (ver migración agenda_publica).
+  cruceHistorico      Boolean            @default(false)
+  creadoEn            DateTime           @default(now())
+  linksPago           LinkPago[]
+  reservaPublica      ReservaPublica?
+  evolucionesClinicas EvolucionClinica[]
+  anticipos           Anticipo[]
 
+  // Además: restricción EXCLUDE (btree_gist) por sala y por profesional, creada a mano en la migración agenda_publica.
   @@index([organizationId, inicio])
+  @@index([profesionalId, inicio])
 }
 
 // Odontograma: una condición por diente (FDI) y superficie opcional.
@@ -301,58 +342,87 @@ enum MedioPago {
   TARJETA
   OTRO
   PASARELA
+  ANTICIPO // se paga con un Anticipo previo (Pago.anticipoId)
 }
 
 // Cuenta de cobro interna (no es factura electrónica DIAN).
 model Factura {
-  id             String          @id @default(cuid())
-  organizationId String
-  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  numero         Int // consecutivo por centro
-  pacienteId     String?
-  paciente       PacienteTenant? @relation(fields: [pacienteId], references: [id])
-  ordenId        String?
-  orden          Orden?          @relation(fields: [ordenId], references: [id])
-  responsable    Responsable     @default(PACIENTE)
-  responsableId  String? // userId del doctor cuando responsable = DOCTOR
-  convenio       String? // nombre del convenio cuando responsable = CONVENIO
-  estado         EstadoFactura   @default(ABIERTA)
-  total          Int
-  fecha          DateTime        @default(now())
-  vence          DateTime?
-  notas          String?
-  items          FacturaItem[]
-  pagos          Pago[]
-  linksPago      LinkPago[]
+  id                        String            @id @default(cuid())
+  organizationId            String
+  organization              Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero                    Int // consecutivo por centro
+  pacienteId                String?
+  paciente                  PacienteTenant?   @relation(fields: [pacienteId], references: [id])
+  ordenId                   String?
+  orden                     Orden?            @relation(fields: [ordenId], references: [id])
+  responsable               Responsable       @default(PACIENTE)
+  responsableId             String? // userId del doctor cuando responsable = DOCTOR
+  convenio                  String? // nombre del convenio cuando responsable = CONVENIO (texto histórico; convenioId es el vínculo real)
+  convenioId                String?
+  convenioRef               Convenio?         @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  anuladoEn                 DateTime?
+  anuladoPorId              String?
+  motivoAnulacion           String?
+  ultimoRecordatorioCobroEn DateTime?
+  estado                    EstadoFactura     @default(ABIERTA)
+  total                     Int
+  fecha                     DateTime          @default(now())
+  vence                     DateTime?
+  notas                     String?
+  items                     FacturaItem[]
+  pagos                     Pago[]
+  linksPago                 LinkPago[]
+  notasCredito              NotaCredito[]
+  cuotas                    CuotaFactura[]
+  promesas                  PromesaPago[]
+  itemsPresupuesto          ItemPresupuesto[]
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])
 }
 
 model FacturaItem {
-  id            String  @id @default(cuid())
+  id            String            @id @default(cuid())
   facturaId     String
-  factura       Factura @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  factura       Factura           @relation(fields: [facturaId], references: [id], onDelete: Cascade)
   descripcion   String
-  cantidad      Int     @default(1)
+  cantidad      Int               @default(1)
   valorUnitario Int
+  descuento     Int               @default(0)
+  servicioId    String?
+  servicio      Servicio?         @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  profesionalId String? // odontólogo que realizó el servicio (base de la liquidación)
+  liquidaciones LiquidacionItem[]
+
+  @@index([servicioId])
 }
 
 model Pago {
-  id                String    @id @default(cuid())
+  id                String            @id @default(cuid())
   facturaId         String
-  factura           Factura   @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  factura           Factura           @relation(fields: [facturaId], references: [id], onDelete: Cascade)
   valor             Int
-  medio             MedioPago @default(EFECTIVO)
-  fecha             DateTime  @default(now())
+  medio             MedioPago         @default(EFECTIVO)
+  fecha             DateTime          @default(now())
   nota              String?
   registradoPorId   String?
   // Pago hecho por pasarela: el link que lo originó (uno a uno) y el id de la transacción en el proveedor.
-  linkPagoId        String?   @unique
-  linkPago          LinkPago? @relation(fields: [linkPagoId], references: [id], onDelete: SetNull)
+  linkPagoId        String?           @unique
+  linkPago          LinkPago?         @relation(fields: [linkPagoId], references: [id], onDelete: SetNull)
   referenciaExterna String?
+  // Anulación auditada (anulado = anuladoEn != null). Las sumas deben excluir pagos anulados.
+  anuladoEn         DateTime?
+  anuladoPorId      String?
+  motivoAnulacion   String?
+  sesionCajaId      String?
+  sesionCaja        SesionCaja?       @relation(fields: [sesionCajaId], references: [id], onDelete: Restrict)
+  anticipoId        String? // medio ANTICIPO: el anticipo que se aplicó
+  anticipo          Anticipo?         @relation(fields: [anticipoId], references: [id], onDelete: Restrict)
+  liquidaciones     LiquidacionItem[]
 
   @@index([facturaId])
+  @@index([sesionCajaId])
+  @@index([anticipoId])
 }
 
 enum EstadoLab {

@@ -35,16 +35,16 @@ model ClaveIdempotencia {
 
 // Suscripción de webhook de salida. El secreto va cifrado (hace falta en claro para firmar con HMAC).
 model Webhook {
-  id             String            @id @default(cuid())
+  id             String           @id @default(cuid())
   organizationId String
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization   Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   nombre         String
   url            String
   secretoCifrado String
   eventos        String[] // p. ej. estudio.recibido, orden.creada; "*" = todos
-  activo         Boolean           @default(true)
+  activo         Boolean          @default(true)
   creadoPorId    String?
-  creadoEn       DateTime          @default(now())
+  creadoEn       DateTime         @default(now())
   entregas       WebhookEntrega[]
 
   @@index([organizationId])
@@ -71,21 +71,21 @@ model WebhookEntrega {
 
 // Conexión de un centro con un sistema externo de gestión de pacientes (Dentalink, etc.).
 model Integracion {
-  id                 String       @id @default(cuid())
-  organizationId     String
-  organization       Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  proveedor          String // clave del adaptador registrado en src/lib/conectores/
-  nombre             String
+  id                   String           @id @default(cuid())
+  organizationId       String
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  proveedor            String // clave del adaptador registrado en src/lib/conectores/
+  nombre               String
   credencialesCifradas String // JSON cifrado (AES-256-GCM) con token/API key del proveedor
-  config             Json?
-  activa             Boolean      @default(true)
-  secretoEntrada     String? // hash del secreto del webhook de entrada (el proveedor nos avisa de cambios)
-  ultimaSync         DateTime?
-  estadoSync         String? // OK | ERROR
-  errorSync          String?
-  creadoPorId        String?
-  creadoEn           DateTime     @default(now())
-  vinculos           VinculoExterno[]
+  config               Json?
+  activa               Boolean          @default(true)
+  secretoEntrada       String? // secreto del webhook de entrada, CIFRADO (AES-GCM; se descifra para validar la firma HMAC del proveedor)
+  ultimaSync           DateTime?
+  estadoSync           String? // OK | ERROR
+  errorSync            String?
+  creadoPorId          String?
+  creadoEn             DateTime         @default(now())
+  vinculos             VinculoExterno[]
 
   @@index([organizationId])
 }

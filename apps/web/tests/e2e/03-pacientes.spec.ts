@@ -65,6 +65,17 @@ test.describe("ficha del paciente", () => {
     await expect(page.getByRole("tab", { name: "Notas clínicas (1)" })).toBeVisible();
   });
 
+  test("notas clínicas: no se editan; corregir crea una nota nueva que cita la anterior", async ({ page }) => {
+    await abrirClinico(page, /Notas clínicas/);
+    await expect(page.getByRole("tabpanel", { name: /Notas clínicas/ }).getByRole("button", { name: "Editar" })).toHaveCount(0);
+    const corr = `Corrección QA ${Date.now()}`;
+    await page.getByRole("button", { name: "Corregir" }).first().click();
+    await page.getByRole("textbox", { name: "Texto de la corrección" }).fill(corr);
+    await page.getByRole("button", { name: "Guardar corrección" }).click();
+    await expect(page.getByText(new RegExp(`^\\[Corrige la nota del .+\\] ${corr}$`))).toBeVisible();
+    await expect(page.getByRole("tab", { name: "Notas clínicas (2)" })).toBeVisible();
+  });
+
   test("plan de tratamiento: agregar ítem", async ({ page }) => {
     await abrirClinico(page, /Plan de tratamiento/);
     await page.getByRole("spinbutton", { name: "Diente (FDI)" }).fill("16");

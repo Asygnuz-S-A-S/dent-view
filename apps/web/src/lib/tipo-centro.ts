@@ -25,19 +25,21 @@ export const MODULOS = [
   "inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "seguimiento-doctores", "doctores",
   "laboratorio", "facturacion", "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta",
   "integraciones", "pasarelas", "notificaciones", "proteccion-datos", "valoraciones", "crm",
+  "agenda-publica", "inventario", "caja", "gastos", "presupuestos", "evolucion",
 ] as const;
 export type Modulo = (typeof MODULOS)[number];
 
 // Se declara qué NO tiene cada tipo: un módulo nuevo queda habilitado en todos hasta que se excluya a propósito.
 const SIN_MODULOS: Record<TipoCentro, readonly Modulo[]> = {
   // Radiología: flujo completo; sin laboratorio protésico.
-  CENTRO_RADIOLOGICO: ["laboratorio", "valoraciones", "crm"],
+  // Sin historia clínica odontológica (evolucion): usa RegistroToma y el evolutivo de imágenes.
+  CENTRO_RADIOLOGICO: ["laboratorio", "valoraciones", "crm", "evolucion"],
   // (valoración virtual y CRM de pacientes son de odontología; el radiológico retiene doctores con seguimiento-doctores)
   // Odontología: sin ingesta, sin convenios con remitentes ni seguimiento de doctores remitentes.
   CENTRO_ODONTOLOGICO: ["seguimiento-doctores", "convenios", "ingesta"],
   CLINICA_ODONTOLOGICA: ["seguimiento-doctores", "convenios", "ingesta"],
   // Particular (centro de 1 usuario): además sin usuarios, doctores, reportes ni cartera (facturación simple).
-  ODONTOLOGO_PARTICULAR: ["seguimiento-doctores", "convenios", "ingesta", "usuarios", "doctores", "reportes", "cartera"],
+  ODONTOLOGO_PARTICULAR: ["seguimiento-doctores", "convenios", "ingesta", "usuarios", "doctores", "reportes", "cartera", "caja"],
 };
 
 export const MODULOS_POR_TIPO: Record<TipoCentro, ReadonlySet<Modulo>> = Object.fromEntries(
@@ -53,11 +55,13 @@ export function etiquetaModulo(tipo: TipoCentro, modulo: Modulo, base: string) {
 
 // Prefijo de ruta -> módulo. Se evalúa el más específico primero (p. ej. /seguimiento-doctores antes que /seguimiento).
 const RUTAS: readonly (readonly [string, Modulo])[] = [
+  ["/ajustes/agenda-publica", "agenda-publica"],
   ["/integraciones/pasarelas", "pasarelas"],
   ["/seguimiento-doctores", "seguimiento-doctores"],
   ["/proteccion-datos", "proteccion-datos"],
   ...(["inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "doctores", "laboratorio", "facturacion",
-    "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta", "integraciones", "notificaciones", "valoraciones", "crm"] as const).map(
+    "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta", "integraciones", "notificaciones", "valoraciones", "crm",
+    "inventario", "caja", "gastos", "presupuestos"] as const).map(
     (m) => [`/${m}`, m] as const,
   ),
 ];

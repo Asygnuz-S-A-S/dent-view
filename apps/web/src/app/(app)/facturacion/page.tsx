@@ -38,7 +38,7 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
   }
   const facturas = await prisma.factura.findMany({
     where,
-    include: { paciente: { include: { persona: true } }, pagos: { select: { valor: true } } },
+    include: { paciente: { include: { persona: true } }, pagos: { where: { anuladoEn: null }, select: { valor: true } } },
     orderBy: { numero: "desc" },
     take: 200,
   });

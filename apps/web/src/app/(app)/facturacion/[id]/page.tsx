@@ -2,6 +2,7 @@
 import { prisma } from "@dent-view/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
+import { AnularPagoBoton, AplicarAnticipoBoton } from "@/components/facturacion/acciones-pago";
 import { AccionesFactura } from "@/components/facturacion/acciones-factura";
 import { LinksPago } from "@/components/facturacion/links-pago";
 import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
@@ -26,15 +27,16 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
   const { id } = await params;
   const f = await prisma.factura.findFirst({
     where: { id, organizationId: ctx.organizationId },
-    include: { paciente: { include: { persona: true } }, orden: true, items: true, pagos: { orderBy: { fecha: "asc" } } },
+    include: { paciente: { include: { persona: true } }, orden: true, items: true, pagos: { orderBy: { fecha: "asc" } }, notasCredito: { orderBy: { consecutivo: "asc" } } },
   });
   if (!f) notFound();
   const doctores = await nombresDoctores(ctx.organizationId, [f.responsableId]);
   const pacienteNombre = f.paciente?.nombre.toLowerCase() ?? "—";
   const pendiente = saldo(f.total, f.pagos);
-  const [pasarelas, links] = await Promise.all([
+  const [pasarelas, links, anticipos] = await Promise.all([
     prisma.pasarelaPago.findMany({ where: { organizationId: ctx.organizationId, activa: true }, select: { id: true, proveedor: true, modo: true } }),
     prisma.linkPago.findMany({ where: { facturaId: f.id, organizationId: ctx.organizationId }, include: { pasarela: { select: { proveedor: true } } }, orderBy: { creadoEn: "desc" } }),
+    f.pacienteId && f.estado === "ABIERTA" ? prisma.anticipo.findMany({ where: { organizationId: ctx.organizationId, pacienteId: f.pacienteId, estado: "DISPONIBLE" }, orderBy: { creadoEn: "asc" } }) : [],
   ]);
   // Lo ya comprometido en links activos no se puede volver a cobrar: evita pagar dos veces la misma deuda.
   const disponible = pendiente - links.filter((l) => linkActivo(l)).reduce((t, l) => t + l.monto, 0);
@@ -61,7 +63,7 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
           )}
           {f.notas && <p className="text-sm">{f.notas}</p>}
         </div>
-        <AccionesFactura id={f.id} abierta={f.estado === "ABIERTA"} saldo={pendiente} tienePagos={f.pagos.length > 0} />
+        <AccionesFactura id={f.id} abierta={f.estado === "ABIERTA"} saldo={pendiente} tienePagos={f.pagos.some((p) => !p.anuladoEn)} pagada={f.estado === "PAGADA"} pagado={totalPagado(f.pagos)} admin={ctx.rol === "admin_tenant"} />
       </div>
 
       <Card className="py-0">
@@ -89,11 +91,28 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
             <TableFooter>
               <TableRow><TableCell colSpan={3} className="pl-6">Total</TableCell><TableCell className="pr-6 text-right">{cop(f.total)}</TableCell></TableRow>
               <TableRow><TableCell colSpan={3} className="pl-6">Abonado</TableCell><TableCell className="pr-6 text-right">{cop(totalPagado(f.pagos))}</TableCell></TableRow>
-              <TableRow><TableCell colSpan={3} className="pl-6">Saldo</TableCell><TableCell className="pr-6 text-right">{f.estado === "ANULADA" ? "—" : cop(pendiente)}</TableCell></TableRow>
+              {f.notasCredito.length > 0 && <TableRow><TableCell colSpan={3} className="pl-6">Notas crédito (ya descontadas del total)</TableCell><TableCell className="pr-6 text-right">{cop(f.notasCredito.reduce((t, n) => t + n.valor, 0))}</TableCell></TableRow>}
+              <TableRow><TableCell colSpan={3} className="pl-6">Saldo</TableCell><TableCell className="pr-6 text-right">{f.estado === "ANULADA" ? "—" : pendiente < 0 ? `${cop(-pendiente)} a favor` : cop(pendiente)}</TableCell></TableRow>
             </TableFooter>
           </Table>
         </CardContent>
       </Card>
+
+      {anticipos.length > 0 && (
+        <Card className="py-0">
+          <CardHeader className="pt-6"><CardTitle>Anticipos disponibles</CardTitle></CardHeader>
+          <CardContent className="px-6 pb-6">
+            <ul className="space-y-2 text-sm">
+              {anticipos.map((a) => (
+                <li key={a.id} className="flex items-center justify-between gap-4">
+                  <span>{fecha(a.creadoEn)} · {ETIQUETA_MEDIO[a.medio]} · disponible {cop(a.valor - a.valorAplicado)}</span>
+                  {pendiente > 0 && <AplicarAnticipoBoton facturaId={f.id} anticipoId={a.id} />}
+                </li>
+              ))}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
 
       <LinksPago
         facturaId={f.id}
@@ -115,16 +134,18 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
                   <TableHead className="pl-6">Fecha</TableHead>
                   <TableHead>Medio</TableHead>
                   <TableHead>Nota</TableHead>
-                  <TableHead className="pr-6 text-right">Valor</TableHead>
+                  <TableHead className="text-right">Valor</TableHead>
+                  <TableHead className="pr-6 print:hidden"><span className="sr-only">Acciones</span></TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
                 {f.pagos.map((p) => (
-                  <TableRow key={p.id}>
+                  <TableRow key={p.id} className={p.anuladoEn ? "text-muted-foreground" : undefined}>
                     <TableCell className="pl-6">{fecha(p.fecha)}</TableCell>
                     <TableCell>{ETIQUETA_MEDIO[p.medio]}</TableCell>
-                    <TableCell className="text-muted-foreground">{p.nota ?? "—"}</TableCell>
-                    <TableCell className="pr-6 text-right">{cop(p.valor)}</TableCell>
+                    <TableCell className="text-muted-foreground">{p.anuladoEn ? `Anulado el ${fecha(p.anuladoEn)}: ${p.motivoAnulacion}` : (p.nota ?? "—")}</TableCell>
+                    <TableCell className={`text-right ${p.anuladoEn ? "line-through" : ""}`}>{cop(p.valor)}</TableCell>
+                    <TableCell className="pr-6 text-right">{ctx.rol === "admin_tenant" && !p.anuladoEn && f.estado !== "ANULADA" && <AnularPagoBoton pagoId={p.id} />}</TableCell>
                   </TableRow>
                 ))}
               </TableBody>
@@ -132,6 +153,16 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
           )}
         </CardContent>
       </Card>
+      {f.notasCredito.length > 0 && (
+        <Card className="py-0">
+          <CardHeader className="pt-6"><CardTitle>Notas crédito</CardTitle></CardHeader>
+          <CardContent className="px-6 pb-6">
+            <ul className="space-y-1 text-sm">
+              {f.notasCredito.map((n) => <li key={n.id} className="flex justify-between gap-4"><span>NC-{String(n.consecutivo).padStart(4, "0")} · {fecha(n.creadoEn)} · {n.motivo}</span><span>{cop(n.valor)}</span></li>)}
+            </ul>
+          </CardContent>
+        </Card>
+      )}
       <p className="text-xs text-muted-foreground">Cuenta de cobro interna del centro; no es factura electrónica DIAN.</p>
     </div>
   );

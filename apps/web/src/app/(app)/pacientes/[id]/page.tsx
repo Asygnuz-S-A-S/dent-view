@@ -34,7 +34,6 @@ import { filtroVisibles } from "@/lib/pacientes-filtro";
 import { cargarHojaDeVida } from "@/lib/pacientes-hoja-datos";
 import { ETIQUETA_ESTADO_FACTURA, numeroFactura, saldo, VARIANTE_ESTADO_FACTURA } from "@/lib/facturacion";
 import { ETIQUETA_ESTADO_SEG, ETIQUETA_MOTIVO, type EstadoSeg, type Motivo } from "@/lib/seguimiento";
-import { puedeEditarNota } from "@/lib/plan";
 import { cop, precioFinal } from "@/lib/precios";
 import { listarEnlaces } from "@/lib/resultados";
 import { CLINICOS, GESTION, MEDICOS } from "@/lib/roles";
@@ -260,7 +259,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
   const nombreActor = new Map(actores.map((a) => [a.id, a.name]));
   const ordenesLab = p.ordenes.map((o) => ({ id: o.id, pacienteId: p.id, numero: o.numero }));
   const [facturas, seguimientos, hoja, solicitudesAbiertas] = await Promise.all([
-    puedeGestionar ? prisma.factura.findMany({ where: { organizationId: org, pacienteId: p.id }, include: { pagos: true }, orderBy: { fecha: "desc" }, take: 100 }) : [],
+    puedeGestionar ? prisma.factura.findMany({ where: { organizationId: org, pacienteId: p.id }, include: { pagos: { where: { anuladoEn: null } } }, orderBy: { fecha: "desc" }, take: 100 }) : [],
     prisma.seguimiento.findMany({ where: { organizationId: org, pacienteId: p.id }, orderBy: { creadoEn: "desc" }, take: 50 }),
     cargarHojaDeVida(org, p.id),
     puedeGestionar ? prisma.solicitudTitular.count({ where: { organizationId: org, pacienteId: p.id, estado: { in: ["RECIBIDA", "EN_TRAMITE"] } } }) : 0,
@@ -486,7 +485,6 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
             notas={p.notasClinicas.map((n) => ({
               id: n.id, texto: n.texto, autor: (n.autorId && nombreActor.get(n.autorId)) || "Sin autor",
               fecha: fechaHoraCompleta(n.fecha),
-              editable: puedeEditarNota({ autorId: n.autorId, creadoEn: n.creadoEn }, ctx.usuario.id),
             }))}
           />
         </TabsContent>

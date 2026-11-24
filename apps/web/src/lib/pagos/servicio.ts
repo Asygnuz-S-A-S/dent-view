@@ -55,6 +55,20 @@ export async function procesarEvento(pasarela: Pasarela, ev: EventoMapeado, acto
           // La cuenta ya no estaba abierta (se pagó o anuló mientras tanto): el dinero llegó igual y queda para revisión.
           if (f.estado !== "ABIERTA") await registrarEvento({ organizationId: org, pacienteId: f.pacienteId, actorId, tipo: "pago.pasarela_discrepancia", detalle: { linkPagoId: link.id, motivo: "factura_no_abierta", facturaEstado: f.estado } }, tx);
         }
+      } else if (link.citaId) {
+        // Anticipo de cita (sin cuenta de cobro aún): el dinero entra como Anticipo DISPONIBLE, que luego se aplica a la cuenta. linkPagoId único = idempotente.
+        const cita = await tx.cita.findFirst({ where: { id: link.citaId, organizationId: org }, select: { pacienteId: true, reservaPublica: { select: { id: true } } } });
+        const cfg = await tx.configAgendaPublica.findUnique({ where: { organizationId: org } });
+        const anticipo = await tx.anticipo.create({
+          data: {
+            organizationId: org, pacienteId: cita?.pacienteId ?? null, citaId: link.citaId, reservaId: cita?.reservaPublica?.id ?? null, linkPagoId: link.id,
+            valor: link.monto, medio: "PASARELA", referencia: ev.idTransaccion,
+            ...(cfg ? { reembolsable: cfg.anticipoReembolsable, horasLimiteReembolso: cfg.horasLimiteReembolso, retieneSiNoAsiste: cfg.retieneSiNoAsiste } : {}),
+          },
+        });
+        await registrarEvento({ organizationId: org, pacienteId: cita?.pacienteId, actorId, tipo: "anticipo.registrado", detalle: { anticipoId: anticipo.id, linkPagoId: link.id, citaId: link.citaId, valor: link.monto, medio: "PASARELA" } }, tx);
+      } else {
+        await registrarEvento({ organizationId: org, actorId, tipo: "pago.pasarela_discrepancia", detalle: { linkPagoId: link.id, motivo: "link_sin_destino" } }, tx);
       }
       await tx.linkPago.update({ where: { id: link.id }, data: { estado: "APROBADO", pagadoEn: new Date() } });
       await registrarEvento({ organizationId: org, actorId, tipo: "pago.link_aprobado", detalle: { linkPagoId: link.id, proveedor: pasarela.proveedor, monto: link.monto, referenciaExterna: ev.idTransaccion } }, tx);

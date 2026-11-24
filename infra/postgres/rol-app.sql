@@ -18,12 +18,21 @@ ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT SELECT, INSERT, UPDATE, DELETE O
 ALTER DEFAULT PRIVILEGES IN SCHEMA public GRANT USAGE, SELECT ON SEQUENCES TO dentview_app;
 
 DO $$
+DECLARE
+  tabla text;
 BEGIN
   -- Bitácora inmutable: la app solo inserta y lee eventos.
   -- (Los ON DELETE CASCADE / SET NULL de sus llaves foráneas corren con permisos del dueño y siguen funcionando.)
   IF to_regclass('public."Evento"') IS NOT NULL THEN
     REVOKE UPDATE, DELETE ON TABLE public."Evento" FROM dentview_app;
   END IF;
+  -- Historia clínica y kardex inmutables (Res. 1995/1999; conservación 15 años): solo INSERT y SELECT.
+  -- Las correcciones son adendas / movimientos compensatorios / notas crédito.
+  FOREACH tabla IN ARRAY ARRAY['EvolucionClinica', 'AdendaEvolucion', 'AdjuntoEvolucion', 'RegistroToma', 'MovimientoInventario', 'NotaCredito'] LOOP
+    IF to_regclass(format('public.%I', tabla)) IS NOT NULL THEN
+      EXECUTE format('REVOKE UPDATE, DELETE ON TABLE public.%I FROM dentview_app', tabla);
+    END IF;
+  END LOOP;
   -- El historial de migraciones no es asunto de la app.
   IF to_regclass('public._prisma_migrations') IS NOT NULL THEN
     REVOKE ALL ON TABLE public._prisma_migrations FROM dentview_app;

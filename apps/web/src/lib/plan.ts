@@ -11,9 +11,3 @@ export function totalesPorEstado(items: { estado: EstadoPlan; valor: number }[])
   for (const i of items) t[i.estado] += i.valor;
   return t;
 }
-
-const diaBogota = (d: Date) => d.toLocaleDateString("en-CA", { timeZone: "America/Bogota" });
-
-/** Una nota solo la edita su autor y únicamente el mismo día (hora de Bogotá) en que se escribió. */
-export const puedeEditarNota = (n: { autorId: string | null; creadoEn: Date }, usuarioId: string, ahora = new Date()) =>
-  n.autorId === usuarioId && diaBogota(n.creadoEn) === diaBogota(ahora);

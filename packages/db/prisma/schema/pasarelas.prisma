@@ -39,26 +39,27 @@ model PasarelaPago {
 }
 
 model LinkPago {
-  id           String         @id @default(cuid())
+  id             String         @id @default(cuid())
   organizationId String
-  organization Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  pasarelaId   String
-  pasarela     PasarelaPago   @relation(fields: [pasarelaId], references: [id], onDelete: Restrict)
-  facturaId    String? // cuenta de cobro (Factura) que se paga
-  factura      Factura?       @relation(fields: [facturaId], references: [id], onDelete: SetNull)
-  citaId       String?
-  cita         Cita?          @relation(fields: [citaId], references: [id], onDelete: SetNull)
-  referencia   String         @unique
-  monto        Int
-  moneda       String         @default("COP")
-  estado       EstadoLinkPago @default(CREADO)
-  urlPago      String?
-  idExterno    String?
-  expiraEn     DateTime?
-  creadoPorId  String?
-  creadoEn     DateTime       @default(now())
-  pagadoEn     DateTime?
-  pago         Pago?
+  organization   Organization   @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pasarelaId     String
+  pasarela       PasarelaPago   @relation(fields: [pasarelaId], references: [id], onDelete: Restrict)
+  facturaId      String? // cuenta de cobro (Factura) que se paga
+  factura        Factura?       @relation(fields: [facturaId], references: [id], onDelete: SetNull)
+  citaId         String?
+  cita           Cita?          @relation(fields: [citaId], references: [id], onDelete: SetNull)
+  referencia     String         @unique
+  monto          Int
+  moneda         String         @default("COP")
+  estado         EstadoLinkPago @default(CREADO)
+  urlPago        String?
+  idExterno      String?
+  expiraEn       DateTime?
+  creadoPorId    String?
+  creadoEn       DateTime       @default(now())
+  pagadoEn       DateTime?
+  pago           Pago?
+  anticipo       Anticipo?
 
   @@index([organizationId, estado])
   @@index([pasarelaId])

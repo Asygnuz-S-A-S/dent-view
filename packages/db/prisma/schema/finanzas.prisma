@@ -1,0 +1,309 @@
+// Finanzas: anticipos, anulación auditada, notas crédito, presupuestos, cuotas, caja, egresos y liquidación de odontólogos.
+// Montos en pesos enteros (Int), como Factura/Pago. NO existe ninguna comisión a doctores remitentes (Ley 35/1989 art. 30):
+// las liquidaciones son solo de odontólogos del propio centro (userId sin FK en profesionalId).
+
+enum EstadoAnticipo {
+  DISPONIBLE
+  APLICADO
+  REEMBOLSADO
+  ANULADO
+  RETENIDO
+}
+
+enum EstadoPresupuesto {
+  BORRADOR
+  ENVIADO
+  ACEPTADO
+  RECHAZADO
+  VENCIDO
+  CONVERTIDO
+}
+
+enum EstadoCuota {
+  PENDIENTE
+  PAGADA
+  VENCIDA
+  ANULADA
+}
+
+enum EstadoPromesa {
+  PENDIENTE
+  CUMPLIDA
+  INCUMPLIDA
+  CANCELADA
+}
+
+enum EstadoSesionCaja {
+  ABIERTA
+  CERRADA
+}
+
+enum TipoComision {
+  PORCENTAJE
+  FIJO
+}
+
+enum EstadoLiquidacion {
+  BORRADOR
+  APROBADA
+  PAGADA
+  ANULADA
+}
+
+// Dinero recibido antes de la atención (cita, reserva pública o paciente). Idempotente por linkPagoId.
+model Anticipo {
+  id                   String          @id @default(cuid())
+  organizationId       String
+  organization         Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  estado               EstadoAnticipo  @default(DISPONIBLE)
+  pacienteId           String?
+  paciente             PacienteTenant? @relation(fields: [pacienteId], references: [id])
+  citaId               String?
+  cita                 Cita?           @relation(fields: [citaId], references: [id])
+  reservaId            String?
+  reserva              ReservaPublica? @relation(fields: [reservaId], references: [id])
+  linkPagoId           String?         @unique
+  linkPago             LinkPago?       @relation(fields: [linkPagoId], references: [id])
+  valor                Int
+  valorAplicado        Int             @default(0)
+  medio                MedioPago       @default(PASARELA)
+  referencia           String?
+  // Copia de la política del centro al momento del cobro (no cambia si el centro la edita después).
+  reembolsable         Boolean         @default(true)
+  horasLimiteReembolso Int             @default(24)
+  retieneSiNoAsiste    Boolean         @default(true)
+  motivo               String? // por qué se reembolsó, retuvo o anuló
+  resueltoEn           DateTime?
+  registradoPorId      String?
+  creadoEn             DateTime        @default(now())
+  pagos                Pago[]
+
+  @@index([organizationId, estado])
+  @@index([pacienteId])
+  @@index([citaId])
+  @@index([reservaId])
+}
+
+// Solo se inserta. Una nota crédito por anulación/devolución; consecutivo por centro.
+model NotaCredito {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  consecutivo    Int
+  facturaId      String
+  factura        Factura      @relation(fields: [facturaId], references: [id], onDelete: Restrict)
+  valor          Int
+  motivo         String
+  creadaPorId    String?
+  creadoEn       DateTime     @default(now())
+
+  @@unique([organizationId, consecutivo])
+  @@index([facturaId])
+}
+
+model Presupuesto {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero         Int // consecutivo por centro
+  pacienteId     String
+  paciente       PacienteTenant    @relation(fields: [pacienteId], references: [id])
+  profesionalId  String?
+  estado         EstadoPresupuesto @default(BORRADOR)
+  titulo         String?
+  notas          String?
+  margen         Decimal?          @db.Decimal(5, 2) // % sobre costo usado al cotizar
+  validoHasta    DateTime?         @db.Date
+  // Aceptación pública (/presupuesto/[token]): el token en claro solo viaja por correo.
+  tokenHash      String?           @unique
+  aceptadoEn     DateTime?
+  aceptadoNombre String?
+  aceptadoIpHash String?
+  rechazadoEn    DateTime?
+  creadoPorId    String?
+  creadoEn       DateTime          @default(now())
+  actualizadoEn  DateTime          @updatedAt
+  items          ItemPresupuesto[]
+
+  @@unique([organizationId, numero])
+  @@index([organizationId, estado])
+  @@index([pacienteId])
+}
+
+// facturaId se llena al convertir (parcial por fase): un ítem se factura una sola vez.
+model ItemPresupuesto {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  presupuestoId  String
+  presupuesto    Presupuesto  @relation(fields: [presupuestoId], references: [id], onDelete: Cascade)
+  servicioId     String?
+  servicio       Servicio?    @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  descripcion    String
+  diente         Int? // FDI
+  fase           Int          @default(1)
+  cantidad       Int          @default(1)
+  valorUnitario  Int
+  costoUnitario  Int          @default(0)
+  descuento      Int          @default(0)
+  posicion       Int          @default(0)
+  facturaId      String?
+  factura        Factura?     @relation(fields: [facturaId], references: [id], onDelete: SetNull)
+
+  @@index([presupuestoId])
+  @@index([organizationId])
+}
+
+model CuotaFactura {
+  id                   String       @id @default(cuid())
+  organizationId       String
+  organization         Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  facturaId            String
+  factura              Factura      @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  numero               Int
+  valor                Int
+  vence                DateTime     @db.Date
+  estado               EstadoCuota  @default(PENDIENTE)
+  ultimoRecordatorioEn DateTime?
+
+  @@unique([facturaId, numero])
+  @@index([organizationId, estado, vence])
+}
+
+model PromesaPago {
+  id             String        @id @default(cuid())
+  organizationId String
+  organization   Organization  @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  facturaId      String
+  factura        Factura       @relation(fields: [facturaId], references: [id], onDelete: Cascade)
+  fechaPromesa   DateTime      @db.Date
+  valor          Int
+  estado         EstadoPromesa @default(PENDIENTE)
+  notas          String?
+  creadaPorId    String?
+  creadoEn       DateTime      @default(now())
+
+  @@index([organizationId, estado, fechaPromesa])
+  @@index([facturaId])
+}
+
+// Una sesión ABIERTA por usuario (índice único parcial en la migración). Cerrada = inmutable (no se borra).
+model SesionCaja {
+  id               String           @id @default(cuid())
+  organizationId   String
+  organization     Organization     @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  numero           Int // consecutivo por centro
+  estado           EstadoSesionCaja @default(ABIERTA)
+  abiertaPorId     String
+  abiertaEn        DateTime         @default(now())
+  baseApertura     Int              @default(0)
+  cerradaPorId     String?
+  cerradaEn        DateTime?
+  esperadoPorMedio Json? // { EFECTIVO: n, TARJETA: n, … } calculado al cerrar
+  contadoPorMedio  Json? // lo que contó el cajero
+  diferencia       Int?
+  notas            String?
+  pagos            Pago[]
+  egresos          Egreso[]
+
+  @@unique([organizationId, numero])
+  @@index([organizationId, estado])
+}
+
+model Egreso {
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  fecha           DateTime     @default(now())
+  valor           Int
+  categoria       String // texto libre (arriendo, nómina, insumos…)
+  descripcion     String?
+  medio           MedioPago    @default(EFECTIVO)
+  proveedorId     String?
+  proveedor       Proveedor?   @relation(fields: [proveedorId], references: [id], onDelete: SetNull)
+  soporteKey      String? // clave S3 del soporte
+  sesionCajaId    String?
+  sesionCaja      SesionCaja?  @relation(fields: [sesionCajaId], references: [id], onDelete: Restrict)
+  ordenCompraId   String?
+  ordenCompra     OrdenCompra? @relation(fields: [ordenCompraId], references: [id], onDelete: SetNull)
+  registradoPorId String?
+  anuladoEn       DateTime?
+  anuladoPorId    String?
+  motivoAnulacion String?
+  creadoEn        DateTime     @default(now())
+
+  @@index([organizationId, fecha])
+  @@index([sesionCajaId])
+}
+
+// Contrato con un odontólogo del propio centro (profesionalId = User.id de un Member con esOdontologo).
+model ContratoProfesional {
+  id                String                  @id @default(cuid())
+  organizationId    String
+  organization      Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  profesionalId     String
+  porcentajeDefault Decimal                 @default(0) @db.Decimal(5, 2) // % sobre lo cobrado si no hay regla por servicio
+  vigenteDesde      DateTime                @db.Date
+  vigenteHasta      DateTime?               @db.Date
+  activo            Boolean                 @default(true)
+  creadoEn          DateTime                @default(now())
+  reglas            ReglaComisionServicio[]
+
+  @@index([organizationId, profesionalId])
+}
+
+model ReglaComisionServicio {
+  id         String              @id @default(cuid())
+  contratoId String
+  contrato   ContratoProfesional @relation(fields: [contratoId], references: [id], onDelete: Cascade)
+  servicioId String
+  servicio   Servicio            @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  tipo       TipoComision        @default(PORCENTAJE)
+  valor      Decimal             @db.Decimal(12, 2) // % o pesos según tipo
+
+  @@unique([contratoId, servicioId])
+}
+
+model Liquidacion {
+  id             String            @id @default(cuid())
+  organizationId String
+  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  profesionalId  String
+  desde          DateTime          @db.Date
+  hasta          DateTime          @db.Date
+  estado         EstadoLiquidacion @default(BORRADOR)
+  totalBase      Int               @default(0) // lo cobrado sobre lo que se liquida
+  totalComision  Int               @default(0)
+  creadaPorId    String?
+  aprobadaEn     DateTime?
+  pagadaEn       DateTime?
+  creadoEn       DateTime          @default(now())
+  items          LiquidacionItem[]
+
+  @@index([organizationId, profesionalId, desde])
+}
+
+// Un pago/ítem se liquida una sola vez (unique). Al anular la liquidación se borran sus ítems.
+model LiquidacionItem {
+  id            String      @id @default(cuid())
+  liquidacionId String
+  liquidacion   Liquidacion @relation(fields: [liquidacionId], references: [id], onDelete: Cascade)
+  pagoId        String
+  pago          Pago        @relation(fields: [pagoId], references: [id])
+  facturaItemId String
+  facturaItem   FacturaItem @relation(fields: [facturaItemId], references: [id])
+  servicioId    String?
+  base          Int
+  comision      Int
+
+  @@unique([pagoId, facturaItemId])
+  @@index([liquidacionId])
+}
+
+model ConfigFinanzas {
+  organizationId          String       @id
+  organization            Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  cobroAutomaticoActivo   Boolean      @default(false)
+  diasRecordatorioCobro   Int          @default(3) // días tras el vencimiento (Ley 2300/2023: respeta horarios y frecuencia)
+  margenCotizacionDefault Decimal      @default(30) @db.Decimal(5, 2)
+}

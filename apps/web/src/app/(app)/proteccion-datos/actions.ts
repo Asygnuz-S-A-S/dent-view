@@ -91,7 +91,7 @@ export async function cambiarEstadoSolicitud(id: string, estado: string): Promis
   if (!transicionSolicitudValida(s.estado as EstadoSolicitud, nuevo)) return { error: "Transición no permitida" };
   await prisma.$transaction(async (tx) => {
     await tx.solicitudTitular.update({ where: { id }, data: { estado: nuevo, resueltaEn: solicitudCerrada(nuevo) ? new Date() : null } });
-    await registrarEvento({ organizationId: ctx.organizationId, pacienteId: s.pacienteId, actorId: ctx.usuario.id, tipo: "solicitud.estado", detalle: { solicitudId: id, de: s.estado, a: nuevo } }, tx);
+    await registrarEvento({ organizationId: ctx.organizationId, pacienteId: s.pacienteId, actorId: ctx.usuario.id, tipo: "solicitud.estado", detalle: { solicitudId: id, de: s.estado, a: nuevo, ...(s.tipo === "SUPRESION" && nuevo === "COMPLETADA" ? { constancia: "La historia clínica no se borra: se conserva 15 años (Res. 839/2017)." } : {}) } }, tx);
   });
   revalidatePath("/proteccion-datos");
   return {};

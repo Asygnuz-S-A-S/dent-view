@@ -142,14 +142,14 @@ model SolicitudTitular {
 
 // Configuración del centro: membrete y ajustes de recordatorios.
 model ConfigCentro {
-  organizationId    String  @id
+  organizationId    String     @id
   nombre            String?
   direccion         String?
   telefono          String?
   correo            String?
   registro          String?
   logo              String? // data URL (PNG/JPEG pequeño)
-  recordatorioHoras Int     @default(24)
+  recordatorioHoras Int        @default(24)
   // Marca del centro (white-label): color principal en hex (#0e6b8a) aplicado al tema de la app y a sus páginas públicas.
   colorPrimario     String?
   // Tipo de centro; sin fila de ConfigCentro el consumidor debe asumir CENTRO_RADIOLOGICO.
@@ -165,30 +165,30 @@ enum TipoCentro {
 
 // Cada versión es una fila; las versiones emitidas son inmutables y comparten grupoId.
 model Informe {
-  id               String    @id @default(cuid())
+  id               String          @id @default(cuid())
   organizationId   String
   grupoId          String
-  version          Int       @default(1)
-  vigente          Boolean   @default(true)
-  estado           String    @default("BORRADOR") // BORRADOR | EMITIDO | ARCHIVADO
+  version          Int             @default(1)
+  vigente          Boolean         @default(true)
+  estado           String          @default("BORRADOR") // BORRADOR | EMITIDO | ARCHIVADO
   pacienteId       String
   ordenId          String?
   estudioId        String?
   motivo           String?
   tecnica          String?
-  hallazgos        String    @default("")
-  impresion        String    @default("")
+  hallazgos        String          @default("")
+  impresion        String          @default("")
   recomendaciones  String?
   firmanteId       String?
   firmanteNombre   String?
   firmanteTarjeta  String?
-  codigo           String?   @unique
+  codigo           String?         @unique
   pdf              Bytes?
   motivoCorreccion String?
   emitidoEn        DateTime?
   creadoPorId      String?
-  creadoEn         DateTime  @default(now())
-  actualizadoEn    DateTime  @updatedAt
+  creadoEn         DateTime        @default(now())
+  actualizadoEn    DateTime        @updatedAt
   capturas         InformeImagen[]
 
   @@unique([grupoId, version])

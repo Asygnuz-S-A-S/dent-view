@@ -92,6 +92,7 @@ model Lead {
   tareas                 TareaCRM[]
   valoraciones           Valoracion[]
   inscripciones          InscripcionSecuencia[]
+  reservasPublicas       ReservaPublica[]
 
   @@index([organizationId, etapa])
   @@index([organizationId, responsableId])

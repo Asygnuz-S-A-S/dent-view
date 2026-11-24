@@ -5,9 +5,10 @@ import { prisma } from "@dent-view/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { registrarEvento } from "@/lib/eventos";
-import { ESTADOS_PLAN, puedeEditarNota, SUPERFICIES } from "@/lib/plan";
+import { fechaHoraCompleta } from "@/lib/fechas";
+import { ESTADOS_PLAN, SUPERFICIES } from "@/lib/plan";
 import { precioFinal } from "@/lib/precios";
-import { CLINICOS } from "@/lib/roles";
+import { MEDICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 
 type R = { error?: string };
@@ -30,7 +31,7 @@ const itemDelCentro = (id: string, organizationId: string) =>
   prisma.planTratamientoItem.findFirst({ where: { id, paciente: { organizationId } } });
 
 export async function agregarItemPlan(entrada: z.input<typeof esquemaItem>): Promise<R> {
-  const ctx = await exigirContexto(CLINICOS);
+  const ctx = await exigirContexto(MEDICOS);
   const r = esquemaItem.safeParse(entrada);
   if (!r.success) return { error: "Datos inválidos" };
   const d = r.data;
@@ -62,7 +63,7 @@ export async function agregarItemPlan(entrada: z.input<typeof esquemaItem>): Pro
 }
 
 export async function cambiarEstadoPlan(id: string, estado: string): Promise<R> {
-  const ctx = await exigirContexto(CLINICOS);
+  const ctx = await exigirContexto(MEDICOS);
   const e = z.enum(ESTADOS_PLAN).safeParse(estado);
   if (!e.success) return { error: "Estado inválido" };
   const item = await itemDelCentro(id, ctx.organizationId);
@@ -79,7 +80,7 @@ export async function cambiarEstadoPlan(id: string, estado: string): Promise<R> 
 
 /** Sube (-1) o baja (1) un ítem intercambiando posición con su vecino. */
 export async function moverItemPlan(id: string, dir: -1 | 1): Promise<R> {
-  const ctx = await exigirContexto(CLINICOS);
+  const ctx = await exigirContexto(MEDICOS);
   const item = await itemDelCentro(id, ctx.organizationId);
   if (!item) return { error: "Ítem no encontrado" };
   const todos = await prisma.planTratamientoItem.findMany({ where: { pacienteId: item.pacienteId }, orderBy: [{ posicion: "asc" }, { creadoEn: "asc" }] });
@@ -93,25 +94,23 @@ export async function moverItemPlan(id: string, dir: -1 | 1): Promise<R> {
   return {};
 }
 
-export async function crearNota(pacienteId: string, texto: string): Promise<R> {
-  const ctx = await exigirContexto(CLINICOS);
+/**
+ * Las notas son inmodificables (Res. 1995/1999 art. 18): solo se crean. Una corrección es una nota nueva que cita a la anterior
+ * (NotaClinica no tiene campo de referencia, por eso la cita va en el texto con fecha y hora).
+ */
+export async function crearNota(pacienteId: string, texto: string, corrigeId?: string): Promise<R> {
+  const ctx = await exigirContexto(MEDICOS);
   const t = z.string().trim().min(1, "Escribe la nota").max(5000).safeParse(texto);
   if (!t.success) return { error: t.error.issues[0].message };
   if (!(await pacienteDelCentro(pacienteId, ctx.organizationId))) return { error: "Paciente no encontrado" };
-  const nota = await prisma.notaClinica.create({ data: { pacienteId, autorId: ctx.usuario.id, texto: t.data } });
-  await registrarEvento({ organizationId: ctx.organizationId, pacienteId, actorId: ctx.usuario.id, tipo: "nota.creada", detalle: { notaId: nota.id } });
+  let contenido = t.data;
+  if (corrigeId) {
+    const previa = await prisma.notaClinica.findFirst({ where: { id: corrigeId, pacienteId } });
+    if (!previa) return { error: "Nota a corregir no encontrada" };
+    contenido = `[Corrige la nota del ${fechaHoraCompleta(previa.fecha)}] ${t.data}`;
+  }
+  const nota = await prisma.notaClinica.create({ data: { pacienteId, autorId: ctx.usuario.id, texto: contenido } });
+  await registrarEvento({ organizationId: ctx.organizationId, pacienteId, actorId: ctx.usuario.id, tipo: "nota.creada", detalle: { notaId: nota.id, ...(corrigeId ? { corrigeId } : {}) } });
   revalidatePath(`/pacientes/${pacienteId}`);
-  return {};
-}
-
-export async function editarNota(id: string, texto: string): Promise<R> {
-  const ctx = await exigirContexto(CLINICOS);
-  const t = z.string().trim().min(1, "Escribe la nota").max(5000).safeParse(texto);
-  if (!t.success) return { error: t.error.issues[0].message };
-  const nota = await prisma.notaClinica.findFirst({ where: { id, paciente: { organizationId: ctx.organizationId } } });
-  if (!nota) return { error: "Nota no encontrada" };
-  if (!puedeEditarNota(nota, ctx.usuario.id)) return { error: "Solo el autor puede editarla el mismo día" };
-  await prisma.notaClinica.update({ where: { id }, data: { texto: t.data } });
-  revalidatePath(`/pacientes/${nota.pacienteId}`);
   return {};
 }

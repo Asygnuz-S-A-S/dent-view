@@ -1,0 +1,239 @@
+// Bodega e inventario. Cantidades y costos en Decimal(14,4) (los insumos se fraccionan: ml, g).
+// MovimientoInventario es el kardex: solo se inserta (la corrección es otro movimiento).
+
+enum TipoInsumo {
+  CONSUMIBLE
+  MEDICAMENTO
+  DESECHABLE
+  INSTRUMENTAL
+  RADIOLOGICO
+  LABORATORIO
+  OTRO
+}
+
+enum TipoMovimiento {
+  ENTRADA_COMPRA
+  ENTRADA_AJUSTE
+  ENTRADA_TRASLADO
+  SALIDA_CONSUMO
+  SALIDA_AJUSTE
+  SALIDA_TRASLADO
+  SALIDA_VENCIMIENTO
+}
+
+enum EstadoOrdenCompra {
+  BORRADOR
+  ENVIADA
+  PARCIAL
+  RECIBIDA
+  CANCELADA
+}
+
+enum EstadoCotizacionProveedor {
+  SOLICITADA
+  RECIBIDA
+  ELEGIDA
+  DESCARTADA
+}
+
+model Insumo {
+  id                 String                    @id @default(cuid())
+  organizationId     String
+  organization       Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre             String
+  codigo             String?
+  tipo               TipoInsumo                @default(CONSUMIBLE)
+  unidad             String                    @default("unidad") // unidad de consumo: unidad, ml, g…
+  presentacion       String? // cómo se compra: caja, frasco…
+  factorPresentacion Decimal                   @default(1) @db.Decimal(14, 4) // unidades de consumo por presentación
+  stockMinimo        Decimal                   @default(0) @db.Decimal(14, 4)
+  stockTotal         Decimal                   @default(0) @db.Decimal(14, 4) // suma de Existencia; puede quedar negativo (con alerta)
+  costoPromedio      Decimal                   @default(0) @db.Decimal(14, 4) // por unidad de consumo, promedio ponderado
+  controlaLote       Boolean                   @default(false)
+  activo             Boolean                   @default(true)
+  creadoEn           DateTime                  @default(now())
+  lotes              LoteInsumo[]
+  existencias        Existencia[]
+  movimientos        MovimientoInventario[]
+  recetas            RecetaServicio[]
+  itemsCompra        ItemOrdenCompra[]
+  itemsCotizacion    ItemCotizacionProveedor[]
+
+  @@unique([organizationId, nombre])
+  @@index([organizationId, activo])
+}
+
+model Bodega {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  principal      Boolean                @default(false)
+  activa         Boolean                @default(true)
+  existencias    Existencia[]
+  movimientos    MovimientoInventario[]
+  ordenesCompra  OrdenCompra[]
+
+  @@unique([organizationId, nombre])
+}
+
+model Proveedor {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nombre         String
+  nit            String?
+  contacto       String?
+  correo         String?
+  telefono       String?
+  activo         Boolean               @default(true)
+  creadoEn       DateTime              @default(now())
+  ordenesCompra  OrdenCompra[]
+  cotizaciones   CotizacionProveedor[]
+  egresos        Egreso[]
+
+  @@index([organizationId])
+}
+
+model LoteInsumo {
+  id             String                 @id @default(cuid())
+  organizationId String
+  organization   Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  insumoId       String
+  insumo         Insumo                 @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+  codigo         String
+  venceEn        DateTime?              @db.Date
+  creadoEn       DateTime               @default(now())
+  existencias    Existencia[]
+  movimientos    MovimientoInventario[]
+
+  @@unique([insumoId, codigo])
+  @@index([organizationId, venceEn])
+}
+
+// Saldo por bodega, insumo y lote. loteId puede ser null (insumo sin lote): la migración usa NULLS NOT DISTINCT,
+// así que (bodega, insumo, null) también es único. Prisma no permite findUnique con null: usar findFirst.
+model Existencia {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  bodegaId       String
+  bodega         Bodega       @relation(fields: [bodegaId], references: [id], onDelete: Cascade)
+  insumoId       String
+  insumo         Insumo       @relation(fields: [insumoId], references: [id], onDelete: Cascade)
+  loteId         String?
+  lote           LoteInsumo?  @relation(fields: [loteId], references: [id], onDelete: Cascade)
+  cantidad       Decimal      @default(0) @db.Decimal(14, 4)
+
+  @@unique([bodegaId, insumoId, loteId])
+  @@index([organizationId, insumoId])
+}
+
+// Kardex. cantidad siempre positiva (el signo lo da tipo). Idempotencia: un consumo por (tipo, referencia, insumo).
+model MovimientoInventario {
+  id                     String         @id @default(cuid())
+  organizationId         String
+  organization           Organization   @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tipo                   TipoMovimiento
+  insumoId               String
+  insumo                 Insumo         @relation(fields: [insumoId], references: [id], onDelete: Restrict)
+  bodegaId               String
+  bodega                 Bodega         @relation(fields: [bodegaId], references: [id], onDelete: Restrict)
+  loteId                 String?
+  lote                   LoteInsumo?    @relation(fields: [loteId], references: [id], onDelete: Restrict)
+  cantidad               Decimal        @db.Decimal(14, 4)
+  costoUnitario          Decimal        @default(0) @db.Decimal(14, 4)
+  saldoPosterior         Decimal        @db.Decimal(14, 4) // stockTotal del insumo después del movimiento
+  costoPromedioPosterior Decimal        @default(0) @db.Decimal(14, 4)
+  // Origen del movimiento: p. ej. ("EVOLUCION", evolucionId), ("ORDEN_TOMADA", ordenId), ("ORDEN_COMPRA", itemId).
+  tipoReferencia         String?
+  referenciaId           String?
+  ordenCompraId          String?
+  motivo                 String?
+  registradoPorId        String?
+  creadoEn               DateTime       @default(now())
+
+  // Con tipoReferencia null no restringe (Postgres trata null como distinto).
+  @@unique([tipoReferencia, referenciaId, insumoId, tipo])
+  @@index([organizationId, insumoId, creadoEn])
+  @@index([bodegaId])
+}
+
+model RecetaServicio {
+  id             String       @id @default(cuid())
+  organizationId String
+  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  servicioId     String
+  servicio       Servicio     @relation(fields: [servicioId], references: [id], onDelete: Cascade)
+  insumoId       String
+  insumo         Insumo       @relation(fields: [insumoId], references: [id], onDelete: Restrict)
+  cantidad       Decimal      @db.Decimal(14, 4) // en unidad de consumo del insumo, por servicio realizado
+
+  @@unique([servicioId, insumoId])
+  @@index([organizationId])
+}
+
+model OrdenCompra {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero         Int // consecutivo por centro
+  proveedorId    String
+  proveedor      Proveedor             @relation(fields: [proveedorId], references: [id])
+  bodegaId       String?
+  bodega         Bodega?               @relation(fields: [bodegaId], references: [id])
+  estado         EstadoOrdenCompra     @default(BORRADOR)
+  notas          String?
+  creadaPorId    String?
+  enviadaEn      DateTime?
+  recibidaEn     DateTime?
+  creadoEn       DateTime              @default(now())
+  items          ItemOrdenCompra[]
+  egresos        Egreso[]
+  cotizaciones   CotizacionProveedor[]
+
+  @@unique([organizationId, numero])
+  @@index([organizationId, estado])
+}
+
+model ItemOrdenCompra {
+  id               String      @id @default(cuid())
+  ordenCompraId    String
+  ordenCompra      OrdenCompra @relation(fields: [ordenCompraId], references: [id], onDelete: Cascade)
+  insumoId         String
+  insumo           Insumo      @relation(fields: [insumoId], references: [id])
+  cantidad         Decimal     @db.Decimal(14, 4) // en unidad de consumo
+  cantidadRecibida Decimal     @default(0) @db.Decimal(14, 4)
+  costoUnitario    Decimal     @default(0) @db.Decimal(14, 4)
+
+  @@index([ordenCompraId])
+}
+
+model CotizacionProveedor {
+  id             String                    @id @default(cuid())
+  organizationId String
+  organization   Organization              @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  proveedorId    String
+  proveedor      Proveedor                 @relation(fields: [proveedorId], references: [id])
+  estado         EstadoCotizacionProveedor @default(SOLICITADA)
+  vigenteHasta   DateTime?                 @db.Date
+  notas          String?
+  ordenCompraId  String? // se llena si la cotización elegida se convierte en orden
+  ordenCompra    OrdenCompra?              @relation(fields: [ordenCompraId], references: [id], onDelete: SetNull)
+  creadoEn       DateTime                  @default(now())
+  items          ItemCotizacionProveedor[]
+
+  @@index([organizationId, estado])
+}
+
+model ItemCotizacionProveedor {
+  id             String              @id @default(cuid())
+  cotizacionId   String
+  cotizacion     CotizacionProveedor @relation(fields: [cotizacionId], references: [id], onDelete: Cascade)
+  insumoId       String
+  insumo         Insumo              @relation(fields: [insumoId], references: [id])
+  cantidad       Decimal             @db.Decimal(14, 4)
+  precioUnitario Decimal?            @db.Decimal(14, 4)
+
+  @@index([cotizacionId])
+}

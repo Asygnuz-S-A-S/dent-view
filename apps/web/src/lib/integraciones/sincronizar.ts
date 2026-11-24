@@ -77,7 +77,7 @@ export async function aplicarCita(integ: Pick<IntegracionFila, "id" | "organizat
   if (!pacienteOk) return void c.omitidos++;
   const sala = (await prisma.sala.findFirst({ where: { organizationId: integ.organizationId, nombre: SALA_IMPORTADA }, select: { id: true } })) ?? (await prisma.sala.create({ data: { organizationId: integ.organizationId, nombre: SALA_IMPORTADA }, select: { id: true } }));
   const notas = notaSillon(cita.sala);
-  const creada = await prisma.cita.create({ data: { organizationId: integ.organizationId, salaId: sala.id, pacienteId: pacienteOk.id, inicio: cita.inicio, fin: cita.fin, estado: cita.estado, notas }, select: { id: true } });
+  const creada = await prisma.cita.create({ data: { organizationId: integ.organizationId, salaId: sala.id, pacienteId: pacienteOk.id, inicio: cita.inicio, fin: cita.fin, estado: cita.estado, notas, origen: "API", cruceHistorico: true }, select: { id: true } }); // la sala "Importada" agrupa varios sillones externos: puede haber citas simultáneas, por eso quedan fuera de la restricción de no cruce
   await vincular(integ.id, "cita", creada.id, cita.idExterno);
   c.citasCreadas++;
 }

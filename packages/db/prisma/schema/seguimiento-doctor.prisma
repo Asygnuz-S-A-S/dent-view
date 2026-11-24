@@ -32,19 +32,19 @@ model ConfigSeguimientoDoctor {
 }
 
 model SeguimientoDoctor {
-  id             String                  @id @default(cuid())
-  organizationId String
-  organization   Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  doctorId       String
-  doctor         User                    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  estado         EstadoSeguimientoDoctor @default(PENDIENTE)
-  motivo         MotivoSeguimientoDoctor
-  responsableId  String?
+  id              String                  @id @default(cuid())
+  organizationId  String
+  organization    Organization            @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  doctorId        String
+  doctor          User                    @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  estado          EstadoSeguimientoDoctor @default(PENDIENTE)
+  motivo          MotivoSeguimientoDoctor
+  responsableId   String?
   proximoContacto DateTime?
-  nota           String?
-  creadoEn       DateTime                @default(now())
-  cerradoEn      DateTime?
-  contactos      ContactoDoctor[]
+  nota            String?
+  creadoEn        DateTime                @default(now())
+  cerradoEn       DateTime?
+  contactos       ContactoDoctor[]
 
   @@index([organizationId, estado])
   @@index([organizationId, doctorId])
@@ -52,17 +52,17 @@ model SeguimientoDoctor {
 
 // Bitácora de gestiones con el doctor (con o sin seguimiento abierto).
 model ContactoDoctor {
-  id             String              @id @default(cuid())
-  organizationId String
-  organization   Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  doctorId       String
-  doctor         User                @relation(fields: [doctorId], references: [id], onDelete: Cascade)
-  seguimientoId  String?
-  seguimiento    SeguimientoDoctor?  @relation(fields: [seguimientoId], references: [id], onDelete: SetNull)
-  canal          CanalContactoDoctor
-  resultado      String?
-  nota           String?
-  fecha          DateTime            @default(now())
+  id              String              @id @default(cuid())
+  organizationId  String
+  organization    Organization        @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  doctorId        String
+  doctor          User                @relation(fields: [doctorId], references: [id], onDelete: Cascade)
+  seguimientoId   String?
+  seguimiento     SeguimientoDoctor?  @relation(fields: [seguimientoId], references: [id], onDelete: SetNull)
+  canal           CanalContactoDoctor
+  resultado       String?
+  nota            String?
+  fecha           DateTime            @default(now())
   registradoPorId String?
 
   @@index([organizationId, doctorId, fecha])

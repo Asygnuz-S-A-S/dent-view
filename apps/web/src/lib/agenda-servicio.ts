@@ -1,4 +1,5 @@
 // Alta/edición de citas compartida por la app (server action) y la API pública.
+import { esCruceDeCitas } from "./agenda-cruce";
 import { prisma } from "@dent-view/db";
 import { z } from "zod";
 import { bogotaAUtc, ESTADOS_CITA, esFecha, FIN_DIA_MIN, hayCruce, INICIO_DIA_MIN, PASO_MIN } from "./agenda";
@@ -46,7 +47,7 @@ export async function guardarCitaEnCentro(a: {
   const mismaSala = await prisma.cita.findMany({ where: { organizationId: org, salaId: sala.id, inicio: { lt: fin }, fin: { gt: inicio } } });
   if (hayCruce(mismaSala, { id: d.id, salaId: sala.id, inicio, fin })) return { error: "Ya hay una cita en esa sala a esa hora" };
 
-  // shortcut: sin restricción de exclusión en BD; dos clics simultáneos podrían cruzarse. Añadir EXCLUDE USING gist si pasa en producción.
+  // La BD tiene EXCLUDE por sala y por profesional (Cita_sin_cruce_*): si dos clics simultáneos se cruzan, el segundo falla aquí.
   const data = { salaId: sala.id, pacienteId: paciente.id, ordenId: orden?.id ?? null, inicio, fin, notas: d.notas || null, ...(d.estado ? { estado: d.estado } : {}) };
   const centro = actual ? null : await varsCentro(org);
   const citaId = await prisma.$transaction(async (tx) => {
@@ -65,6 +66,10 @@ export async function guardarCitaEnCentro(a: {
       await registrarEvento({ ...base, tipo: "orden.estado", detalle: { ordenId: orden.id, orden: numeroOrden(orden.numero), de: "SOLICITADA", a: "AGENDADA", origen: "cita" } }, tx);
     }
     return cita.id;
+  }).catch((e: unknown) => {
+    if (esCruceDeCitas(e)) return null;
+    throw e;
   });
+  if (!citaId) return { error: "Ya hay una cita en esa sala a esa hora" };
   return { id: citaId };
 }

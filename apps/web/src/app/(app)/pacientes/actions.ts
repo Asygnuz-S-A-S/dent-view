@@ -3,7 +3,7 @@
 import { prisma } from "@dent-view/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
-import { CLINICOS, GESTION } from "@/lib/roles";
+import { GESTION, MEDICOS } from "@/lib/roles";
 import { registrarEvento } from "@/lib/eventos";
 import { CONDICIONES, esquemaNumeroDocumento, esquemaTipoDocumento } from "@/lib/pacientes";
 import { crearPacienteEnCentro } from "@/lib/pacientes-centro";
@@ -65,17 +65,20 @@ const esquemaCondicion = z.object({
 
 /** Fija (o quita, con null) la condición del diente completo. Reemplaza la que hubiera. */
 export async function guardarCondicion(input: z.input<typeof esquemaCondicion>): Promise<{ error?: string }> {
-  const ctx = await exigirContexto(CLINICOS);
+  const ctx = await exigirContexto(MEDICOS);
   const p = esquemaCondicion.safeParse(input);
   if (!p.success) return { error: "Datos inválidos" };
   const { pacienteId, diente, condicion } = p.data;
   const paciente = await prisma.pacienteTenant.findFirst({ where: { id: pacienteId, organizationId: ctx.organizationId } });
   if (!paciente) return { error: "Paciente no encontrado" };
 
-  await prisma.$transaction([
-    prisma.condicionDental.deleteMany({ where: { pacienteId, diente, superficie: null } }),
-    ...(condicion ? [prisma.condicionDental.create({ data: { pacienteId, diente, condicion } })] : []),
-  ]);
+  await prisma.$transaction(async (tx) => {
+    // Historial (Res. 1995/1999): antes de sobrescribir se guarda el estado previo completo, con quién y cuándo.
+    const previo = await tx.condicionDental.findMany({ where: { pacienteId }, select: { diente: true, superficie: true, condicion: true, notas: true } });
+    await tx.odontogramaHistorial.create({ data: { organizationId: ctx.organizationId, pacienteId, autorId: ctx.usuario.id, snapshot: previo, motivo: `Diente ${diente}: ${condicion ?? "condición quitada"}` } });
+    await tx.condicionDental.deleteMany({ where: { pacienteId, diente, superficie: null } });
+    if (condicion) await tx.condicionDental.create({ data: { pacienteId, diente, condicion } });
+  });
   await registrarEvento({
     organizationId: ctx.organizationId,
     pacienteId,
