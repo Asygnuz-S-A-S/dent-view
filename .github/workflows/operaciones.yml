@@ -179,8 +179,9 @@ jobs:
         run: |
           set -uo pipefail
           falla() { echo "::error title=Snapshot::$1 Revisa los roles IAM de github-deploy (infra/operaciones/README.md)."; exit 1; }
-          DISCO=$(gcloud compute instances describe "$VM" --project="$PROYECTO" --zone="$ZONA" \
-            --flatten='disks[]' --filter='disks.boot=true' --format='value(disks.source.basename())') || falla "No se pudo leer la VM."
+          DISCO=$(gcloud compute instances describe "$VM" --project="$PROYECTO" --zone="$ZONA" --format=json \
+            | jq -r '.disks[] | select(.boot == true) | .source | split("/") | last') || falla "No se pudo leer la VM."
+          [ -n "$DISCO" ] || falla "No se encontró el disco de arranque."
           NOMBRE="dentview-$(date -u +%Y%m%d-%H%M)"
           gcloud compute disks snapshot "$DISCO" --project="$PROYECTO" --zone="$ZONA" --snapshot-names="$NOMBRE" \
             --labels=origen=operaciones-gha,vm="$VM" --description="Respaldo automático (operaciones.yml)" \
