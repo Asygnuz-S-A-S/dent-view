@@ -1,1 +1,10 @@
-{ "operacion": "respaldo", "confirmar": "", "parametros": { "nota": "reintento del snapshot" } }
+{
+  "operacion": "reiniciar-demo",
+  "confirmar": "REINICIAR-DEMO",
+  "parametros": {
+    "admin_correo": "andres.agudelo@asygnuz.com",
+    "admin_nombre": "Andres Agudelo",
+    "admin_hash": "6167454ff53b1ba4b562552c941ae352:172b9c44f987e8ce210dd37b25a2261deb9cc92d140ae54e988215d5f4e37e00794c5b2b0ef09edfde7765e97e6851d757281fd4345d18f3d0cbdc79ecebe32a",
+    "demo_clave": "Demo-Dentview-2026"
+  }
+}
