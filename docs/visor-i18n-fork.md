@@ -70,6 +70,52 @@ La compilación es pesada (pnpm install + webpack de todo OHIF); con caché de c
    y revisar el visor en el navegador: barra de herramientas, panel de estudios, menús, MPR/3D, "Acerca de".
 6. Regenerar el parche (`--generar`), compilar y desplegar.
 
+## Móvil (teléfono y tableta)
+
+Objetivo: el visor completo usable por debajo de **1024 px** (teléfonos y tabletas en vertical) sin tocar el
+escritorio. Se usó 1024 y no 768 porque una tableta de 820 px con los dos paneles abiertos (282 + 280 px) deja
+la imagen en ~30 % del ancho. Todo va con clases `max-lg:` de Tailwind o `matchMedia('(max-width: 1023px)')`;
+por encima de 1024 px nada cambia. Spec: `apps/web/tests/e2e/26-visor-movil.spec.ts`.
+
+Cambios al submódulo (van en el parche `0001-dent-view-es.patch`):
+
+- `extensions/default/src/ViewerLayout/index.tsx`: en pantallas compactas los paneles laterales arrancan
+  **cerrados**; abiertos se **superponen** a la imagen (`absolute`, ancho `min(282px, 85vw)`, `z-30`) en vez de
+  aplastarla; cerrados son una franja fija de 33 px y la imagen toma el resto (`!grow`). Es CSS sobre el
+  `ResizablePanel`: la librería sigue calculando porcentajes, pero el resultado visual no depende de ellos.
+- `platform/ui-next/src/components/Header/Header.tsx`: en compacto la cabecera pasa de capas absolutas a una fila
+  flex: logo | barra de herramientas con **scroll horizontal interno** (sin barra visible) | deshacer/rehacer y
+  engranaje. Se oculta la barra secundaria (vacía) y los datos del paciente. El engranaje mide 40x40.
+- `extensions/default/src/ViewerLayout/ViewerHeader.tsx`: deshacer/rehacer a 40 px mínimo.
+- `modes/basic/src/initToolGroups.ts` (grupos `default` y `mpr`, que usa también el modo longitudinal): con
+  `(pointer: coarse)` el dedo principal es **StackScroll** (un dedo = pasar cortes) y WindowLevel queda sin
+  binding hasta que se elige en la barra. Un binding `numTouchPoints: 1` no sirve: el de ratón `Primary` gana con
+  un dedo; y StackScroll no puede ir en la lista `passive` porque pasarlo a pasivo le quita el binding Primary.
+  Dos dedos = zoom (pellizco) y desplazamiento (ya era así). Con ratón (escritorio) todo igual.
+
+Solo configuración (`viewer/config/dent-view.js`, sin parche):
+
+- Logo: en compacto muestra solo "←" (enlace a `/estudios` o a la página de origen, 40x40, `aria-label`); el
+  texto "dent-view" y "Volver" llevan la clase `dv-solo-escritorio`, oculta por una hoja de estilo inyectada.
+- Tour de bienvenida de OHIF: en compacto se marca como visto (`localStorage.shownTours`), sus globos tapan la imagen.
+- **Miniaturas livianas**: `thumbnailRendering: 'rendered'` + `thumbnailRequestStrategy: 'fetch'`. Cada miniatura
+  es un JPEG de ~50 KB del endpoint `/rendered` de Orthanc en vez del DICOM completo decodificado en el
+  navegador. La estrategia por defecto (`bulkDataRetrieve`) pide `Accept: multipart/related` y Orthanc responde
+  400; con `fetch` se hace un GET normal con la cookie. Requirió permitir los parámetros `accept` y `viewport`
+  en `apps/web/src/lib/acceso.ts` (lista blanca de QIDO) y que el chequeo de `%2f` mire solo el path (OHIF pide
+  `accept=image%2Fjpeg`). No amplía qué estudios se ven: el UID sigue saliendo del path o de `StudyInstanceUID`, y
+  `acceso.test.ts` demuestra que `?StudyInstanceUID=otro` da 403 para otro centro y que otros filtros QIDO
+  siguen rechazados. Para volver a la descarga completa: `thumbnailRendering: 'wadors'`.
+
+Límites conocidos en móvil: las flechas de los botones desplegables miden 20x40 px, las pestañas de los paneles
+cerrados 33x28 px; al elegir otra herramienta primaria en la barra (p. ej. Longitud) un dedo pasa a usar esa
+herramienta (dibujar) y deja de pasar cortes hasta volver a elegir StackScroll (botón de la barra); no se ha probado en dispositivos físicos ni iOS Safari real.
+
+Regenerar el parche tras cambiar el submódulo: `viewer/scripts/aplicar-parches.sh --generar` (escribe TODO el
+diff del submódulo, traducción incluida). Comprobar con el submódulo limpio
+(`git -C viewer/ohif checkout -- . && git -C viewer/ohif clean -fd platform/i18n/src/locales/es`) y
+`viewer/scripts/aplicar-parches.sh`, que reaplica y verifica la cobertura del español.
+
 ## Límites conocidos
 
 - Textos que no pasan por i18n en OHIF siguen en inglés si aparecen fuera del flujo revisado (p. ej. el enlace

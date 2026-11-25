@@ -1,0 +1,4 @@
+# Suite de humo contra produccion: sesiones guardadas (cookies) y salidas con capturas de datos reales
+tests/produccion/.auth/
+test-results-produccion/
+playwright-report-produccion/

@@ -27,6 +27,94 @@ index 5f8cdd9..4cc58df 100644
            </div>
          )}
        </div>
+diff --git a/extensions/default/src/ViewerLayout/ViewerHeader.tsx b/extensions/default/src/ViewerLayout/ViewerHeader.tsx
+index da9f989..736114e 100644
+--- a/extensions/default/src/ViewerLayout/ViewerHeader.tsx
++++ b/extensions/default/src/ViewerLayout/ViewerHeader.tsx
+@@ -117,7 +117,7 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
+         <div className="text-primary flex cursor-pointer items-center">
+           <Button
+             variant="ghost"
+-            className="hover:bg-muted"
++            className="hover:bg-muted max-lg:h-10 max-lg:min-w-10"
+             data-cy="undo-btn"
+             onClick={() => {
+               commandsManager.run('undo');
+@@ -127,7 +127,7 @@ function ViewerHeader({ appConfig }: withAppTypes<{ appConfig: AppTypes.Config }
+           </Button>
+           <Button
+             variant="ghost"
+-            className="hover:bg-muted"
++            className="hover:bg-muted max-lg:h-10 max-lg:min-w-10"
+             data-cy="redo-btn"
+             onClick={() => {
+               commandsManager.run('redo');
+diff --git a/extensions/default/src/ViewerLayout/index.tsx b/extensions/default/src/ViewerLayout/index.tsx
+index 50533ff..8db2fd9 100644
+--- a/extensions/default/src/ViewerLayout/index.tsx
++++ b/extensions/default/src/ViewerLayout/index.tsx
+@@ -11,6 +11,14 @@ import useResizablePanels from './ResizablePanelsHook';
+ 
+ const resizableHandleClassName = 'mt-[1px] bg-background';
+ 
++// dent-view (móvil): por debajo de 1024 px los paneles laterales arrancan cerrados y, abiertos, se superponen
++// a la imagen en vez de aplastarla (ver docs/visor-i18n-fork.md, sección Móvil).
++const isCompactScreen = () => window.matchMedia('(max-width: 1023px)').matches;
++const overlayPanelClassName =
++  'max-lg:absolute max-lg:inset-y-0 max-lg:z-30 max-lg:!w-[min(282px,85vw)] max-lg:!min-w-0 max-lg:!max-w-[85vw] max-lg:bg-background max-lg:shadow-xl';
++// Cerrado: franja fija de 33 px (la que usa el panel colapsado); la imagen toma el resto con grow.
++const closedPanelClassName = 'max-lg:!grow-0 max-lg:!basis-[33px]';
++
+ function ViewerLayout({
+   // From Extension Module Params
+   extensionManager,
+@@ -30,6 +38,10 @@ function ViewerLayout({
+   rightPanelMinimumExpandedWidth,
+ }: withAppTypes): React.FunctionComponent {
+   const [appConfig] = useAppConfig();
++  if (isCompactScreen()) {
++    leftPanelClosed = true;
++    rightPanelClosed = true;
++  }
+ 
+   const { panelService, hangingProtocolService, customizationService } = servicesManager.services;
+   const [showLoadingIndicator, setShowLoadingIndicator] = useState(appConfig.showLoadingIndicator);
+@@ -167,7 +179,10 @@ function ViewerLayout({
+             {/* LEFT SIDEPANELS */}
+             {hasLeftPanels ? (
+               <>
+-                <ResizablePanel {...resizableLeftPanelProps}>
++                <ResizablePanel
++                  {...resizableLeftPanelProps}
++                  className={!leftPanelClosedState ? `${overlayPanelClassName} max-lg:left-0` : closedPanelClassName}
++                >
+                   <SidePanelWithServices
+                     side="left"
+                     isExpanded={!leftPanelClosedState}
+@@ -183,7 +198,10 @@ function ViewerLayout({
+               </>
+             ) : null}
+             {/* TOOLBAR + GRID */}
+-            <ResizablePanel {...resizableViewportGridPanelProps}>
++            <ResizablePanel
++              {...resizableViewportGridPanelProps}
++              className="max-lg:!grow"
++            >
+               <div className="flex h-full flex-1 flex-col">
+                 <div
+                   className="relative flex h-full flex-1 items-center justify-center overflow-hidden bg-background"
+@@ -204,7 +222,10 @@ function ViewerLayout({
+                   disabled={!rightPanelResizable}
+                   className={resizableHandleClassName}
+                 />
+-                <ResizablePanel {...resizableRightPanelProps}>
++                <ResizablePanel
++                  {...resizableRightPanelProps}
++                  className={!rightPanelClosedState ? `${overlayPanelClassName} max-lg:right-0` : closedPanelClassName}
++                >
+                   <SidePanelWithServices
+                     side="right"
+                     isExpanded={!rightPanelClosedState}
 diff --git a/extensions/default/src/customizations/aboutModalCustomization.tsx b/extensions/default/src/customizations/aboutModalCustomization.tsx
 index 93a00e2..0f38724 100644
 --- a/extensions/default/src/customizations/aboutModalCustomization.tsx
@@ -43,6 +131,76 @@ index 93a00e2..0f38724 100644
        {beta && <AboutModal.ProductBeta>{beta}</AboutModal.ProductBeta>}
  
        <AboutModal.Body>
+diff --git a/modes/basic/src/initToolGroups.ts b/modes/basic/src/initToolGroups.ts
+index 1b9b776..2732377 100644
+--- a/modes/basic/src/initToolGroups.ts
++++ b/modes/basic/src/initToolGroups.ts
+@@ -10,6 +10,11 @@ const colorsByOrientation = {
+   coronal: 'rgb(0, 200, 0)',
+ };
+ 
++// dent-view (móvil): en pantallas táctiles el dedo principal pasa cortes (stack scroll) en vez de ventana/nivel;
++// WindowLevel sigue disponible desde la barra de herramientas. Un binding numTouchPoints:1 no basta: el binding
++// de ratón Primary tiene prioridad con un dedo.
++const isTouch = window.matchMedia('(pointer: coarse)').matches;
++
+ function initDefaultToolGroup(extensionManager, toolGroupService, commandsManager, toolGroupId) {
+   const utilityModule = extensionManager.getModuleEntry(
+     '@ohif/extension-cornerstone.utilityModule.tools'
+@@ -21,7 +26,7 @@ function initDefaultToolGroup(extensionManager, toolGroupService, commandsManage
+     active: [
+       {
+         toolName: toolNames.WindowLevel,
+-        bindings: [{ mouseButton: Enums.MouseBindings.Primary }],
++        bindings: isTouch ? [] : [{ mouseButton: Enums.MouseBindings.Primary }],
+       },
+       {
+         toolName: toolNames.Pan,
+@@ -33,7 +38,7 @@ function initDefaultToolGroup(extensionManager, toolGroupService, commandsManage
+       },
+       {
+         toolName: toolNames.StackScroll,
+-        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }, { numTouchPoints: 3 }],
++        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }, ...(isTouch ? [{ mouseButton: Enums.MouseBindings.Primary }] : []), { numTouchPoints: 3 }],
+       },
+     ],
+     passive: [
+@@ -65,7 +70,7 @@ function initDefaultToolGroup(extensionManager, toolGroupService, commandsManage
+       { toolName: toolNames.EllipticalROI },
+       { toolName: toolNames.CircleROI },
+       { toolName: toolNames.RectangleROI },
+-      { toolName: toolNames.StackScroll },
++      ...(isTouch ? [] : [{ toolName: toolNames.StackScroll }]), // pasivo anularía su binding Primary táctil
+       { toolName: toolNames.Angle },
+       { toolName: toolNames.CobbAngle },
+       { toolName: toolNames.Magnify },
+@@ -179,7 +184,7 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager) {
+     active: [
+       {
+         toolName: toolNames.WindowLevel,
+-        bindings: [{ mouseButton: Enums.MouseBindings.Primary }],
++        bindings: isTouch ? [] : [{ mouseButton: Enums.MouseBindings.Primary }],
+       },
+       {
+         toolName: toolNames.Pan,
+@@ -191,7 +196,7 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager) {
+       },
+       {
+         toolName: toolNames.StackScroll,
+-        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }, { numTouchPoints: 3 }],
++        bindings: [{ mouseButton: Enums.MouseBindings.Wheel }, ...(isTouch ? [{ mouseButton: Enums.MouseBindings.Primary }] : []), { numTouchPoints: 3 }],
+       },
+     ],
+     passive: [
+@@ -220,7 +225,7 @@ function initMPRToolGroup(extensionManager, toolGroupService, commandsManager) {
+       { toolName: toolNames.EllipticalROI },
+       { toolName: toolNames.CircleROI },
+       { toolName: toolNames.RectangleROI },
+-      { toolName: toolNames.StackScroll },
++      ...(isTouch ? [] : [{ toolName: toolNames.StackScroll }]), // pasivo anularía su binding Primary táctil
+       { toolName: toolNames.Angle },
+       { toolName: toolNames.CobbAngle },
+       { toolName: toolNames.PlanarFreehandROI },
 diff --git a/platform/app/public/html-templates/index.html b/platform/app/public/html-templates/index.html
 index 5977752..e49fe92 100644
 --- a/platform/app/public/html-templates/index.html
@@ -1267,3 +1425,51 @@ index b501e85..6817220 100644
 +    EncapsulatedDocument,
    },
  };
+diff --git a/platform/ui-next/src/components/Header/Header.tsx b/platform/ui-next/src/components/Header/Header.tsx
+index 35964b6..525968a 100644
+--- a/platform/ui-next/src/components/Header/Header.tsx
++++ b/platform/ui-next/src/components/Header/Header.tsx
+@@ -60,8 +60,8 @@ function Header({
+         isSticky={isSticky}
+         {...props}
+       >
+-        <div className="relative h-[48px] items-center">
+-          <div className="absolute left-0 top-1/2 flex -translate-y-1/2 items-center">
++        <div className="relative h-[48px] items-center max-lg:flex max-lg:gap-1">
++          <div className="absolute left-0 top-1/2 flex -translate-y-1/2 items-center max-lg:static max-lg:translate-y-0 max-lg:shrink-0">
+             <div
+               className={classNames(
+                 'mr-3 inline-flex items-center',
+@@ -76,22 +76,24 @@ function Header({
+               </div>
+             </div>
+           </div>
+-          <div className="absolute top-1/2 left-[250px] h-8 -translate-y-1/2">{Secondary}</div>
+-          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 transform">
+-            <div className="flex items-center justify-center space-x-2">{children}</div>
++          <div className="absolute top-1/2 left-[250px] h-8 -translate-y-1/2 max-lg:hidden">{Secondary}</div>
++          <div className="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 transform max-lg:static max-lg:min-w-0 max-lg:flex-1 max-lg:translate-x-0 max-lg:translate-y-0 max-lg:overflow-x-auto max-lg:[scrollbar-width:none]">
++            <div className="flex items-center justify-center space-x-2 max-lg:mx-auto max-lg:w-max">{children}</div>
+           </div>
+-          <div className="absolute right-0 top-1/2 flex -translate-y-1/2 select-none items-center">
++          <div className="absolute right-0 top-1/2 flex -translate-y-1/2 select-none items-center max-lg:static max-lg:translate-y-0 max-lg:shrink-0">
+             {UndoRedo}
++            <div className="flex items-center max-lg:hidden">
++              <div className="border-muted mx-1.5 h-[25px] border-r"></div>
++              {PatientInfo}
++            </div>
+             <div className="border-muted mx-1.5 h-[25px] border-r"></div>
+-            {PatientInfo}
+-            <div className="border-muted mx-1.5 h-[25px] border-r"></div>
+-            <div className="flex-shrink-0">
++            <div className="flex-shrink-0 max-lg:h-10 max-lg:w-10">
+               <DropdownMenu>
+                 <DropdownMenuTrigger asChild>
+                   <Button
+                     variant="ghost"
+                     size="icon"
+-                    className="text-primary hover:bg-muted mt-2 h-full w-full"
++                    className="text-primary hover:bg-muted mt-2 h-full w-full max-lg:mt-0"
+                   >
+                     <Icons.GearSettings />
+                   </Button>

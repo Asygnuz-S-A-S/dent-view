@@ -14,6 +14,22 @@ const volverA = (() => {
   }
 })();
 
+// Móvil/tableta (< 1024 px, igual que el parche del visor): el logo se reduce a "←" y no se muestra el tour de
+// bienvenida (sus globos tapan la imagen). El tour se marca como ya visto; en escritorio no cambia nada.
+const style = document.createElement('style');
+style.textContent =
+  '@media (max-width: 1023px) { .dv-solo-escritorio { display: none !important; } ' +
+  '.dv-logo { min-width: 40px; min-height: 40px; justify-content: center; } .dv-flecha { font-size: 1.5rem !important; opacity: 1 !important; } }';
+document.head.appendChild(style);
+try {
+  if (window.matchMedia('(max-width: 1023px)').matches) {
+    const vistos = JSON.parse(localStorage.getItem('shownTours')) || [];
+    if (!vistos.includes('basicViewerTour')) localStorage.setItem('shownTours', JSON.stringify([...vistos, 'basicViewerTour']));
+  }
+} catch (e) {
+  // localStorage no disponible: el tour se muestra como en upstream.
+}
+
 window.config = {
   name: 'config/dent-view.js',
   routerBasename: '/visor',
@@ -30,9 +46,16 @@ window.config = {
     createLogoComponentFn: function (React) {
       return React.createElement(
         'a',
-        { href: volverA, target: '_self', title: 'Volver a dent-view', className: 'flex items-center gap-2 text-white' },
-        React.createElement('span', { className: 'text-lg font-semibold' }, 'dent-view'),
-        React.createElement('span', { className: 'text-sm opacity-70' }, '← Volver')
+        {
+          href: volverA,
+          target: '_self',
+          title: 'Volver a dent-view',
+          'aria-label': 'Volver a dent-view',
+          className: 'dv-logo flex items-center gap-2 text-white',
+        },
+        React.createElement('span', { className: 'dv-solo-escritorio text-lg font-semibold' }, 'dent-view'),
+        React.createElement('span', { className: 'dv-flecha text-sm opacity-70' }, '←'),
+        React.createElement('span', { className: 'dv-solo-escritorio text-sm opacity-70' }, 'Volver')
       );
     },
   },
@@ -60,7 +83,10 @@ window.config = {
         qidoSupportsIncludeField: false,
         supportsReject: false,
         imageRendering: 'wadors',
-        thumbnailRendering: 'wadors',
+        // 'rendered': JPEG de ~50 KB desde Orthanc en vez de bajar el DICOM completo por miniatura (requiere ?accept= en acceso.ts).
+        thumbnailRendering: 'rendered',
+        // 'fetch': GET con cookie del endpoint /rendered (la estrategia por defecto pide multipart y Orthanc responde 400).
+        thumbnailRequestStrategy: 'fetch',
         enableStudyLazyLoad: true,
         supportsFuzzyMatching: false,
         supportsWildcard: true,

@@ -15,6 +15,18 @@ describe("extraerEstudioUid", () => {
     expect(extraerEstudioUid(`/dicom-web/studies?StudyInstanceUID=${u}&includefield=00100030&limit=10`)).toBe(u);
   });
 
+  it("miniatura rendered: acepta ?accept= y ?viewport= solo con el UID del estudio y no abre otros estudios", () => {
+    const r = `/dicom-web/studies/${UID}/series/1.2/instances/1.3/rendered`;
+    expect(extraerEstudioUid(`${r}?accept=image/jpeg`)).toBe(UID);
+    expect(extraerEstudioUid(`${r}?accept=image%2Fjpeg`)).toBe(UID); // así lo codifica dicomweb-client
+    expect(extraerEstudioUid(`${r}%2f..%2fx?accept=image%2Fjpeg`)).toBeNull(); // el %2f en el path sigue rechazado
+    expect(extraerEstudioUid(`${r}?accept=image/jpeg&StudyInstanceUID=1.2.3`)).toBeNull(); // contradictorio
+    expect(extraerEstudioUid(`/dicom-web/studies?accept=image/jpeg&StudyInstanceUID=1.2.3`)).toBe("1.2.3"); // el control por centro decide: otro centro -> 403
+    expect(extraerEstudioUid(`${r}?viewport=256%2C256`)).toBe(UID);
+    expect(extraerEstudioUid(`${r}?viewport=256%2C256&00100020=1`)).toBeNull(); // otros filtros siguen fuera
+    expect(decidirAccesoVisor({ ...base, uid: extraerEstudioUid(`/dicom-web/studies?accept=image/jpeg&StudyInstanceUID=1.2.3`), estudio: null })).toBe(403);
+  });
+
   it("lee el UID del path", () => {
     expect(extraerEstudioUid(`/dicom-web/studies/${UID}/series/1.2/metadata`)).toBe(UID);
     expect(extraerEstudioUid(`/dicom-web/studies/${UID}`)).toBe(UID);

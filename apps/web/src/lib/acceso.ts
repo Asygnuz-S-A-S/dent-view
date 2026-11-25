@@ -6,13 +6,14 @@ export type EstudioAcceso = { organizationId: string; doctorRemitenteId: string 
 
 const UID = /^[0-9]+(\.[0-9]+)*$/;
 const RUTA_ESTUDIO = /^\/dicom-web\/studies\/([^/]+)(?:\/|$)/;
-// Lista blanca de parámetros QIDO: cualquier otro filtro (p. ej. el alias 0020000D) podría ampliar la búsqueda a otros estudios.
-const PARAMETROS_PERMITIDOS = new Set(["StudyInstanceUID", "SeriesInstanceUID", "includefield", "limit", "offset", "fuzzymatching"]);
+// Lista blanca de parámetros QIDO (`accept` y `viewport` solo fijan formato y tamaño de la miniatura /rendered; no filtran): cualquier otro filtro (p. ej. el alias 0020000D) podría ampliar la búsqueda a otros estudios.
+const PARAMETROS_PERMITIDOS = new Set(["StudyInstanceUID", "SeriesInstanceUID", "includefield", "limit", "offset", "fuzzymatching", "accept", "viewport"]);
 
 /** UID del estudio desde el path `/dicom-web/studies/{uid}/…` o la query `StudyInstanceUID=`. */
 export function extraerEstudioUid(uri: string | null | undefined): string | null {
   // Rechaza separadores codificados y segmentos . / .. para que nadie autorice un UID y lea otro.
-  if (!uri || /%(2f|5c|2e)/i.test(uri) || /\/\.{1,2}(\/|\?|$)/.test(uri)) return null;
+  // El %2F de la query (p. ej. accept=image%2Fjpeg) es inofensivo: solo el path se revisa.
+  if (!uri || /%(2f|5c|2e)/i.test(uri.split("?")[0]) || /\/\.{1,2}(\/|\?|$)/.test(uri)) return null;
   let url: URL;
   try {
     url = new URL(uri, "http://x");
