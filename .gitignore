@@ -27,3 +27,7 @@ docs/qa/evidencias/
 *.dicom
 *.ply
 *.stl
+
+# Demo: entorno virtual de Python
+apps/web/scripts/demo/.venv/
+apps/web/scripts/demo/__pycache__/

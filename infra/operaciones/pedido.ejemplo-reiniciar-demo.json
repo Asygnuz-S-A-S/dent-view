@@ -1,0 +1,9 @@
+{
+  "operacion": "reiniciar-demo",
+  "confirmar": "REINICIAR-DEMO",
+  "parametros": {
+    "admin_correo": "admin@ejemplo.com",
+    "admin_nombre": "Admin Demo",
+    "admin_hash": "<hash generado localmente, nunca la clave en claro>"
+  }
+}

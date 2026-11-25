@@ -1,0 +1,76 @@
+# Chequeo de salud de producción cada 15 min. Si falla, el job falla (GitHub avisa por correo a quien tenga notificaciones de Actions)
+# y tras 2 chequeos seguidos fallidos abre/actualiza UN issue "Caída de producción" (se cierra solo al recuperarse).
+# Sin concurrency compartida con desplegar a propósito: un grupo común podría descartar un despliegue pendiente. Durante un despliegue
+# puede haber 1 falla transitoria; por eso el issue exige 2 seguidas.
+name: Salud
+
+on:
+  schedule:
+    - cron: '*/15 * * * *'
+  workflow_dispatch:
+
+concurrency:
+  group: salud
+  cancel-in-progress: true
+
+permissions:
+  contents: read
+  actions: read
+  issues: write
+
+env:
+  DOMINIO: dentview.asygnuz.com
+
+jobs:
+  chequear:
+    if: github.repository == 'Asygnuz-S-A-S/dent-view'
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Chequeo
+        id: chk
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          fallas=0
+          probar() { # $1=ruta
+            for i in 1 2 3; do
+              code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 5 "https://$DOMINIO$1" || true)
+              [ "$code" = "200" ] && { echo "OK   $1 -> 200"; return 0; }
+              sleep 5
+            done
+            echo "FALLO $1 -> $code (esperado 200 en menos de 5 s)"; fallas=$((fallas+1))
+          }
+          probar /ingresar
+          probar /visor/
+          dias=$(infra/operaciones/dias-certificado.sh "$DOMINIO" 2>/dev/null || echo "")
+          if [[ "$dias" =~ ^-?[0-9]+$ ]] && [ "$dias" -gt 14 ]; then echo "OK   certificado: $dias días"
+          else echo "FALLO certificado: '${dias:-no se pudo leer}' días (mínimo 15)"; fallas=$((fallas+1)); fi
+          { echo "## Salud de producción"; echo "Fallas: $fallas"; } >> "$GITHUB_STEP_SUMMARY"
+          [ "$fallas" -eq 0 ]
+
+      - name: Issue de caída
+        if: steps.chk.outcome == 'failure'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          previo=$(gh run list --workflow salud.yml --status completed --limit 1 --json conclusion --jq '.[0].conclusion // ""' || true)
+          [ "$previo" = "failure" ] || { echo "Primera falla; el issue se abre si la siguiente también falla."; exit 0; }
+          cuerpo="Dos chequeos seguidos fallaron. Detalle: $GITHUB_SERVER_URL/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID"
+          n=$(gh issue list --state open --search 'in:title "Caída de producción"' --json number --jq '.[0].number // empty' || true)
+          if [ -n "$n" ]; then gh issue comment "$n" --body "$cuerpo" || true
+          else gh issue create --title "Caída de producción" --body "$cuerpo" || true; fi
+
+      - name: Cerrar issue al recuperarse
+        if: steps.chk.outcome == 'success'
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          n=$(gh issue list --state open --search 'in:title "Caída de producción"' --json number --jq '.[0].number // empty' || true)
+          [ -z "$n" ] || gh issue close "$n" --comment "Producción respondió bien de nuevo ($GITHUB_RUN_ID)." || true
+
+      - name: Fallar si hubo caída
+        if: steps.chk.outcome == 'failure'
+        run: exit 1

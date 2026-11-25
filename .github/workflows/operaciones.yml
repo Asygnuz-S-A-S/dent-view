@@ -1,0 +1,320 @@
+# Operaciones puntuales en producción desde el repo: diagnostico | respaldo | reiniciar-demo.
+# Disparadores: pestaña Actions (workflow_dispatch), un push a main que cambie infra/operaciones/pedido.json, o el respaldo diario.
+# Guía de uso, restauración e IAM: infra/operaciones/README.md.
+#
+# Contrato con el script de demo (apps/web/scripts/demo/index.ts, lo escribe otro agente), ejecutado en el runner con `npx tsx`:
+#   argumentos: --reset (borra y recarga todo) | --solo-datos (sin borrar; opcional)
+#   entorno:    DATABASE_URL (DUEÑO de la base, vía túnel SSH a 127.0.0.1:15432), ORTHANC_URL (http://127.0.0.1:18042),
+#               S3_ENDPOINT (http://127.0.0.1:19000), S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET_ESTUDIOS, S3_BUCKET_ORTHANC,
+#               BETTER_AUTH_SECRET, CIFRADO_SECRETO, ADMIN_EMAIL, ADMIN_NOMBRE, ADMIN_HASH, DEMO_CLAVE (opcional)
+#   Debe salir con código != 0 si falla y NO imprimir ninguna de esas variables.
+name: Operaciones
+
+on:
+  workflow_dispatch:
+    inputs:
+      operacion:
+        description: Operación a ejecutar
+        type: choice
+        options: [diagnostico, respaldo, reiniciar-demo]
+        default: diagnostico
+      confirmar:
+        description: 'Solo reiniciar-demo: escribe REINICIAR-DEMO (los parámetros salen de infra/operaciones/pedido.json)'
+        type: string
+        default: ''
+  push:
+    branches: [main]
+    paths:
+      - infra/operaciones/pedido.json
+  schedule:
+    - cron: '30 6 * * *' # respaldo diario: 06:30 UTC = 01:30 Bogotá
+
+# Mismo grupo que desplegar: nunca corren a la vez. Ojo: GitHub conserva un solo pendiente por grupo.
+concurrency:
+  group: desplegar
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  id-token: write
+
+env:
+  PROYECTO: dent-view-asygnuz
+  ZONA: us-east1-b
+  VM: dent-view
+  DOMINIO: dentview.asygnuz.com
+
+jobs:
+  operar:
+    if: github.repository == 'Asygnuz-S-A-S/dent-view'
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - uses: actions/checkout@v4
+
+      # Primer paso: enmascara hash y clave del pedido ANTES de cualquier otra cosa, y valida todo con regex estrictas.
+      # Nada del pedido se interpola en comandos: viaja por variables de entorno y los pasos posteriores lo releen del archivo.
+      - name: Leer y validar el pedido
+        id: pedido
+        env:
+          IN_OP: ${{ inputs.operacion }}
+          IN_CONF: ${{ inputs.confirmar }}
+        run: |
+          set -euo pipefail
+          P=infra/operaciones/pedido.json
+          if [ -f "$P" ] && jq -e . "$P" >/dev/null 2>&1; then
+            for k in admin_hash demo_clave; do
+              v=$(jq -r --arg k "$k" '.parametros[$k] // empty | tostring' "$P")
+              if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+            done
+          fi
+          [ "$GITHUB_REF" = "refs/heads/main" ] || { echo "::error::Solo se opera desde main (ref: $GITHUB_REF)"; exit 1; }
+          case "$GITHUB_EVENT_NAME" in
+            schedule) OP=respaldo; CONF="" ;;
+            workflow_dispatch) OP=$IN_OP; CONF=$IN_CONF ;;
+            push)
+              jq -e . "$P" >/dev/null || { echo "::error::pedido.json no es JSON válido"; exit 1; }
+              OP=$(jq -r '.operacion // empty' "$P"); CONF=$(jq -r '.confirmar // empty' "$P") ;;
+            *) echo "::error::Evento no soportado"; exit 1 ;;
+          esac
+          [[ "$OP" =~ ^(diagnostico|respaldo|reiniciar-demo)$ ]] || { echo "::error::operacion inválida"; exit 1; }
+          if [ "$OP" = "reiniciar-demo" ]; then
+            [ "$CONF" = "REINICIAR-DEMO" ] || { echo "::error::Para reiniciar-demo, confirmar debe ser exactamente REINICIAR-DEMO"; exit 1; }
+            jq -e . "$P" >/dev/null || { echo "::error::pedido.json no es JSON válido"; exit 1; }
+            c=$(jq -r '.parametros.admin_correo // empty' "$P")
+            n=$(jq -r '.parametros.admin_nombre // empty' "$P")
+            h=$(jq -r '.parametros.admin_hash // empty' "$P")
+            d=$(jq -r '.parametros.demo_clave // empty' "$P")
+            [[ "$c" =~ ^[A-Za-z0-9._%+-]+@[A-Za-z0-9.-]+\.[A-Za-z]{2,}$ ]] || { echo "::error::admin_correo inválido"; exit 1; }
+            [[ "$n" =~ ^[[:alnum:]\ .\'-]{1,80}$ ]] || { echo "::error::admin_nombre inválido"; exit 1; }
+            [[ "$h" =~ ^[A-Za-z0-9\$./+=:_-]{20,255}$ ]] || { echo "::error::admin_hash inválido o ausente"; exit 1; }
+            [ -z "$d" ] || [[ "$d" =~ ^[A-Za-z0-9._!@#%+=-]{8,64}$ ]] || { echo "::error::demo_clave inválida"; exit 1; }
+          fi
+          echo "op=$OP" >> "$GITHUB_OUTPUT"
+          echo "Operación: $OP (evento: $GITHUB_EVENT_NAME, commit: $GITHUB_SHA)"
+
+      - uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: projects/187757273619/locations/global/workloadIdentityPools/github/providers/github-oidc
+          service_account: github-deploy@dent-view-asygnuz.iam.gserviceaccount.com
+
+      - uses: google-github-actions/setup-gcloud@v2
+
+      # ---------------------------------------------------------------- diagnostico
+      - name: Diagnóstico
+        if: steps.pedido.outputs.op == 'diagnostico'
+        run: |
+          set -uo pipefail
+          F=infra/operaciones/filtrar-secretos.sh
+          {
+            gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet \
+              --command 'sudo bash -s' -- -T <<'REMOTO'
+          cd /opt/dent-view/infra
+          PSQL="docker exec -i dent-view-postgres-1 psql -U dentview -d dentview"
+          echo "== Contenedores =="; docker ps -a --filter name=dent-view --format 'table {{.Names}}\t{{.Image}}\t{{.Status}}'
+          echo "== Imágenes =="; docker images --format 'table {{.Repository}}\t{{.Tag}}\t{{.CreatedSince}}\t{{.Size}}' | head -30
+          echo "== Disco =="; df -h /
+          echo "== Volúmenes docker =="; docker system df -v | awk '/^Local Volumes/{p=1} /^Build cache/{p=0} p'
+          echo "== /opt/backups =="; ls -lh /opt/backups 2>&1 | tail -n 12
+          echo "== Migraciones (10 últimas) =="; $PSQL -Atc 'select migration_name from _prisma_migrations order by started_at desc limit 10' 2>&1
+          echo "== Variables en .env (solo existencia) =="
+          for k in CRON_SECRET MIGRATE_DATABASE_URL; do
+            if grep -q "^$k=." .env; then echo "$k: true"; else echo "$k: false"; fi
+          done
+          for c in web worker migrador; do echo "== Logs $c (30) =="; docker logs --tail 30 "dent-view-$c-1" 2>&1; done
+          REMOTO
+          } 2>&1 | "$F"
+          [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "::error::Falló el diagnóstico remoto"; exit 1; }
+          echo "== Conteos =="
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet \
+            --command 'sudo docker exec -i dent-view-postgres-1 psql -U dentview -d dentview -A' -- -T < infra/operaciones/conteos.sql 2>&1 | "$F"
+          echo "== Certificado TLS =="
+          echo "Días para vencer: $(infra/operaciones/dias-certificado.sh "$DOMINIO")"
+
+      # ---------------------------------------------------------------- respaldo (también precede a reiniciar-demo)
+      - name: Respaldo - pg_dump en la VM
+        id: dump
+        if: steps.pedido.outputs.op == 'respaldo' || steps.pedido.outputs.op == 'reiniciar-demo'
+        run: |
+          set -uo pipefail
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet \
+            --command 'sudo bash -s' -- -T <<'REMOTO' 2>&1 | tee "$RUNNER_TEMP/respaldo.log"
+          umask 077
+          DIR=/opt/backups
+          mkdir -p "$DIR"; chmod 700 "$DIR"
+          ORT=$(grep -E '^ORTHANC_DB=' /opt/dent-view/infra/.env | tail -1 | cut -d= -f2- | tr -d '"')
+          [[ "${ORT:-}" =~ ^[a-z0-9_]+$ ]] || ORT=orthanc
+          TS=$(date -u +%Y%m%d-%H%M%S)
+          rc=0
+          volcar() {
+            local base=$1 tmp="$DIR/$1-$TS.dump.part" fin="$DIR/$1-$TS.dump"
+            if docker exec dent-view-postgres-1 pg_dump -U dentview -Fc "$base" > "$tmp" \
+               && docker exec -i dent-view-postgres-1 pg_restore --list < "$tmp" > /dev/null; then
+              mv "$tmp" "$fin"
+              echo "PASO $base $(du -h "$fin" | cut -f1) $(basename "$fin")"
+              ls -1t "$DIR/$base-"*.dump | tail -n +15 | xargs -r rm -f
+            else
+              rm -f "$tmp"; echo "FALLO $base"; rc=1
+            fi
+          }
+          volcar dentview
+          volcar "$ORT"
+          # Roles y claves del clúster (los dumps de cada base no los traen); archivo 600 dentro de la carpeta 700.
+          if docker exec dent-view-postgres-1 pg_dumpall -U dentview --globals-only > "$DIR/globales-$TS.sql"; then
+            echo "PASO globales $(du -h "$DIR/globales-$TS.sql" | cut -f1) globales-$TS.sql"
+            ls -1t "$DIR"/globales-*.sql | tail -n +15 | xargs -r rm -f
+          else
+            rm -f "$DIR/globales-$TS.sql"; echo "AVISO globales no se pudo respaldar"
+          fi
+          echo "Retención: últimos 14 por tipo. Espacio:"; df -h "$DIR" | tail -1
+          exit $rc
+          REMOTO
+          [ "${PIPESTATUS[0]}" -eq 0 ]
+
+      # Falla sola (permiso IAM faltante, cuota) sin romper el pg_dump ya hecho; el resumen final la marca FALLO.
+      - name: Respaldo - snapshot del disco de arranque
+        id: snap
+        if: steps.pedido.outputs.op == 'respaldo' || steps.pedido.outputs.op == 'reiniciar-demo'
+        continue-on-error: true
+        run: |
+          set -uo pipefail
+          falla() { echo "::error title=Snapshot::$1 Revisa los roles IAM de github-deploy (infra/operaciones/README.md)."; exit 1; }
+          DISCO=$(gcloud compute instances describe "$VM" --project="$PROYECTO" --zone="$ZONA" \
+            --flatten='disks[]' --filter='disks.boot=true' --format='value(disks.source.basename())') || falla "No se pudo leer la VM."
+          NOMBRE="dentview-$(date -u +%Y%m%d-%H%M)"
+          gcloud compute disks snapshot "$DISCO" --project="$PROYECTO" --zone="$ZONA" --snapshot-names="$NOMBRE" \
+            --labels=origen=operaciones-gha,vm="$VM" --description="Respaldo automático (operaciones.yml)" \
+            || falla "No se pudo crear el snapshot."
+          echo "Snapshot creado: $NOMBRE"
+          gcloud compute snapshots describe "$NOMBRE" --project="$PROYECTO" --format='value(diskSizeGb,storageBytes)' || true
+          VIEJOS=$(gcloud compute snapshots list --project="$PROYECTO" \
+            --filter="labels.origen=operaciones-gha AND creationTimestamp<'-P14D'" --format='value(name)') \
+            || falla "No se pudo listar snapshots."
+          for s in $VIEJOS; do
+            gcloud compute snapshots delete "$s" --project="$PROYECTO" --quiet || falla "No se pudo borrar el snapshot $s."
+            echo "Borrado (más de 14 días): $s"
+          done
+
+      # ---------------------------------------------------------------- reiniciar-demo (destructivo)
+      # Solo llega aquí si: rama main, confirmar exacto (validado arriba) y el pg_dump previo terminó bien.
+      - uses: actions/setup-node@v4
+        if: steps.pedido.outputs.op == 'reiniciar-demo' && steps.dump.outcome == 'success'
+        with:
+          node-version: 24
+          cache: npm
+
+      - name: Instalar dependencias y cliente Prisma
+        if: steps.pedido.outputs.op == 'reiniciar-demo' && steps.dump.outcome == 'success'
+        run: |
+          npm ci --no-audit --no-fund
+          cd packages/db && DATABASE_URL=postgresql://x:x@localhost:5432/x npx prisma generate
+
+      - name: Python para generar los DICOM sintéticos
+        if: steps.pedido.outputs.op == 'reiniciar-demo' && steps.dump.outcome == 'success'
+        run: |
+          python3 -m venv apps/web/scripts/demo/.venv
+          apps/web/scripts/demo/.venv/bin/pip install --quiet pydicom numpy
+          fc-list | grep -qi dejavu || sudo apt-get install -y --no-install-recommends fonts-dejavu-core >/dev/null
+
+      - name: Reiniciar demo (BORRA datos de producción)
+        id: demo
+        if: steps.pedido.outputs.op == 'reiniciar-demo' && steps.dump.outcome == 'success'
+        run: |
+          set -euo pipefail
+          P=infra/operaciones/pedido.json
+          for k in admin_hash demo_clave; do
+            v=$(jq -r --arg k "$k" '.parametros[$k] // empty | tostring' "$P"); if [ -n "$v" ]; then echo "::add-mask::$v"; fi
+          done
+          vm_ssh() { gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command "$1" -- -T; }
+          conteos() { vm_ssh 'sudo docker exec -i dent-view-postgres-1 psql -U dentview -d dentview -A' < infra/operaciones/conteos.sql; }
+
+          echo "== Conteos ANTES =="; conteos
+
+          # IPs de los contenedores (una por línea, en el orden pedido) y túnel SSH; muere al terminar el job.
+          IPS=$(vm_ssh "sudo docker inspect -f '{{range .NetworkSettings.Networks}}{{.IPAddress}}{{end}}' dent-view-postgres-1 dent-view-orthanc-1 dent-view-minio-1")
+          mapfile -t IP <<<"$IPS"
+          for i in 0 1 2; do [[ "${IP[$i]:-}" =~ ^[0-9]{1,3}(\.[0-9]{1,3}){3}$ ]] || { echo "::error::No se obtuvo la IP del contenedor $i"; exit 1; }; done
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet -- -N -f -o ExitOnForwardFailure=yes \
+            -L "15432:${IP[0]}:5432" -L "18042:${IP[1]}:8042" -L "19000:${IP[2]}:9000"
+          trap 'pkill -f "15432:" || true' EXIT
+          for i in $(seq 1 30); do (exec 3<>/dev/tcp/127.0.0.1/15432) 2>/dev/null && break; sleep 1; done
+
+          # Credenciales: se leen en la VM, se enmascaran al instante y nunca se imprimen.
+          CRED=$(vm_ssh 'sudo bash -s' <<'REMOTO'
+          cd /opt/dent-view/infra
+          for k in MIGRATE_DATABASE_URL S3_ACCESS_KEY S3_SECRET_KEY S3_BUCKET_ESTUDIOS S3_BUCKET_ORTHANC BETTER_AUTH_SECRET CIFRADO_SECRETO; do
+            grep -m1 "^$k=" .env || true
+          done
+          REMOTO
+          )
+          while IFS= read -r l; do
+            k=${l%%=*}; v=${l#*=}; v=${v%\"}; v=${v#\"}
+            case "$k" in
+              MIGRATE_DATABASE_URL|S3_ACCESS_KEY|S3_SECRET_KEY|S3_BUCKET_ESTUDIOS|S3_BUCKET_ORTHANC|BETTER_AUTH_SECRET|CIFRADO_SECRETO)
+                if [ -n "$v" ]; then echo "::add-mask::$v"; fi; export "$k=$v" ;;
+            esac
+          done <<<"$CRED"
+          [ -n "${MIGRATE_DATABASE_URL:-}" ] || { echo "::error::Falta MIGRATE_DATABASE_URL en la VM"; exit 1; }
+          clave=$(sed -E 's#^[a-z]+://[^:]+:([^@]*)@.*#\1#' <<<"$MIGRATE_DATABASE_URL"); if [ -n "$clave" ]; then echo "::add-mask::$clave"; fi
+          export DATABASE_URL=$(sed -E 's#@[^/]+/#@127.0.0.1:15432/#' <<<"$MIGRATE_DATABASE_URL")
+          echo "::add-mask::$DATABASE_URL"
+          unset MIGRATE_DATABASE_URL
+          export ORTHANC_URL=http://127.0.0.1:18042 S3_ENDPOINT=http://127.0.0.1:19000
+          export ADMIN_EMAIL=$(jq -r '.parametros.admin_correo' "$P") ADMIN_NOMBRE=$(jq -r '.parametros.admin_nombre' "$P")
+          export ADMIN_HASH=$(jq -r '.parametros.admin_hash' "$P")
+          d=$(jq -r '.parametros.demo_clave // empty' "$P"); [ -z "$d" ] || export DEMO_CLAVE=$d
+
+          echo "== Ejecutando scripts/demo/index.ts --reset (admin: $ADMIN_EMAIL) =="
+          (cd apps/web && npx tsx scripts/demo/index.ts --reset)
+
+          echo "== Conteos DESPUÉS =="; conteos
+          {
+            echo "### Reinicio de demo"
+            echo "- Se ejecutó \`scripts/demo/index.ts --reset\` contra producción: se borraron y recargaron los datos de la base \`dentview\` (y lo que el script elimine en Orthanc/MinIO)."
+            echo "- Admin cargado: \`$ADMIN_EMAIL\`. Respaldo previo verificado: ver resumen de respaldo."
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Exentar de MFA solo a los administradores de la demo y recrear la web
+        if: steps.demo.outcome == 'success'
+        run: |
+          # Los 4 admin_tenant demo no usan MFA (datos ficticios); el superadmin y cualquier centro real SIEMPRE lo exigen.
+          EXENTOS="admin@lumia.ejemplo.invalid,admin@radia.ejemplo.invalid,admin@alejandro-restrepo.ejemplo.invalid,admin@orion-laboratorio.ejemplo.invalid"
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command "sudo bash -s '$EXENTOS'" -- -T <<'REMOTO'
+          set -euo pipefail
+          cd /opt/dent-view/infra
+          if grep -q '^MFA_EXENTOS=' .env; then sed -i "s|^MFA_EXENTOS=.*|MFA_EXENTOS=$1|" .env; else echo "MFA_EXENTOS=$1" >> .env; fi
+          docker compose -f compose.yaml -f compose.produccion.yaml up -d web
+          echo "MFA_EXENTOS actualizado (solo cuentas demo) y web recreada"
+          REMOTO
+
+      - name: Smoke público
+        if: steps.demo.outcome == 'success'
+        run: |
+          code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 10 "https://$DOMINIO/ingresar" || true)
+          echo "GET /ingresar -> $code"
+          [ "$code" = "200" ] || { echo "::error::/ingresar no respondió 200"; exit 1; }
+          echo "::warning::El login del admin NO se pudo probar desde aquí: pruébalo a mano."
+
+      # ---------------------------------------------------------------- resumen
+      - name: Resumen
+        if: always()
+        env:
+          OP: ${{ steps.pedido.outputs.op }}
+          DUMP: ${{ steps.dump.outcome }}
+          SNAP: ${{ steps.snap.outcome }}
+          DEMO: ${{ steps.demo.outcome }}
+        run: |
+          marca() { case "$1" in success) echo PASO ;; skipped|"") echo OMITIDO ;; *) echo FALLO ;; esac; }
+          {
+            echo "## Operación: ${OP:-inválida}"
+            if [ "$OP" = respaldo ] || [ "$OP" = reiniciar-demo ]; then
+              echo "| Parte | Resultado |"; echo "|---|---|"
+              echo "| pg_dump (dentview, orthanc, globales) | $(marca "$DUMP") |"
+              echo "| Snapshot del disco | $(marca "$SNAP") |"
+              [ "$OP" = reiniciar-demo ] && echo "| Reinicio de demo | $(marca "$DEMO") |"
+              echo; echo '```'; grep -E '^(PASO|FALLO|AVISO|Retención)' "$RUNNER_TEMP/respaldo.log" 2>/dev/null || true; echo '```'
+            fi
+          } >> "$GITHUB_STEP_SUMMARY"
+          if [ "$DUMP" = failure ] || [ "$SNAP" = failure ] || [ "$DEMO" = failure ]; then
+            echo "::error::Alguna parte falló: ver el resumen"; exit 1
+          fi
