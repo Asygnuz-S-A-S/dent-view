@@ -434,8 +434,11 @@ test.describe("E) visor", () => {
     await visor.keyboard.press("ArrowUp");
     await expect.poll(() => indiceCorte(visor).innerText(), { message: "la tecla no cambio de corte" }).not.toBe(trasRueda);
     await foto(visor, "E-visor-cbct-corte");
-    const malas = dicom.filter((d) => d.status === 401 || d.status === 403 || d.status >= 500);
-    expect(malas, `respuestas /dicom-web con 401/403/5xx: ${JSON.stringify(malas)}; errores de consola: ${consola.join(" | ")}`).toEqual([]);
+    // Esperado por diseño: OHIF consulta "otros estudios del paciente" (QIDO por PatientID) y el control de acceso lo rechaza (403) para
+    // que un doctor o paciente no vea estudios ajenos; cualquier otro 401/403/5xx sí es un fallo.
+    const esperada = (d: { status: number; url: string }) => d.status === 403 && /\/dicom-web\/studies\?.*00100020=/.test(d.url);
+    const malas = dicom.filter((d) => (d.status === 401 || d.status === 403 || d.status >= 500) && !esperada(d));
+    expect(malas, `respuestas /dicom-web con 401/403/5xx: ${JSON.stringify(malas)}`).toEqual([]);
     expect(dicom.length, "no hubo ninguna llamada a /dicom-web").toBeGreaterThan(0);
   });
 
