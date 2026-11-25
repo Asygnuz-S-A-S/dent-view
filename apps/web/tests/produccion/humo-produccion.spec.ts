@@ -828,6 +828,8 @@ test.describe("F3) Clinica Aurora: valoracion virtual y CRM", () => {
 test.describe("G) correo de recuperacion", () => {
   test.use({ storageState: SIN_SESION });
   test("'olvide mi contrasena' para el dueno responde bien (la bandeja la confirma el coordinador)", async ({ page }) => {
+    // Cada corrida enviaba un correo real al dueño: ahora solo con ENVIAR_CORREO_PRUEBA=1.
+    test.skip(process.env.ENVIAR_CORREO_PRUEBA !== "1", "Envía un correo real al dueño: activar con ENVIAR_CORREO_PRUEBA=1");
     test.setTimeout(240_000);
     await dormir(3_000);
     let status = 0;
