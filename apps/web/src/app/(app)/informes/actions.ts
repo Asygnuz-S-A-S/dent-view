@@ -91,7 +91,7 @@ export async function guardarCapturas(id: string, entrada: unknown): Promise<R> 
   const ids = n.capturas.flatMap((c) => (c.imagenId ? [c.imagenId] : []));
   const uids = n.capturas.flatMap((c) => (c.estudioUid ? [c.estudioUid] : []));
   const [imgs, ests] = await Promise.all([
-    ids.length ? prisma.imagenEstudio.count({ where: { id: { in: ids }, pacienteId: inf.pacienteId, ...filtroImagenes(org, ctx.usuario.id, ctx.rol) } }) : 0,
+    ids.length ? prisma.imagenEstudio.count({ where: { id: { in: ids }, pacienteId: inf.pacienteId, mime: { startsWith: "image/" }, ...filtroImagenes(org, ctx.usuario.id, ctx.rol) } }) : 0,
     uids.length ? prisma.estudio.count({ where: { studyInstanceUid: { in: uids }, organizationId: org, pacienteId: inf.pacienteId } }) : 0,
   ]);
   if (imgs !== new Set(ids).size || ests !== new Set(uids).size) return { error: "Alguna captura no pertenece a este paciente" };

@@ -1,6 +1,6 @@
 import { ETIQUETA_ESTADO_ORDEN, numeroOrden, VARIANTE_ESTADO_ORDEN } from "@/lib/ordenes";
 import { prisma } from "@dent-view/db";
-import { Box, ClipboardList, ClipboardPlus, Eye, History, Mail, Phone, PhoneCall, ScanLine, ShieldCheck, TriangleAlert, Wallet } from "lucide-react";
+import { Box, ClipboardList, ClipboardPlus, Eye, History, Mail, Phone, PhoneCall, ScanLine, ShieldCheck, TriangleAlert, Upload, Wallet } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
@@ -11,6 +11,7 @@ import { Consentimientos } from "@/components/pacientes/consentimientos";
 import { Antecedentes, ContactoPersona } from "@/components/pacientes/historia-clinica";
 import { EquipoTratante } from "@/components/pacientes/equipo-tratante";
 import { GaleriaImagenes } from "@/components/estudios/galeria-imagenes";
+import { ListaDocumentos } from "@/components/estudios/lista-documentos";
 import { FotoPaciente } from "@/components/pacientes/foto-paciente";
 import { HojaDeVida } from "@/components/pacientes/hoja-de-vida";
 import { CasoDialog } from "@/components/laboratorio/caso-dialog";
@@ -25,7 +26,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { registrarAcceso } from "@/lib/bitacora";
-import { filtroImagenes } from "@/lib/imagenes";
+import { cargarArchivos } from "@/lib/imagenes-datos";
 import { estadoVigente } from "@/lib/consentimientos";
 import { calcularAlertas, esMenor } from "@/lib/historia-clinica";
 import { calcularEdad } from "@/lib/pacientes";
@@ -153,10 +154,18 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
   const org = ctx.organizationId;
   const puedeGestionar = (GESTION as readonly string[]).includes(ctx.rol);
   await registrarAcceso(ctx, p.id, "ficha");
-  // Imágenes no DICOM del paciente (el doctor remitente solo ve las de sus órdenes/estudios); suben las clínicas, no el doctor.
-  const imagenes = await prisma.imagenEstudio.findMany({ where: { pacienteId: p.id, ...filtroImagenes(ctx.organizationId, ctx.usuario.id, ctx.rol) }, orderBy: { creadoEn: "desc" }, select: { id: true, titulo: true, nombreOriginal: true, mime: true, bytes: true } });
-  const galeria = (
-    <GaleriaImagenes pacienteId={p.id} imagenes={imagenes} puedeEditar={!esDoctor} ordenes={p.ordenes.map((o) => ({ id: o.id, etiqueta: numeroOrden(o.numero) }))} estudios={p.estudios.map((e) => ({ id: e.id, etiqueta: `${e.modalidad ?? "Estudio"} · ${fechaDeEstudio(e)}` }))} />
+  // Imágenes y documentos no DICOM del paciente (el doctor remitente solo ve los de sus órdenes/estudios); suben las clínicas, no el doctor.
+  const archivos = await cargarArchivos(ctx, { pacienteId: p.id });
+  const vista = (l: typeof archivos.todas) => l.map((d) => ({ id: d.id, titulo: d.titulo, nombreOriginal: d.nombreOriginal, mime: d.mime, bytes: d.bytes }));
+  const estudiosTab = (
+    <>
+      {!esDoctor && <div className="flex justify-end"><Button asChild size="sm"><Link href={`/cargar?pacienteId=${p.id}`}><Upload /> Cargar archivos</Link></Button></div>}
+      <GaleriaImagenes pacienteId={p.id} titulo="Fotografías" subida={false} imagenes={vista(archivos.fotos)} puedeEditar={!esDoctor} />
+      <GaleriaImagenes pacienteId={p.id} titulo="Radiografías e imágenes" imagenes={vista(archivos.radiografias)} puedeEditar={!esDoctor} ordenes={p.ordenes.map((o) => ({ id: o.id, etiqueta: numeroOrden(o.numero) }))} estudios={p.estudios.map((e) => ({ id: e.id, etiqueta: `${e.modalidad ?? "Estudio"} · ${fechaDeEstudio(e)}` }))} />
+      <section className="space-y-3" aria-label="Estudios DICOM"><h3 className="text-sm font-medium">Estudios DICOM ({p.estudios.length})</h3><TablaEstudios estudios={p.estudios} /></section>
+      <section className="space-y-3" aria-label="Órdenes y documentos"><h3 className="text-sm font-medium">Órdenes y documentos ({archivos.documentos.length})</h3>
+        <ListaDocumentos documentos={archivos.documentos} puedeEliminar={ctx.rol === "admin_tenant"} vacio="Sin órdenes médicas ni documentos adjuntos." /></section>
+    </>
   );
 
   // Equipo tratante: derivado de órdenes y estudios (ya acotados al doctor si es doctor) + lo registrado a mano.
@@ -228,7 +237,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
             <TabsTrigger value="ordenes">Órdenes ({p.ordenes.length})</TabsTrigger>
           </TabsList>
           <TabsContent value="resumen"><Card><CardHeader><CardTitle>Tu participación</CardTitle></CardHeader><CardContent>{equipo}</CardContent></Card></TabsContent>
-          <TabsContent value="estudios" className="space-y-6"><TablaEstudios estudios={p.estudios} />{galeria}</TabsContent>
+          <TabsContent value="estudios" className="space-y-6">{estudiosTab}</TabsContent>
           <TabsContent value="ordenes"><TablaOrdenes ordenes={p.ordenes} pacienteId={p.id} puedeGestionar={false} /></TabsContent>
         </Tabs>
       </div>
@@ -334,7 +343,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
           </Card>
         </TabsContent>
 
-        <TabsContent value="estudios" className="space-y-6"><TablaEstudios estudios={p.estudios} />{galeria}</TabsContent>
+        <TabsContent value="estudios" className="space-y-6">{estudiosTab}</TabsContent>
 
         <TabsContent value="ordenes"><TablaOrdenes ordenes={p.ordenes} pacienteId={p.id} puedeGestionar={puedeGestionar} /></TabsContent>
 

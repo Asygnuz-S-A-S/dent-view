@@ -2,7 +2,7 @@
 
 import {
   Building2, CalendarDays, Check, ChevronsUpDown, ClipboardList, House, LogOut, ScanLine, Settings2, ShieldCheck, HardDriveUpload, Plug,
-  Stethoscope, Tags, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch,
+  Stethoscope, Tags, Upload, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -41,6 +41,7 @@ const NAV = [
       { href: "/ordenes", label: "Órdenes", icon: ClipboardList, roles: TODOS },
       { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/estudios", label: "Estudios", icon: ScanLine, roles: TODOS },
+      { href: "/cargar", label: "Cargar estudios", icon: Upload, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/informes", label: "Informes", icon: FileText, roles: TODOS },
       { href: "/seguimiento", label: "Seguimiento", icon: PhoneCall, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/valoraciones", label: "Valoraciones virtuales", icon: Video, roles: ["admin_tenant", "recepcion", "especialista"] },

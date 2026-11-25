@@ -28,7 +28,7 @@ export const dynamic = "force-dynamic";
 async function capturasDelInforme(ctx: Awaited<ReturnType<typeof exigirContexto>>, informeId: string, pacienteId: string): Promise<[CapturaUI[], CapturaUI[]]> {
   const org = ctx.organizationId;
   const [imagenes, estudios, elegidas] = await Promise.all([
-    prisma.imagenEstudio.findMany({ where: { pacienteId, ...filtroImagenes(org, ctx.usuario.id, ctx.rol) }, orderBy: { creadoEn: "desc" }, select: { id: true, titulo: true, nombreOriginal: true } }),
+    prisma.imagenEstudio.findMany({ where: { pacienteId, mime: { startsWith: "image/" }, ...filtroImagenes(org, ctx.usuario.id, ctx.rol) }, orderBy: { creadoEn: "desc" }, select: { id: true, titulo: true, nombreOriginal: true } }),
     prisma.estudio.findMany({ where: { pacienteId, organizationId: org }, orderBy: { creadoEn: "desc" }, select: { id: true, studyInstanceUid: true, orthancId: true, modalidad: true, descripcion: true } }),
     prisma.informeImagen.findMany({ where: { informeId, organizationId: org }, orderBy: { orden: "asc" } }),
   ]);

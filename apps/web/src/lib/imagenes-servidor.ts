@@ -15,6 +15,13 @@ export async function contextoImagenes(escritura: boolean) {
   return clinico || (!escritura && ctx.rol === "doctor_remitente") ? ctx : null;
 }
 
+/** Carga de archivos: personal clínico, o doctor remitente (el llamador lo acota a la orden médica de sus propias órdenes). */
+export async function contextoCarga() {
+  const ctx = await contextoActivo();
+  if (!ctx || ctx.usuario.debeCambiarClave) return null;
+  return (CLINICOS as readonly string[]).includes(ctx.rol) || ctx.rol === "doctor_remitente" ? ctx : null;
+}
+
 // La cookie de sesión es SameSite=Lax; además se exige mismo origen en las escrituras.
 export function mismoOrigen(req: Request) {
   const origen = req.headers.get("origin");

@@ -28,10 +28,10 @@ test("subir una imagen JPG sintética, verla en el modal y descargarla", async (
   const jpg = await sharp({ create: { width: 1200, height: 800, channels: 3, background: "#2a6f97" } }).jpeg().toBuffer();
   // Un archivo con extensión .jpg pero contenido falso se rechaza por su firma real.
   await page.getByTestId("subir-imagenes").setInputFiles({ name: "falso.jpg", mimeType: "image/jpeg", buffer: Buffer.from("esto no es una imagen") });
-  await expect(page.getByText(/falso\.jpg: Solo se aceptan/)).toBeVisible();
+  await expect(page.getByText(/falso\.jpg: Formato no reconocido/)).toBeVisible();
   await page.getByTestId("subir-imagenes").setInputFiles({ name: "panoramica-sintetica.jpg", mimeType: "image/jpeg", buffer: jpg });
   await expect(page.getByText("Imagen subida")).toBeVisible();
-  await expect(page.getByRole("heading", { name: "Imágenes (1)" })).toBeVisible();
+  await expect(page.getByRole("heading", { name: "Radiografías e imágenes (1)" })).toBeVisible();
 
   await page.getByRole("button", { name: /panoramica-sintetica\.jpg/ }).click();
   const modal = page.getByRole("dialog");

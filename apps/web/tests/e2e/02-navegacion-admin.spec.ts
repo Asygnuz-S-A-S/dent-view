@@ -6,7 +6,7 @@ test.use({ storageState: authFile("admin") });
 // Rutas del menú lateral del admin (app-sidebar.tsx) + subrutas de listado. radex-demo es CENTRO_RADIOLOGICO: /laboratorio no existe para ese tipo (404, ver 15-tipos-centro).
 const RUTAS: [string, string][] = [
   ["/inicio", "Buen"], ["/pacientes", "Pacientes"], ["/ordenes", "Órdenes"], ["/agenda", "Agenda"],
-  ["/estudios", "Estudios"], ["/informes", "Informes"], ["/seguimiento", "Seguimiento"],
+  ["/estudios", "Estudios"], ["/cargar", "Cargar"], ["/informes", "Informes"], ["/seguimiento", "Seguimiento"],
   ["/doctores", "Doctores"], ["/seguimiento-doctores", "Seguimiento"], ["/facturacion", "Facturación"],
   ["/cartera", "Cartera"], ["/reportes", "Reportes"], ["/catalogo", "Catálogo"], ["/usuarios", "Usuarios"],
   ["/ajustes", "Salas"], ["/notificaciones", "Notificaciones"], ["/proteccion-datos", "Protección"],

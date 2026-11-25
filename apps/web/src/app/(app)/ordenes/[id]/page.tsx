@@ -1,5 +1,5 @@
 import { prisma } from "@dent-view/db";
-import { CalendarDays, CalendarPlus, Eye, Receipt, TriangleAlert } from "lucide-react";
+import { CalendarDays, CalendarPlus, Eye, Receipt, TriangleAlert, Upload } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { BadgeCita, BadgeOrden } from "@/components/comunes/estado-badge";
@@ -7,6 +7,9 @@ import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 import { AlertasClinicas } from "@/components/pacientes/alertas-clinicas";
 import { CrearInformeBoton } from "@/components/informes/crear-informe-boton";
+import { AdjuntarOrden } from "@/components/estudios/adjuntar-orden";
+import { ListaDocumentos } from "@/components/estudios/lista-documentos";
+import { cargarArchivos } from "@/lib/imagenes-datos";
 import { EstudiosOrden } from "@/components/estudios/estudios-orden";
 import { AccionesOrden } from "@/components/ordenes/acciones-orden";
 import { Button } from "@/components/ui/button";
@@ -56,6 +59,7 @@ export default async function DetalleOrden({ params }: { params: Promise<{ id: s
   const disponibles = puedeGestionar && orden.estado !== "CANCELADA"
     ? await prisma.estudio.findMany({ where: { organizationId: ctx.organizationId, pacienteId: orden.pacienteId, ordenId: null }, orderBy: { creadoEn: "desc" } })
     : [];
+  const archivos = await cargarArchivos(ctx, { ordenId: orden.id });
   const nombreEstudio = (e: { descripcion: string | null; modalidad: string | null }) => e.descripcion ?? e.modalidad ?? "Estudio";
   const alertas = verClinica
     ? calcularAlertas(contexto, alergias, enfermedades)
@@ -140,6 +144,17 @@ export default async function DetalleOrden({ params }: { params: Promise<{ id: s
           <CardContent className="whitespace-pre-wrap text-sm">{orden.observaciones}</CardContent>
         </Card>
       )}
+
+      <Card>
+        <CardHeader className="flex-row flex-wrap items-center justify-between gap-2">
+          <CardTitle>Documentos adjuntos ({archivos.todas.length})</CardTitle>
+          <div className="flex gap-2">
+            {puedeGestionar && orden.estado !== "CANCELADA" && <Button asChild size="sm" variant="outline"><Link href={`/cargar?pacienteId=${orden.pacienteId}&ordenId=${orden.id}`}><Upload /> Cargar archivos</Link></Button>}
+            {esDoctor && orden.estado !== "CANCELADA" && <AdjuntarOrden pacienteId={orden.pacienteId} ordenId={orden.id} />}
+          </div>
+        </CardHeader>
+        <CardContent><ListaDocumentos documentos={archivos.todas} puedeEliminar={ctx.rol === "admin_tenant"} vacio="Aún no hay orden médica ni archivos adjuntos a esta orden." /></CardContent>
+      </Card>
 
       <div className="grid gap-6 md:grid-cols-2">
         <Card>

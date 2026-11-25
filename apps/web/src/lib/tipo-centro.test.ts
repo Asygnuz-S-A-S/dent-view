@@ -1,5 +1,5 @@
 import { describe, expect, it, vi } from "vitest";
-import { etiquetaModulo, moduloDeRuta, moduloHabilitado, MODULOS, rutaBloqueada } from "./tipo-centro";
+import { etiquetaModulo, moduloDeRuta, moduloHabilitado, MODULOS, rutaBloqueada, TIPOS_CENTRO } from "./tipo-centro";
 
 const findUnique = vi.fn();
 vi.mock("@dent-view/db", () => ({ prisma: { configCentro: { findUnique: (...a: unknown[]) => findUnique(...a) } } }));
@@ -52,6 +52,13 @@ describe("moduloDeRuta / rutaBloqueada", () => {
     expect(moduloDeRuta("/ajustes/agenda-publica")).toBe("agenda-publica");
     expect(moduloDeRuta("/ajustes/marca")).toBe("ajustes");
     for (const m of ["inventario", "caja", "gastos", "presupuestos"] as const) expect(moduloDeRuta(`/${m}/x`)).toBe(m);
+  });
+  it("cargar estudios está habilitado en todos los tipos de centro", () => {
+    for (const t of TIPOS_CENTRO) {
+      expect(moduloHabilitado(t, "cargar")).toBe(true);
+      expect(rutaBloqueada(t, "/cargar")).toBe(false);
+    }
+    expect(moduloDeRuta("/cargar")).toBe("cargar");
   });
   it("no confunde prefijos parciales ni rutas libres", () => {
     expect(moduloDeRuta("/pacientesx")).toBeNull();

@@ -13,7 +13,7 @@ type Opcion = { id: string; etiqueta: string };
 const SELECT = "h-8 rounded-md border border-input bg-background px-2 text-sm";
 
 /** Galería de imágenes no DICOM del paciente con subida (JPG, PNG, WebP, HEIC) y visor modal. */
-export function GaleriaImagenes({ pacienteId, imagenes, puedeEditar, ordenes = [], estudios = [] }: { pacienteId: string; imagenes: ImagenVista[]; puedeEditar: boolean; ordenes?: Opcion[]; estudios?: Opcion[] }) {
+export function GaleriaImagenes({ pacienteId, imagenes, puedeEditar, ordenes = [], estudios = [], titulo = "Imágenes", subida = true }: { pacienteId: string; imagenes: ImagenVista[]; puedeEditar: boolean; ordenes?: Opcion[]; estudios?: Opcion[]; titulo?: string; subida?: boolean }) {
   const router = useRouter();
   const entrada = useRef<HTMLInputElement>(null);
   const [indice, setIndice] = useState<number | null>(null);
@@ -50,10 +50,10 @@ export function GaleriaImagenes({ pacienteId, imagenes, puedeEditar, ordenes = [
   }
 
   return (
-    <section className="space-y-3" aria-label="Imágenes">
+    <section className="space-y-3" aria-label={titulo}>
       <div className="flex flex-wrap items-center gap-2">
-        <h3 className="mr-auto text-sm font-medium">Imágenes ({imagenes.length})</h3>
-        {puedeEditar && (<>
+        <h3 className="mr-auto text-sm font-medium">{titulo} ({imagenes.length})</h3>
+        {puedeEditar && subida && (<>
           {ordenes.length > 0 && <select aria-label="Orden de las imágenes" className={SELECT} value={ordenId} onChange={(e) => setOrdenId(e.target.value)}><option value="">Sin orden</option>{ordenes.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}</select>}
           {estudios.length > 0 && <select aria-label="Estudio de las imágenes" className={SELECT} value={estudioId} onChange={(e) => setEstudioId(e.target.value)}><option value="">Sin estudio</option>{estudios.map((o) => <option key={o.id} value={o.id}>{o.etiqueta}</option>)}</select>}
           <input ref={entrada} type="file" multiple accept={IMG_ACCEPT} className="sr-only" aria-label="Elegir imágenes" data-testid="subir-imagenes" onChange={subir} />
@@ -61,7 +61,7 @@ export function GaleriaImagenes({ pacienteId, imagenes, puedeEditar, ordenes = [
         </>)}
       </div>
       {imagenes.length === 0 ? (
-        <EstadoVacio icono={ImageIcon} titulo="Sin imágenes" descripcion="Sube fotos o radiografías en JPG, PNG, WebP o HEIC (máx. 25 MB por archivo, hasta 20 archivos y 150 MB por subida)." />
+        <EstadoVacio icono={ImageIcon} titulo={`Sin ${titulo.toLowerCase()}`} descripcion="Sube JPG, PNG, WebP o HEIC (máx. 25 MB por archivo, hasta 20 archivos y 150 MB por subida), o usa «Cargar archivos» para más tipos." />
       ) : (
         <ul className="grid grid-cols-2 gap-3 sm:grid-cols-3 lg:grid-cols-5">
           {imagenes.map((im, i) => (

@@ -25,7 +25,7 @@ export const MODULOS = [
   "inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "seguimiento-doctores", "doctores",
   "laboratorio", "facturacion", "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta",
   "integraciones", "pasarelas", "notificaciones", "proteccion-datos", "valoraciones", "crm",
-  "agenda-publica", "inventario", "caja", "gastos", "presupuestos", "evolucion",
+  "cargar", "agenda-publica", "inventario", "caja", "gastos", "presupuestos", "evolucion",
 ] as const;
 export type Modulo = (typeof MODULOS)[number];
 
@@ -61,7 +61,7 @@ const RUTAS: readonly (readonly [string, Modulo])[] = [
   ["/proteccion-datos", "proteccion-datos"],
   ...(["inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "doctores", "laboratorio", "facturacion",
     "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta", "integraciones", "notificaciones", "valoraciones", "crm",
-    "inventario", "caja", "gastos", "presupuestos"] as const).map(
+    "inventario", "caja", "gastos", "presupuestos", "cargar"] as const).map(
     (m) => [`/${m}`, m] as const,
   ),
 ];

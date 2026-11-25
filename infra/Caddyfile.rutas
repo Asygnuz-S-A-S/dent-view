@@ -31,7 +31,7 @@
 	handle {
 		# B1: tope de cuerpo en la API (el visor y DICOM-web suben archivos grandes y quedan fuera).
 		# Excepciones: la subida de fotos y video de la valoración virtual (hasta 50 MB de video + formulario), la subida de
-		# imágenes del personal (hasta 20 archivos de 25 MB) y la ingesta de DICOM/ZIP desde las estaciones (CBCT de cientos de MB).
+		# imágenes del personal (hasta 20 archivos de 25 MB) la ingesta de DICOM/ZIP desde las estaciones (CBCT de cientos de MB) y la carga web de DICOM/ZIP (1 GB).
 		# En estas rutas la app valida primero sesión o token y aplica su propio tope, con un mensaje claro.
 		@valoracionSubida path /api/valoraciones/publico/*
 		request_body @valoracionSubida {
@@ -51,9 +51,14 @@
 		request_body @ingesta {
 			max_size 2200MB
 		}
+		# Carga web de un DICOM o ZIP de DICOM (sesión de personal clínico; la app corta a 1 GB y hace streaming a Orthanc).
+		@cargarEstudios path /api/estudios/cargar
+		request_body @cargarEstudios {
+			max_size 1GB
+		}
 		@api {
 			path /api/*
-			not path /api/valoraciones/publico/* /api/imagenes /api/ingesta
+			not path /api/valoraciones/publico/* /api/imagenes /api/ingesta /api/estudios/cargar
 		}
 		request_body @api {
 			max_size 2MB
