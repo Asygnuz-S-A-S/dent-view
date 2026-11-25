@@ -1,1 +1,1 @@
-{ "operacion": "respaldo", "confirmar": "", "parametros": {} }
+{ "operacion": "respaldo", "confirmar": "", "parametros": { "nota": "reintento del snapshot" } }
