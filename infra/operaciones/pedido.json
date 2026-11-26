@@ -1,8 +1,1 @@
-{
-  "operacion": "restablecer-2fa",
-  "confirmar": "RESTABLECER-2FA",
-  "parametros": {
-    "correo": "andres.agudelo@asygnuz.com"
-  },
-  "nota": "reintento"
-}
+{ "operacion": "diagnostico", "confirmar": "", "parametros": {} }
