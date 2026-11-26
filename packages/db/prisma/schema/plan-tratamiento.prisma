@@ -1,0 +1,55 @@
+// Plan de tratamiento: costo congelado que se va ejecutando al crear órdenes por cita. Sin RLS: toda consulta filtra por organizationId.
+enum EstadoPlanTratamiento {
+  ACTIVO
+  COMPLETADO
+  CANCELADO
+}
+
+enum EstadoPlanItem {
+  PENDIENTE
+  EN_ORDEN
+  REALIZADO
+}
+
+model PlanTratamiento {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  pacienteId     String
+  paciente       PacienteTenant        @relation(fields: [pacienteId], references: [id])
+  presupuestoId  String? // cotización aceptada de origen (un plan por cotización)
+  presupuesto    Presupuesto?          @relation(fields: [presupuestoId], references: [id], onDelete: SetNull)
+  titulo         String?
+  estado         EstadoPlanTratamiento @default(ACTIVO)
+  total          Int // suma de los ítems, congelada al crear el plan
+  creadoPorId    String?
+  creadoEn       DateTime              @default(now())
+  actualizadoEn  DateTime              @updatedAt
+  items          PlanItem[]
+  anticipos      Anticipo[]
+
+  @@unique([organizationId, presupuestoId])
+  @@index([organizationId, estado])
+  @@index([pacienteId])
+}
+
+// Una fila por unidad (cantidad 3 = 3 filas): la orden no maneja cantidad. `precio` es neto y congelado.
+model PlanItem {
+  id             String          @id @default(cuid())
+  organizationId String
+  organization   Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  planId         String
+  plan           PlanTratamiento @relation(fields: [planId], references: [id], onDelete: Cascade)
+  servicioId     String?
+  servicio       Servicio?       @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  descripcion    String
+  diente         Int? // FDI
+  fase           Int             @default(1)
+  posicion       Int             @default(0)
+  precio         Int
+  estado         EstadoPlanItem  @default(PENDIENTE)
+  ordenItems     OrdenItem[]
+
+  @@index([planId, estado])
+  @@index([organizationId])
+}

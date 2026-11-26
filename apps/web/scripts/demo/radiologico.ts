@@ -8,18 +8,20 @@ import { generarTokenApi, SOLO_LECTURA } from "../../src/lib/api-token";
 import { resolverPrecio } from "../../src/lib/precios";
 import { generarSecreto } from "../../src/lib/webhooks";
 import { calcularEdad } from "../../src/lib/pacientes";
-import { HALLAZGOS, OBSERVACIONES, type SrvDef } from "./catalogos";
+import { cupsDe, DX_POR_ESTUDIO, HALLAZGOS, OBSERVACIONES, tipoRipsDe, type SrvDef } from "./catalogos";
+import { digitoVerificacionNit } from "../../src/lib/fe/dian";
+import { generarYGuardarRips } from "../../src/lib/rips/servicio";
 import { Acum, asegurarMiembro, caja, consentimientos, crearCentro, crearUsuarios, egresosMensuales, facturar, mensajesHistoricos, type DefCentro, type DefUsuario, type DocFactura } from "./nucleo";
 import { crearPacientes, historiaClinica, registrarPacientes, type Pac } from "./pacientes";
 import { fechaDicom, nombreDicom, planEstudio, uidEstudio, type PlanEstudio, type TipoDicom } from "./estudios";
-import { bog, conConcurrencia, crearRng, DIA, diaSemana, diaUtc, enMin, hashFicticio, mesDe, type Entorno, type Persona } from "./util";
+import { bog, conConcurrencia, crearRng, DIA, diaSemana, diaUtc, enMin, hashFicticio, log, mesDe, type Entorno, type Persona } from "./util";
 
 export type DefDoctor = { nombre: string; email: string; especialidad: string; ciudad: string; peso: number; inicio: number; ultimo: number; semaforo: string };
 export type ParamsRad = {
   def: DefCentro; catalogo: SrvDef[]; salas: [string, string, "cbct" | "pano" | "intra"][]; nPacientes: number; nOrdenes: number; histDias: number;
   doctores: DefDoctor[]; radiologos: { email: string; nombre: string; tarjeta: string }[]; recepcion: { email: string; nombre: string }[]; adminNombre: string;
   convenios: { nombre: string; nit: string; contacto: string; descuento: number | null; tarifas: [string, number][] }[];
-  nEstudios: Partial<Record<TipoDicom, number>>; hoy: ("A" | "E" | "L" | "C" | "P")[]; futuras: [number, number]; solicitadas: number; cajaDias: number; mensajes: number; solicitudes: number; esGrande: boolean;
+  nEstudios: Partial<Record<TipoDicom, number>>; ventanaEstudios: number; rips: { codMunicipio: string; nit: string; codigoPrestador: string; prefijo: string; emiteFev: boolean }; hoy: ("A" | "E" | "L" | "C" | "P")[]; futuras: [number, number]; solicitadas: number; cajaDias: number; mensajes: number; solicitudes: number; esGrande: boolean;
 };
 
 type Doc = DefDoctor & { id: string };
@@ -62,6 +64,7 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
   await prisma.servicio.createMany({
     data: servicios.map((s) => ({
       id: s.id, organizationId: orgId, categoria: s.categoria, nombre: s.nombre, descripcion: s.tecnica ?? null, precioImpreso: s.impreso, precioDigital: s.digital, descuento: s.descuento,
+      codigoCups: cupsDe(s.nombre), tipoRips: tipoRipsDe(s.nombre),
       duracionMin: s.min, holguraMin: 0, reservableEnLinea: false, requiereOrden: true,
     })),
   });
@@ -69,6 +72,12 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
   await prisma.servicioSala.createMany({ data: servicios.map((s) => ({ organizationId: orgId, servicioId: s.id, salaId: salaId[s.sala]! })).filter((x) => x.salaId) });
   A.add("horarioAtencion", ...[1, 2, 3, 4, 5].map((d) => ({ id: `${slug}-hor-${d}`, organizationId: orgId, diaSemana: d, inicioMin: 420, finMin: 1080 })), { id: `${slug}-hor-6`, organizationId: orgId, diaSemana: 6, inicioMin: 480, finMin: 780 });
   await prisma.configFinanzas.create({ data: { organizationId: orgId } });
+  // Facturación electrónica: NUNCA con proveedor SIMULADO (no existe en producción). Se deja el RIPS activo y, si el centro lo declara,
+  // la columna FEV visible SIN conexión ni documentos: las cuentas de cobro quedan "no enviadas" a la DIAN. Ver README.
+  await prisma.configFacturacion.create({ data: {
+    organizationId: orgId, nit: P.rips.nit, dv: digitoVerificacionNit(P.rips.nit), razonSocial: `${P.def.nombre} S.A.S. (demo)`, nombreComercial: P.def.nombre, codigoPrestador: P.rips.codigoPrestador,
+    generaRips: true, emiteFev: P.rips.emiteFev, modalidadDefecto: "01", grupoServiciosDefecto: "02", prefijoFactura: P.rips.prefijo, regimen: "COMUN", responsabilidadFiscal: "O-13", actualizadoEn: new Date(),
+  } });
   await prisma.configSeguimientoDoctor.create({ data: { organizationId: orgId } });
 
   // ---- Convenios y tarifas ----
@@ -104,7 +113,8 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
   const pacs = crearPacientes({ slug, rng, n: P.nPacientes, nombre: g.nombre, documento: g.documento, ciudad: P.def.ciudad });
 
   // ---- Órdenes del pasado ----
-  const pesoDia = (d: number) => (diaSemana(-d) === 7 ? 0.03 : diaSemana(-d) === 6 ? 0.45 : 1) * (0.6 + 0.4 * (1 - d / P.histDias)) * ESTACION[mesDe(-d) - 1]!;
+  // La última semana pesa la mitad: parte de sus órdenes ya la cubren las de hoy y la agenda de las próximas dos semanas (si no, el último mes se dispara en los reportes).
+  const pesoDia = (d: number) => (diaSemana(-d) === 7 ? 0.03 : diaSemana(-d) === 6 ? 0.45 : 1) * (0.7 + 0.3 * (1 - d / P.histDias)) * ESTACION[mesDe(-d) - 1]! * (d <= 8 ? 0.5 : 1);
   const dias = Array.from({ length: P.histDias }, (_, i) => i + 1);
   const pesos = dias.map(pesoDia);
   const hoyN = P.hoy.length;
@@ -167,18 +177,18 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
   const presentes: { o: Ord; estadoCita: string; pref: number; dia: number }[] = [];
   P.hoy.forEach((k, i) => {
     const estadoCita = { A: "ATENDIDA", E: "EN_ATENCION", L: "LLEGO", C: "CONFIRMADA", P: "PROGRAMADA" }[k];
-    const o = nuevaOrden(rng.int(1, 3), doctorAbierto(), k === "A" ? "TOMADA" : "AGENDADA");
+    const o = nuevaOrden(rng.int(1, 5), doctorAbierto(), k === "A" ? "TOMADA" : "AGENDADA");
     presentes.push({ o, estadoCita, pref: { A: 450, E: 600, L: 630, C: 750, P: 840 }[k] + i * 15, dia: 0 });
   });
   for (let off = 1; off <= 14; off++) {
     if (diaSemana(off) === 7) continue;
     const n = rng.int(P.futuras[0], P.futuras[1]);
     for (let k = 0; k < n; k++) {
-      const o = nuevaOrden(rng.int(1, 3), doctorAbierto(), "AGENDADA");
+      const o = nuevaOrden(rng.int(1, 8), doctorAbierto(), "AGENDADA");
       presentes.push({ o, estadoCita: off <= 3 && rng.chance(0.7) ? "CONFIRMADA" : off > 3 && rng.chance(0.25) ? "CONFIRMADA" : "PROGRAMADA", pref: rng.int(450, 960), dia: off });
     }
   }
-  for (let k = 0; k < P.solicitadas; k++) ordenes.push(nuevaOrden(rng.int(1, 3), doctorAbierto(), "SOLICITADA"));
+  for (let k = 0; k < P.solicitadas; k++) ordenes.push(nuevaOrden(rng.int(1, 8), doctorAbierto(), "SOLICITADA"));
   ordenes.push(...presentes.map((x) => x.o));
   ordenes.sort((a, b) => a.creado.getTime() - b.creado.getTime());
   const recepcionId = cajeros[0]!;
@@ -244,7 +254,7 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
     if (ult && rng.chance(0.25)) p.proximoControlEn = enMin(ult, 60 * 24 * rng.int(150, 190));
     if (rng.chance(0.06)) p.alertas = "Alergia al látex.";
   }
-  registrarPacientes(A, { orgId, slug, pacientes: pacs, actor: recepcionId });
+  registrarPacientes(A, { orgId, slug, pacientes: pacs, actor: recepcionId, rips: { codMunicipio: P.rips.codMunicipio } });
   historiaClinica(A, { orgId, slug, rng, pacientes: pacs, fraccion: 0.18, actor: admin });
   pacs.slice(0, Math.round(pacs.length * 0.9)).forEach((p) => A.add("preferenciaContacto", { pacienteId: p.id, organizationId: orgId, noContactar: false, correo: true, sms: true, whatsapp: true, tiposRechazados: [] }));
 
@@ -283,17 +293,35 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
   }
   for (const [tipo, cuantos] of Object.entries(P.nEstudios) as [TipoDicom, number][]) {
     const hechos = () => planes.filter((x) => x.tipo === tipo).length;
-    // Reparto parejo en los últimos ~75 días (no todos juntos en la última semana).
-    const lista = candidatos.filter((o) => !usados.has(o) && o.items.some((i) => i.srv.dicom === tipo) && diaDe(o.cita!.inicio) <= 75);
-    const paso = Math.max(1, Math.floor(lista.length / Math.max(1, cuantos - hechos())));
-    for (let i = 0; i < lista.length && hechos() < cuantos; i += paso) intentar(lista[i]!, tipo);
-    for (const o of candidatos) { if (hechos() >= cuantos) break; if (diaDe(o.cita!.inicio) <= 60) intentar(o, tipo, true); }
+    // Reparto parejo en toda la ventana (los reportes comparan periodos: no pueden quedar todos juntos en el último mes).
+    const lista = candidatos.filter((o) => !usados.has(o) && o.items.some((i) => i.srv.dicom === tipo) && diaDe(o.cita!.inicio) <= P.ventanaEstudios);
+    // Para cada estudio se busca la orden más cercana a su "edad objetivo" (puntos equidistantes en la ventana).
+    const faltan = cuantos - hechos();
+    for (let i = 0; i < faltan; i++) {
+      const objetivo = ((i + 0.5) * P.ventanaEstudios) / faltan;
+      const mejor = lista.filter((o) => !usados.has(o)).sort((a, b) => Math.abs(diaDe(a.cita!.inicio) - objetivo) - Math.abs(diaDe(b.cita!.inicio) - objetivo))[0];
+      if (mejor) intentar(mejor, tipo);
+    }
+    for (const o of candidatos) { if (hechos() >= cuantos) break; if (diaDe(o.cita!.inicio) <= P.ventanaEstudios) intentar(o, tipo, true); }
   }
   // ---- Órdenes (filas) ----
   const vinculosEq = new Set<string>();
+  // Datos RIPS de la orden (tablas de lib/catalogos/referencias-rips.ts). ~10 % quedan sin diagnóstico para que la lista muestre órdenes "incompletas".
+  const ripsDe = (o: Ord) => {
+    if (o.estado === "CANCELADA") return {};
+    const incompleta = rng.chance(0.1);
+    const dxs = DX_POR_ESTUDIO[o.items.find((i) => i.srv.dicom)?.srv.dicom ?? "DEFECTO"]!;
+    const principal = rng.pick(dxs);
+    const otros = dxs.filter((d) => d !== principal);
+    return {
+      tipoUsuario: o.convenio ? "01" : "05", finalidad: "15", causaMotivoAtencion: "13", viaIngreso: "01", tipoDiagnostico: "01",
+      diagnosticoPrincipal: incompleta ? null : principal, diagnosticosRelacionados: incompleta || !otros.length || !rng.chance(0.4) ? [] : [rng.pick(otros)],
+      profesionalAtiendeId: radiologos[o.numero % radiologos.length]!.id, ripsActualizadoEn: enMin(o.creado, 90),
+    };
+  };
   for (const o of ordenes) {
-    A.add("orden", { id: o.id, organizationId: orgId, numero: o.numero, pacienteId: o.pac.id, doctorRemitenteId: o.doctor?.id ?? null, estado: o.estado, entrega: o.entrega, convenioId: o.convenio?.id ?? null, observaciones: o.obs, embarazo: false, creadoPorId: recepcionId, creadoEn: o.creado, actualizadoEn: o.creado });
-    o.items.forEach((it, k) => A.add("ordenItem", { id: `${o.id}-i${k + 1}`, ordenId: o.id, servicioId: it.servicioId, nombre: it.srv.nombre, opciones: it.opciones, precio: it.precio, descuento: 0 }));
+    A.add("orden", { id: o.id, organizationId: orgId, numero: o.numero, pacienteId: o.pac.id, doctorRemitenteId: o.doctor?.id ?? null, estado: o.estado, entrega: o.entrega, convenioId: o.convenio?.id ?? null, observaciones: o.obs, embarazo: false, creadoPorId: recepcionId, creadoEn: o.creado, actualizadoEn: o.creado, ...ripsDe(o) });
+    o.items.forEach((it, k) => A.add("ordenItem", { id: `${o.id}-i${k + 1}`, ordenId: o.id, servicioId: it.servicioId, nombre: it.srv.nombre, opciones: it.opciones, precio: it.precio, descuento: 0, codigoCups: cupsDe(it.srv.nombre), tipoRips: tipoRipsDe(it.srv.nombre) }));
     A.add("evento", { id: `${o.id}-ev`, organizationId: orgId, pacienteId: o.pac.id, actorId: recepcionId, tipo: "orden.creada", detalle: { ordenId: o.id, numero: o.numero }, creadoEn: o.creado });
     if (o.doctor && !vinculosEq.has(`${o.doctor.id}|${o.pac.id}`) && rng.chance(0.05)) {
       vinculosEq.add(`${o.doctor.id}|${o.pac.id}`);
@@ -466,6 +494,16 @@ export async function construirRadiologico(env: Entorno, hash: string, P: Params
   mensajesHistoricos(A, { orgId, slug, rng, n: P.mensajes, pacientes: pacs, dias: Math.min(90, P.histDias), centro: P.def.nombre });
   consentimientos(A, { orgId, slug, rng, pacientes: pacs, solicitudes: P.solicitudes });
 
+  // Tras volcar las filas: RIPS ya generados (JSON en S3 + EnvioRips) para unas pocas órdenes completas, con el mismo código que usa la app.
+  const despues = async () => {
+    let n = 0;
+    for (const o of [...ordenes].reverse()) {
+      if (n >= 8) break;
+      if (o.estado !== "ENTREGADA" && o.estado !== "INFORMADA") continue;
+      if ((await generarYGuardarRips({ organizationId: orgId, actorId: admin, ordenId: o.id })).estado === "ok") n++;
+    }
+    log(`  ${slug}: ${n} RIPS generados (JSON en S3).`);
+  };
   const doctoresResumen = doctores.map((d) => ({ nombre: d.nombre, semaforo: d.semaforo, ordenes: ordenes.filter((o) => o.doctor?.id === d.id && o.estado !== "CANCELADA").length }));
-  return { A, org, planes, doctoresResumen, resumen: { ordenes: ordenes.length, informes: informes.length + corregidos.size, estudiosDicom: planes.length, facturas: docs.length, notasCredito: fac.ncs, citas: citaRows.length } };
+  return { A, org, planes, despues, doctoresResumen, resumen: { ordenes: ordenes.length, informes: informes.length + corregidos.size, estudiosDicom: planes.length, facturas: docs.length, notasCredito: fac.ncs, citas: citaRows.length } };
 }

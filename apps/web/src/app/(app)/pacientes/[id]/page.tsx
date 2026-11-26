@@ -1,6 +1,6 @@
 import { ETIQUETA_ESTADO_ORDEN, numeroOrden, VARIANTE_ESTADO_ORDEN } from "@/lib/ordenes";
 import { prisma } from "@dent-view/db";
-import { Box, ClipboardList, ClipboardPlus, Eye, History, Mail, Phone, PhoneCall, ScanLine, Send, ShieldCheck, TriangleAlert, Upload, Wallet } from "lucide-react";
+import { Box, ClipboardList, ClipboardPlus, ListChecks, Eye, History, Mail, Phone, PhoneCall, ScanLine, Send, ShieldCheck, TriangleAlert, Upload, Wallet } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
@@ -156,7 +156,9 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
   if (!p) notFound();
   const org = ctx.organizationId;
   const puedeGestionar = (GESTION as readonly string[]).includes(ctx.rol);
-  const puedeRemitir = !esDoctor && moduloHabilitado(await tipoDeCentro(org), "remisiones");
+  const tipoCentro = await tipoDeCentro(org);
+  const puedeRemitir = !esDoctor && moduloHabilitado(tipoCentro, "remisiones");
+  const conPlanes = !esDoctor && moduloHabilitado(tipoCentro, "planes");
   await registrarAcceso(ctx, p.id, "ficha");
   // Imágenes y documentos no DICOM del paciente (el doctor remitente solo ve los de sus órdenes/estudios); suben las clínicas, no el doctor.
   const archivos = await cargarArchivos(ctx, { pacienteId: p.id });
@@ -203,6 +205,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
           acciones={(puedeGestionar || puedeRemitir) && <>
             {puedeGestionar && <PacienteDialog paciente={editar(p)} />}
             {puedeGestionar && <Button asChild size="sm"><Link href={`/ordenes/nueva?paciente=${p.id}`}><ClipboardPlus /> Crear orden</Link></Button>}
+            {conPlanes && <Button asChild size="sm" variant="outline"><Link href={`/planes/nuevo?paciente=${p.id}`}><ListChecks /> Plan de tratamiento</Link></Button>}
             {puedeRemitir && <Button asChild size="sm" variant="outline"><Link href={`/remisiones/nueva?paciente=${p.id}`}><Send /> Remitir a otro centro</Link></Button>}
           </>}
         >
@@ -251,7 +254,6 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
 
   const enlacesEntrega = await listarEnlaces(ctx.organizationId, { pacienteId: p.id });
   const verClinica = (MEDICOS as readonly string[]).includes(ctx.rol);
-  const tipoCentro = await tipoDeCentro(org);
   const radiologico = tipoCentro === "CENTRO_RADIOLOGICO";
   const verEvolucion = verClinica && (radiologico || moduloHabilitado(tipoCentro, "evolucion"));
   const [contexto, alergias, medicaciones, enfermedades, contacto, representante, autorizaciones, preferencia] = await Promise.all([

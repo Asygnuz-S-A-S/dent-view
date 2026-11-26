@@ -22,13 +22,15 @@ export default async function FichaPresupuesto({ params }: { params: Promise<{ i
   const p = await presupuestoVisible(ctx, id);
   if (!p) notFound();
   const org = ctx.organizationId;
-  const [items, paciente, eventos, opciones, conCrm, conVal] = await Promise.all([
+  const conPlanes = await modulosHabilitadoEnCentro(org, "planes");
+  const [items, paciente, eventos, opciones, conCrm, conVal, plan] = await Promise.all([
     prisma.itemPresupuesto.findMany({ where: { presupuestoId: id, organizationId: org }, orderBy: [{ fase: "asc" }, { posicion: "asc" }] }),
     prisma.pacienteTenant.findFirst({ where: { id: p.pacienteId, organizationId: org }, select: { id: true, nombre: true, persona: { select: { numeroDocumento: true } } } }),
     prisma.evento.findMany({ where: { organizationId: org, tipo: { startsWith: "presupuesto." }, detalle: { path: ["presupuestoId"], equals: id } }, orderBy: { creadoEn: "asc" }, take: 100 }),
     p.estado === "ACEPTADO" ? opcionesEditor(org) : null,
     modulosHabilitadoEnCentro(org, "crm"),
     modulosHabilitadoEnCentro(org, "valoraciones"),
+    conPlanes ? prisma.planTratamiento.findFirst({ where: { organizationId: org, presupuestoId: id }, select: { id: true } }) : null,
   ]);
   const estadoDb = p.estado as EstadoPres;
   const visible = estadoVisible({ estado: estadoDb, validoHasta: p.validoHasta });
@@ -62,10 +64,11 @@ export default async function FichaPresupuesto({ params }: { params: Promise<{ i
           {p.leadId && conCrm && <> · <Link className="underline" href={`/crm/leads/${p.leadId}`}>ver lead</Link></>}
           {p.valoracionId && conVal && <> · <Link className="underline" href={`/valoraciones/${p.valoracionId}`}>ver valoración</Link></>}
           {p.ordenId && <> · <Link className="underline" href={`/ordenes/${p.ordenId}`}>ver orden</Link></>}
+          {plan && <> · <Link className="underline" href={`/planes/${plan.id}`}>ver plan de tratamiento</Link></>}
         </p>
       </EncabezadoPagina>
       <AccionesPresupuesto id={p.id} puedeEditar={esEditable({ estado: estadoDb })} puedeEnviar={estadoDb === "BORRADOR"} puedeReenviar={estadoDb !== "BORRADOR" && admiteRespuesta({ estado: estadoDb, validoHasta: p.validoHasta })}
-        puedeAnular={puedeAnular({ estado: estadoDb })} puedeConvertir={estadoDb === "ACEPTADO" && !p.ordenId} convenios={opciones?.convenios ?? []} />
+        puedeAnular={puedeAnular({ estado: estadoDb })} puedeConvertir={estadoDb === "ACEPTADO" && !p.ordenId && !plan} puedeCrearPlan={conPlanes && estadoDb === "ACEPTADO" && !p.ordenId && !plan} convenios={opciones?.convenios ?? []} />
 
       <div className="grid gap-6 lg:grid-cols-[minmax(0,1fr)_22rem]">
         <div className="space-y-6">

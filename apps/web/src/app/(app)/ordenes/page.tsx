@@ -146,7 +146,7 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">{fecha(o.creadoEn)}</TableCell>
                     <TableCell className="max-w-[12rem] whitespace-normal capitalize">
-                      <span className="block truncate">{o.paciente.nombre.toLowerCase()}</span>
+                      <span className="block truncate capitalize">{o.paciente.nombre.toLowerCase()}</span>
                       <span className="block text-xs text-muted-foreground xl:hidden">{fecha(o.creadoEn)} · {cop(totalOrden(o.items))}</span>
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">{o.doctorRemitente?.name ?? "—"}</TableCell>

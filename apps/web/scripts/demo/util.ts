@@ -76,7 +76,9 @@ export const enMin = (d: Date, min: number) => new Date(d.getTime() + min * 60_0
 // ---------- Nombres colombianos ficticios ----------
 const NOMBRES_F = ["Valeria", "Daniela", "Mariana", "Natalia", "Luisa", "Paola", "Carolina", "Juliana", "Sofía", "Camila", "Laura", "Andrea", "Manuela", "Isabella", "Catalina", "Alejandra", "Gabriela", "Tatiana", "Lina", "Diana", "Viviana", "Marcela", "Mónica", "Sara", "Karen", "Johana", "Paula", "Lucía", "Verónica", "Estefanía"];
 const NOMBRES_M = ["Santiago", "Julián", "Andrés", "Camilo", "Mateo", "Esteban", "Sebastián", "Felipe", "Daniel", "Juan", "Carlos", "Jorge", "Nicolás", "David", "Miguel", "Alejandro", "Ricardo", "Diego", "Mauricio", "Fernando", "Óscar", "Héctor", "Iván", "Cristian", "Samuel", "Tomás", "Simón", "Gustavo", "Álvaro", "Rodrigo"];
-const SEGUNDOS = ["Andrea", "Fernanda", "Isabel", "Sofía", "María", "Alejandra", "Esteban", "Felipe", "Alberto", "José", "Camilo", "David", "Stiven", "Elena", "Patricia"];
+// Segundo nombre del mismo género que el primero (antes se mezclaban: "Valeria Esteban").
+const SEGUNDOS_F = ["Andrea", "Fernanda", "Isabel", "Sofía", "María", "Alejandra", "Elena", "Patricia", "Camila", "Lucía"];
+const SEGUNDOS_M = ["Esteban", "Felipe", "Alberto", "José", "Camilo", "David", "Stiven", "Andrés", "Mauricio", "Alejandro"];
 const APELLIDOS = ["Cardona", "Mejía", "Quintero", "Londoño", "Ocampo", "Cárdenas", "Bedoya", "Sánchez", "Arias", "Restrepo", "Uribe", "Giraldo", "Marín", "Duque", "Zuluaga", "Montoya", "Vélez", "Arango", "Gil", "Toro", "Franco", "Echeverri", "Herrera", "Naranjo", "Posada", "Ríos", "Salazar", "Pineda", "Aguirre", "Henao", "Osorio", "Ramírez", "Gómez", "Castaño", "Valencia", "Jaramillo", "Ospina", "Villegas", "Betancur", "Correa", "Agudelo", "Escobar", "Patiño", "Rendón", "Tobón", "Vargas", "Moreno", "Rojas", "Pérez", "Torres", "Mora", "Cano", "Cortés", "Lozano", "Pardo", "Cifuentes", "Bermúdez", "Acosta"];
 
 export type Persona = { nombre: string; sexo: "F" | "M"; primerNombre: string; apellido: string };
@@ -86,7 +88,8 @@ export function generadorNombres(rng: Rng, usados = new Set<string>()) {
     for (;;) {
       const sexo = rng.chance(0.52) ? "F" : "M";
       const primerNombre = rng.pick(sexo === "F" ? NOMBRES_F : NOMBRES_M);
-      const segundo = rng.chance(0.45) ? ` ${rng.pick(SEGUNDOS)}` : "";
+      const sec = rng.chance(0.45) ? rng.pick(sexo === "F" ? SEGUNDOS_F : SEGUNDOS_M) : "";
+      const segundo = sec && sec !== primerNombre ? ` ${sec}` : "";
       const a1 = rng.pick(APELLIDOS);
       const a2 = rng.pick(APELLIDOS);
       const nombre = `${primerNombre}${segundo} ${a1} ${a2}`;

@@ -3,6 +3,7 @@ import { DICOM_MAX_BYTES, ESTADOS_ORDEN_CARGA, normalizarPatientId } from "@/lib
 import { extraerDicomDeZip, ZipInvalido } from "@/lib/estudios-zip";
 import { limitarIp } from "@/lib/entrega";
 import { registrarEvento } from "@/lib/eventos";
+import { sincronizarPlanConOrden } from "@/lib/planes-servidor";
 import { mismoOrigen } from "@/lib/imagenes-servidor";
 import { CONTENT_TYPE, CuerpoDemasiadoGrande, decidirEstudio, etiquetaCentro, inspeccionarCuerpo, tipoDeclarado } from "@/lib/ingesta";
 import { CLINICOS } from "@/lib/roles";
@@ -108,7 +109,13 @@ export async function POST(req: Request) {
       const estudio = enBd
         ? await prisma.estudio.update({ where: { id: enBd.id }, data: { orthancId: id, pacienteId: paciente.id, ...(orden && !enBd.ordenId && { ordenId: orden.id }) } })
         : await prisma.estudio.create({ data: { organizationId: org, pacienteId: paciente.id, ordenId: orden?.id ?? null, studyInstanceUid: uid, orthancId: id, modalidad, descripcion: est.MainDicomTags.StudyDescription ?? null, fechaEstudio: fechaDicom(est.MainDicomTags.StudyDate), estado: "ASIGNADO" } });
-      if (orden?.estado === "AGENDADA") await prisma.orden.updateMany({ where: { id: orden.id, estado: "AGENDADA" }, data: { estado: "TOMADA" } });
+      if (orden?.estado === "AGENDADA") {
+        const o = orden;
+        await prisma.$transaction(async (tx) => {
+          const { count } = await tx.orden.updateMany({ where: { id: o.id, estado: "AGENDADA" }, data: { estado: "TOMADA" } });
+          if (count === 1) await sincronizarPlanConOrden(tx, { organizationId: org, ordenId: o.id, estadoOrden: "TOMADA" });
+        });
+      }
       if (!enBd) await encolarWebhooks(prisma, { organizationId: org, evento: "estudio.recibido", pacienteId: paciente.id, datos: { estudioId: estudio.id, modalidad, estado: "ASIGNADO" } }).catch((e) => console.error("No se pudo encolar estudio.recibido", e));
       await registrarEvento({ organizationId: org, pacienteId: paciente.id, actorId: ctx.usuario.id, tipo: "estudio.cargado", detalle: { estudioId: estudio.id, ordenId: orden?.id ?? null, origen: "web", tipo } });
       resultado.push({ studyInstanceUid: uid, estudioId: estudio.id, instancias: [...nuevas.values()].filter((i) => i.ParentStudy === studyId).length });

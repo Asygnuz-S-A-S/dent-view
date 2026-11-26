@@ -267,6 +267,7 @@ async function aceptadaConvertible(ctx: ContextoPres, id: string) {
   const p = await presupuestoVisible(ctx, id);
   if (!p) return { error: "Cotización no encontrada" } as const;
   if (p.estado !== "ACEPTADO" || p.ordenId) return { error: "Solo se convierte una cotización aceptada que aún no tiene orden." } as const;
+  if (await prisma.planTratamiento.findFirst({ where: { organizationId: ctx.organizationId, presupuestoId: p.id }, select: { id: true } })) return { error: "Esta cotización ya tiene un plan de tratamiento: crea las órdenes desde el plan." } as const;
   return { p } as const;
 }
 

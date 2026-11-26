@@ -4,14 +4,20 @@ import { prisma } from "@dent-view/db";
 import { fechaHoraCompleta } from "../../src/lib/fechas";
 import { PLANTILLAS_SECUENCIA } from "../../src/lib/crm";
 import { claveCopia, claveMedia } from "../../src/lib/valoraciones";
-import { CATALOGO_ALEJANDRO } from "./catalogos";
+import { CATALOGO_ALEJANDRO, cupsDe, tipoRipsDe } from "./catalogos";
+import { digitoVerificacionNit } from "../../src/lib/fe/dian";
+import { generarYGuardarRips } from "../../src/lib/rips/servicio";
+import { generarCodigoAcceso, generarToken, hashCodigo, hashToken } from "../../src/lib/entrega";
+import { hashIp, hashTexto } from "../../src/lib/presupuestos-hash";
+import { textoAceptacion, TEXTO_ACEPTACION_VERSION } from "../../src/lib/presupuestos";
+import { evolutivos } from "./evolutivos";
 import { DEF } from "./centros";
 import { asegurarMiembro, Acum, consentimientos, crearCentro, crearUsuarios, egresosMensuales, facturar, fotoPerfilKey, mensajesHistoricos, type DocFactura } from "./nucleo";
 import { crearPacientes, historiaClinica, registrarPacientes } from "./pacientes";
 import { fechaDicom, nombreDicom, planEstudio, uidEstudio, type PlanEstudio } from "./estudios";
 import { subirS3 } from "./externos";
 import { fotoClinicaJpeg, miniatura } from "./imagenes";
-import { bog, conConcurrencia, crearAgendador, crearRng, diaSemana, diaUtc, enMin, hashFicticio, type Entorno, type Persona } from "./util";
+import { bog, conConcurrencia, crearAgendador, crearRng, diaSemana, diaUtc, enMin, hashFicticio, log, type Entorno, type Persona } from "./util";
 
 const DIENTES = [...[1, 2, 3, 4].flatMap((c) => [1, 2, 3, 4, 5, 6, 7, 8].map((d) => c * 10 + d))];
 const SUPERFICIES = ["M", "D", "O", "V", "L"];
@@ -43,12 +49,18 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
 
   // ---- Catálogo, sala y horarios ----
   const servicios = CATALOGO_ALEJANDRO.map((s, i) => ({ ...s, id: `${slug}-srv-${i + 1}` }));
-  await prisma.servicio.createMany({ data: servicios.map((s, i) => ({ id: s.id, organizationId: orgId, categoria: s.categoria, nombre: s.nombre, precioImpreso: null, precioDigital: s.digital, descuento: s.descuento, duracionMin: s.min, reservableEnLinea: i < 6, anticipoTipo: s.nombre.startsWith("Endodoncia") || s.nombre.startsWith("Implante") ? "FIJO" : "NINGUNO", anticipoValor: s.nombre.startsWith("Endodoncia") || s.nombre.startsWith("Implante") ? 100000 : null })) });
+  await prisma.servicio.createMany({ data: servicios.map((s, i) => ({ id: s.id, organizationId: orgId, categoria: s.categoria, nombre: s.nombre, precioImpreso: null, precioDigital: s.digital, descuento: s.descuento, duracionMin: s.min, codigoCups: cupsDe(s.nombre), tipoRips: tipoRipsDe(s.nombre), reservableEnLinea: i < 6, anticipoTipo: s.nombre.startsWith("Endodoncia") || s.nombre.startsWith("Implante") ? "FIJO" : "NINGUNO", anticipoValor: s.nombre.startsWith("Endodoncia") || s.nombre.startsWith("Implante") ? 100000 : null })) });
   const sala = `${slug}-sala-1`;
   await prisma.sala.create({ data: { id: sala, organizationId: orgId, nombre: "Consultorio 1", color: "emerald" } });
   A.add("horarioAtencion", ...[1, 2, 3, 4, 5].flatMap((d) => [{ id: `${slug}-hor-${d}a`, organizationId: orgId, diaSemana: d, inicioMin: 480, finMin: 750, profesionalId: doc }, { id: `${slug}-hor-${d}b`, organizationId: orgId, diaSemana: d, inicioMin: 840, finMin: 1080, profesionalId: doc }]), { id: `${slug}-hor-6`, organizationId: orgId, diaSemana: 6, inicioMin: 480, finMin: 750, profesionalId: doc });
   await prisma.servicioProfesional.createMany({ data: servicios.slice(0, 6).map((s) => ({ organizationId: orgId, servicioId: s.id, profesionalId: doc })) });
   await prisma.configFinanzas.create({ data: { organizationId: orgId } });
+  // RIPS activo; sin facturación electrónica (ni proveedor SIMULADO, que no existe en producción). Ver README.
+  const nit = "9015550179";
+  await prisma.configFacturacion.create({ data: {
+    organizationId: orgId, nit, dv: digitoVerificacionNit(nit), razonSocial: "Alejandro Restrepo Naranjo (demo)", nombreComercial: D.nombre, codigoPrestador: "DEMO17001002",
+    generaRips: true, emiteFev: false, modalidadDefecto: "01", grupoServiciosDefecto: "01", prefijoFactura: "AR", regimen: "SIMPLE", responsabilidadFiscal: "R-99-PN", actualizadoEn: new Date(),
+  } });
   await prisma.configAgendaPublica.create({ data: { organizationId: orgId, activa: false, mensajeBienvenida: "Agenda tu cita con el Dr. Restrepo.", versionPolitica: "2026-01" } });
 
   // ---- Pacientes con foto de perfil sintética ----
@@ -85,7 +97,24 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
     const n = diaSemana(off) === 6 ? 2 : rng.int(3, 6);
     for (let i = 0; i < n; i++) poner(pickPac(k++), off, 8 * 60 + i * 75 + rng.int(0, 20), off <= 3 && rng.chance(0.7) ? "CONFIRMADA" : "PROGRAMADA");
   }
-  A.add("cita", ...citas.map((c) => ({ id: c.id, organizationId: orgId, salaId: sala, pacienteId: pacs[c.pac]!.id, inicio: c.inicio, fin: c.fin, estado: c.estado, profesionalId: doc, servicioId: c.srv.id, origen: c.off > 0 && rng.chance(0.12) ? "PUBLICA" : "INTERNA", notas: c.estado === "CANCELADA" ? "Canceló el paciente" : c.estado === "NO_ASISTIO" ? "No asistió" : null, creadoEn: enMin(c.inicio, -2 * 1440) })));
+  // ---- Órdenes (una por atención con servicio codificable, las 60 más recientes) con sus datos RIPS ----
+  const DX_SERVICIO: [RegExp, string][] = [[/^Consulta/, "Z012"], [/^Profilaxis/, "K036"], [/^Detartraje/, "K051"], [/^Resina/, "K021"], [/^Sellantes|^Fluor/, "K020"], [/^Endodoncia/, "K041"], [/^Exodoncia/, "K083"], [/^Radiografía/, "K021"]];
+  const conOrden = citas.filter((c) => c.estado === "ATENDIDA" && c.off < 0 && c.srv.digital && c.srv.nombre !== "Control mensual" && cupsDe(c.srv.nombre)).sort((a, b) => b.inicio.getTime() - a.inicio.getTime()).slice(0, 60).sort((a, b) => a.inicio.getTime() - b.inicio.getTime());
+  const ordenDeCita = new Map(conOrden.map((c, i) => [c.id, { id: `${slug}-ord-${i + 1}`, numero: i + 1 }]));
+  const precioDe = (c: (typeof citas)[number]) => Math.max(0, c.srv.digital! - c.srv.descuento);
+  conOrden.forEach((c) => {
+    const { id, numero } = ordenDeCita.get(c.id)!;
+    const creado = enMin(c.inicio, -60);
+    const consulta = tipoRipsDe(c.srv.nombre) === "CONSULTA";
+    A.add("orden", {
+      id, organizationId: orgId, numero, pacienteId: pacs[c.pac]!.id, doctorRemitenteId: null, estado: "ENTREGADA", entrega: "DIGITAL", observaciones: c.srv.nombre, embarazo: false, creadoPorId: doc, creadoEn: creado, actualizadoEn: c.fin,
+      tipoUsuario: "05", finalidad: /^Profilaxis|^Sellantes|^Fluor/.test(c.srv.nombre) ? "14" : consulta ? "11" : "16", causaMotivoAtencion: "13", viaIngreso: "01", tipoDiagnostico: "02",
+      diagnosticoPrincipal: DX_SERVICIO.find(([re]) => re.test(c.srv.nombre))?.[1] ?? "Z012", diagnosticosRelacionados: [], profesionalAtiendeId: doc, ripsActualizadoEn: c.fin,
+    });
+    A.add("ordenItem", { id: `${id}-i1`, ordenId: id, servicioId: c.srv.id, nombre: c.srv.nombre, opciones: null, precio: precioDe(c), descuento: 0, codigoCups: cupsDe(c.srv.nombre), tipoRips: tipoRipsDe(c.srv.nombre) });
+    A.add("evento", { id: `${id}-ev`, organizationId: orgId, pacienteId: pacs[c.pac]!.id, actorId: doc, tipo: "orden.creada", detalle: { ordenId: id, numero }, creadoEn: creado });
+  });
+  A.add("cita", ...citas.map((c) => ({ id: c.id, organizationId: orgId, salaId: sala, pacienteId: pacs[c.pac]!.id, inicio: c.inicio, fin: c.fin, estado: c.estado, profesionalId: doc, servicioId: c.srv.id, ordenId: ordenDeCita.get(c.id)?.id ?? null, origen: c.off > 0 && rng.chance(0.12) ? "PUBLICA" : "INTERNA", notas: c.estado === "CANCELADA" ? "Canceló el paciente" : c.estado === "NO_ASISTIO" ? "No asistió" : null, creadoEn: enMin(c.inicio, -2 * 1440) })));
   pacs.forEach((p, i) => {
     const suyas = citas.filter((c) => c.pac === i);
     const primera = suyas.reduce((m, c) => (c.inicio < m ? c.inicio : m), bog(1));
@@ -94,7 +123,7 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
     p.ultimaVisitaEn = ult?.inicio ?? null;
     if (ult && rng.chance(0.55)) p.proximoControlEn = enMin(ult.inicio, 1440 * rng.pick([90, 120, 180, 180]));
   });
-  registrarPacientes(A, { orgId, slug, pacientes: pacs, actor: doc });
+  registrarPacientes(A, { orgId, slug, pacientes: pacs, actor: doc, rips: { codMunicipio: "17001" } });
   historiaClinica(A, { orgId, slug, rng, pacientes: pacs, fraccion: 0.7, actor: doc });
 
   // ---- Odontograma con su historial ----
@@ -140,23 +169,49 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
 
   // ---- Cuentas de cobro (una por cita atendida con valor) con abonos y cartera ----
   const docs: DocFactura[] = citas.filter((c) => c.estado === "ATENDIDA" && c.srv.digital && c.srv.nombre !== "Control mensual").map((c) => ({
-    id: `${slug}-fac-${c.id.split("-").at(-1)}`, fecha: enMin(c.fin, 5), pacienteId: pacs[c.pac]!.id, ordenId: null,
+    id: `${slug}-fac-${c.id.split("-").at(-1)}`, fecha: enMin(c.fin, 5), pacienteId: pacs[c.pac]!.id, ordenId: ordenDeCita.get(c.id)?.id ?? null,
     items: [{ descripcion: c.srv.nombre, valorUnitario: Math.max(0, c.srv.digital! - c.srv.descuento), servicioId: c.srv.id, profesionalId: doc }], responsable: "PACIENTE",
   }));
   const fac = facturar(A, { orgId, rng, docs, cajeros: [doc], admin: doc, probAbierta: (e) => (e <= 30 ? 0.22 : e <= 60 ? 0.12 : e <= 90 ? 0.08 : 0.04) });
   egresosMensuales(A, { orgId, rng, meses: 5, escala: 0.3, admin: doc });
 
-  // ---- Presupuestos con ítems y fases ----
-  const estPres = ["BORRADOR", "ENVIADO", "ENVIADO", "ACEPTADO", "ACEPTADO", "RECHAZADO", "VENCIDO", "CONVERTIDO", "CONVERTIDO", "ACEPTADO", "ENVIADO", "CONVERTIDO"] as const;
+  // ---- Evolutivos clínicos firmados (uno por atención con orden), plantillas base y adendas ----
+  const evo = evolutivos(A, {
+    orgId, slug, rng, firmante: { id: doc, nombre: "Dr. Alejandro Restrepo Naranjo", tarjeta: "TP-DEMO-2291" },
+    atenciones: conOrden.map((c) => ({ citaId: c.id, ordenId: ordenDeCita.get(c.id)!.id, pacienteId: pacs[c.pac]!.id, servicioId: c.srv.id, servicio: c.srv.nombre, diente: rng.pick(DIENTES), fin: c.fin })),
+  });
+
+  // ---- Presupuestos virtuales con ítems, fases y enlace (solo hash del token y del código: nunca se imprimen) ----
+  // Estados que ve la gente: Borrador, Enviada, Vista, Aceptada, Rechazada, Vencida (enviada con vigencia pasada), Anulada (VENCIDO guardado) y Convertida.
+  const PRES: { estado: string; vigencia: number }[] = [
+    { estado: "BORRADOR", vigencia: 15 }, { estado: "ENVIADO", vigencia: 12 }, { estado: "ENVIADO", vigencia: 6 }, { estado: "VISTO", vigencia: 9 }, { estado: "ACEPTADO", vigencia: 10 },
+    { estado: "ACEPTADO", vigencia: 4 }, { estado: "RECHAZADO", vigencia: 8 }, { estado: "RECHAZADO", vigencia: -4 }, { estado: "ENVIADO", vigencia: -9 }, { estado: "ENVIADO", vigencia: -22 },
+    { estado: "VENCIDO", vigencia: 10 }, { estado: "CONVERTIDO", vigencia: -2 }, { estado: "CONVERTIDO", vigencia: -8 }, { estado: "CONVERTIDO", vigencia: -15 },
+  ];
   const titulos = ["Rehabilitación oral", "Ortodoncia completa", "Endodoncia y corona", "Implante y corona", "Diseño de sonrisa", "Tratamiento integral"];
-  estPres.forEach((estado, i) => {
+  const MOTIVOS_RECHAZO = ["Prefiere esperar por presupuesto familiar", "Pidió otra opinión con otro odontólogo", "El valor está por encima de lo que esperaba"];
+  PRES.forEach(({ estado, vigencia }, i) => {
     const p = pacs[i * 3 % pacs.length]!;
     const id = `${slug}-pres-${i + 1}`;
-    const creado = bog(-rng.int(5, 90), 11);
+    const creado = bog(-(rng.int(3, 20) + Math.max(0, 15 - vigencia)), 11);
     const n = rng.int(2, 5);
     const items = Array.from({ length: n }, (_, j) => { const s = rng.pick(servicios.filter((x) => x.digital && x.digital >= 120000 && x.categoria === "OTRO")); return { s, j }; });
     const suya = docs.find((d) => d.pacienteId === p.id && fac.facturas.has(d.id));
-    A.add("presupuesto", { id, organizationId: orgId, numero: i + 1, pacienteId: p.id, profesionalId: doc, estado, titulo: rng.pick(titulos), margen: 30, validoHasta: diaUtc(estado === "VENCIDO" ? -10 : 30 - rng.int(0, 20)), aceptadoEn: ["ACEPTADO", "CONVERTIDO"].includes(estado) ? enMin(creado, 1440 * 3) : null, aceptadoNombre: ["ACEPTADO", "CONVERTIDO"].includes(estado) ? p.nombre : null, rechazadoEn: estado === "RECHAZADO" ? enMin(creado, 1440 * 4) : null, creadoPorId: doc, creadoEn: creado, actualizadoEn: creado });
+    const validoHasta = diaUtc(vigencia);
+    const total = items.reduce((t, { s }) => t + s.digital!, 0);
+    const enviado = estado !== "BORRADOR" && estado !== "VENCIDO";
+    const respondida = ["ACEPTADO", "CONVERTIDO"].includes(estado);
+    const token = generarToken(), tokenHash = hashToken(token);
+    A.add("presupuesto", {
+      id, organizationId: orgId, numero: i + 1, pacienteId: p.id, profesionalId: doc, estado, titulo: titulos[i % titulos.length], margen: 30, validoHasta, creadoPorId: doc, creadoEn: creado, actualizadoEn: creado,
+      ...(enviado ? { tokenHash, codigoHash: hashCodigo(tokenHash, generarCodigoAcceso(), env.secreto), intentosCodigo: 0, enviadoEn: enMin(creado, 45) } : {}),
+      ...(["VISTO", "ACEPTADO", "RECHAZADO", "CONVERTIDO"].includes(estado) ? { vistoEn: enMin(creado, 600) } : {}),
+      ...(respondida ? {
+        aceptadoEn: enMin(creado, 1440 * 3), aceptadoNombre: p.nombre, aceptadoDocumento: p.doc, aceptadoIpHash: hashIp(null, env.secreto), textoAceptacionVersion: TEXTO_ACEPTACION_VERSION,
+        textoAceptacionHash: hashTexto(textoAceptacion({ numero: i + 1, total, validoHasta, centro: D.nombre })),
+      } : {}),
+      ...(estado === "RECHAZADO" ? { rechazadoEn: enMin(creado, 1440 * 4), rechazoMotivo: MOTIVOS_RECHAZO[i % MOTIVOS_RECHAZO.length] } : {}),
+    });
     items.forEach(({ s, j }) => A.add("itemPresupuesto", { id: `${id}-i${j + 1}`, organizationId: orgId, presupuestoId: id, servicioId: s.id, descripcion: s.nombre, diente: rng.pick(DIENTES), fase: j < 2 ? 1 : 2, cantidad: 1, valorUnitario: s.digital!, costoUnitario: Math.round(s.digital! * 0.4), descuento: 0, posicion: j, facturaId: estado === "CONVERTIDO" && j === 0 && suya ? suya.id : null }));
   });
 
@@ -170,7 +225,7 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
     const enviado = estado === "PENDIENTE" ? null : bog(-rng.int(estado === "ENTREGADO" ? 14 : 3, estado === "ENTREGADO" ? 60 : 16), 10);
     const esperada = enviado ? enMin(enviado, 1440 * rng.int(6, 12)) : bog(rng.int(3, 8));
     const vencido = (estado === "ENVIADO" && i % 2 === 0);
-    A.add("casoLaboratorio", { id: `${slug}-lab-${i + 1}`, organizationId: orgId, pacienteId: p.id, laboratorio: labs[i % labs.length], tipo, dientes: rng.pick(["36", "46", "11-21", "14-15", "24", "36-37"]), valor, estado, enviado, entregaEsperada: vencido ? bog(-rng.int(2, 6), 10) : esperada, recibido: estado === "RECIBIDO" || estado === "ENTREGADO" ? (enviado ? enMin(enviado, 1440 * 8) : null) : null, notas: estado === "CANCELADO" ? "El paciente decidió otro tratamiento" : null, creadoEn: enviado ?? bog(-1) });
+    A.add("casoLaboratorio", { id: `${slug}-lab-${i + 1}`, organizationId: orgId, pacienteId: p.id, laboratorio: labs[i % labs.length], tipo, dientes: rng.pick(["36", "46", "11-21", "14-15", "24", "36-37"]), valor, estado, enviado, entregaEsperada: vencido ? bog(-rng.int(2, 6), 10) : esperada, recibido: estado === "RECIBIDO" || estado === "ENTREGADO" ? (enviado ? new Date(Math.min(enMin(enviado, 1440 * 8).getTime(), bog(-1, 10).getTime())) : null) : null, notas: estado === "CANCELADO" ? "El paciente decidió otro tratamiento" : null, creadoEn: enviado ?? bog(-1) });
   });
 
   // ---- Valoraciones virtuales (fotos sintéticas en S3) ----
@@ -240,13 +295,14 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
   });
   await prisma.configFidelizacion.create({ data: { organizationId: orgId, activa: false, diasControl: 180, recordarCumpleanos: true, mensajeCumpleanos: "Todo el equipo del consultorio te desea un feliz cumpleaños." } });
 
-  // ---- Estudios para el visor (importados): una panorámica y dos periapicales ----
+  // ---- Estudios para el visor (importados): panorámicas y periapicales repartidas en cinco meses ----
   const planes: PlanEstudio[] = [];
-  const conCita = pacs.filter((p) => p.tipoDoc === "CC" && p.ultimaVisitaEn).slice(0, 3);
-  (["PX", "IO", "IO"] as const).forEach((tipo, i) => {
+  const TIPOS_EST = ["PX", "IO", "IO", "PX", "IO", "IO", "PX", "IO"] as const;
+  const conCita = pacs.filter((p) => p.tipoDoc === "CC" && p.ultimaVisitaEn).slice(0, TIPOS_EST.length);
+  TIPOS_EST.forEach((tipo, i) => {
     const p = conCita[i]!;
     const n = i + 1;
-    const off = -(i * 12 + 6);
+    const off = -(i * 18 + 6);
     const plan = planEstudio({ key: `${slug}-${tipo.toLowerCase()}-${n}`, tipo, patientId: p.doc, patientName: nombreDicom(p.nombre), birthDate: fechaDicom(p.nac), sex: p.sexo, studyDate: fechaDicom(diaUtc(off)), studyUid: uidEstudio(slug, n), desc: tipo === "PX" ? "Radiografía panorámica" : "Radiografía periapical", seed: 900 + n, centro: D.nombre, remitente: "", accession: `AR-${n}` });
     planes.push(plan);
     A.add("estudio", { id: `${slug}-est-${n}`, organizationId: orgId, pacienteId: p.id, studyInstanceUid: plan.studyUid, orthancId: plan.orthancId, modalidad: tipo === "PX" ? "PX" : "IO", descripcion: plan.desc, fechaEstudio: diaUtc(off), estado: "ASIGNADO", creadoEn: bog(off, 10), actualizadoEn: bog(off, 10) });
@@ -254,5 +310,10 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
 
   mensajesHistoricos(A, { orgId, slug, rng, n: 25, pacientes: pacs, dias: 90, centro: D.nombre });
   consentimientos(A, { orgId, slug, rng, pacientes: pacs, solicitudes: 3 });
-  return { A, org, planes, resumen: { pacientes: pacs.length, citas: citas.length, facturas: docs.length, notasClinicas: notas.length, presupuestos: estPres.length, leads: ETAPAS.length, valoraciones: vals.length, estudiosDicom: planes.length } };
+  const despues = async () => {
+    let n = 0;
+    for (const c of [...conOrden].reverse()) { if (n >= 6) break; if ((await generarYGuardarRips({ organizationId: orgId, actorId: doc, ordenId: ordenDeCita.get(c.id)!.id })).estado === "ok") n++; }
+    log(`  ${slug}: ${n} RIPS generados (JSON en S3).`);
+  };
+  return { A, org, planes, despues, resumen: { ordenes: conOrden.length, evolutivos: evo.evolutivos, pacientes: pacs.length, citas: citas.length, facturas: docs.length, notasClinicas: notas.length, presupuestos: PRES.length, leads: ETAPAS.length, valoraciones: vals.length, estudiosDicom: planes.length } };
 }

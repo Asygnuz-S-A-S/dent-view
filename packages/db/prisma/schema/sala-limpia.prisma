@@ -161,6 +161,7 @@ enum TipoCentro {
   CENTRO_ODONTOLOGICO
   CLINICA_ODONTOLOGICA
   ODONTOLOGO_PARTICULAR
+  LABORATORIO_DENTAL // laboratorio de prótesis: sin agenda, estudios ni informes (ver lib/tipo-centro.ts)
 }
 
 // Cada versión es una fila; las versiones emitidas son inmutables y comparten grupoId.

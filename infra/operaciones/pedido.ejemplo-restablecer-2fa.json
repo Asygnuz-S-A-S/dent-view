@@ -1,0 +1,7 @@
+{
+  "operacion": "restablecer-2fa",
+  "confirmar": "RESTABLECER-2FA",
+  "parametros": {
+    "correo": "persona@ejemplo.invalid"
+  }
+}

@@ -109,7 +109,7 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
                     </TableCell>
                     <TableCell className="hidden lg:table-cell">{fecha(f.fecha)}</TableCell>
                     <TableCell className="max-w-[9rem] whitespace-normal capitalize">
-                      <span className="block truncate">{aCargoDe(f, doctores, f.paciente?.nombre.toLowerCase() ?? "—")}</span>
+                      <span className="block truncate capitalize">{aCargoDe(f, doctores, f.paciente?.nombre.toLowerCase() ?? "—")}</span>
                       <span className="block text-xs text-muted-foreground lg:hidden">{fecha(f.fecha)} · {cop(f.total)}</span>
                     </TableCell>
                     <TableCell className="hidden text-right lg:table-cell">{cop(f.total)}</TableCell>

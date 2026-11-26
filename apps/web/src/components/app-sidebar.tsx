@@ -2,7 +2,7 @@
 
 import {
   Building2, CalendarDays, Check, ChevronsUpDown, ClipboardList, House, LogOut, ScanLine, Settings2, ShieldCheck, HardDriveUpload, Plug,
-  Stethoscope, Tags, Upload, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch, Calculator, Send,
+  Stethoscope, Tags, Upload, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch, Calculator, Send, ListChecks,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -58,6 +58,7 @@ const NAV = [
       { href: "/facturacion", label: "Facturación", icon: Receipt, roles: ["admin_tenant", "recepcion"] },
       { href: "/cartera", label: "Cartera", icon: Wallet, roles: ["admin_tenant", "recepcion"] },
       { href: "/presupuestos", label: "Presupuestos", icon: Calculator, roles: ["admin_tenant", "recepcion", "especialista"] },
+      { href: "/planes", label: "Planes de tratamiento", icon: ListChecks, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/reportes", label: "Reportes", icon: ChartColumn, roles: ["admin_tenant"] },
     ],
   },

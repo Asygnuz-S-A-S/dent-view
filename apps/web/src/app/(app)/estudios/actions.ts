@@ -4,6 +4,7 @@ import { ordenParaVincular, prisma, type Prisma } from "@dent-view/db";
 import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { registrarEvento } from "@/lib/eventos";
+import { sincronizarPlanConOrden } from "@/lib/planes-servidor";
 import { idsPacientesPorNombre } from "@/lib/busqueda";
 import { numeroOrden } from "@/lib/ordenes";
 import { CLINICOS, GESTION } from "@/lib/roles";
@@ -92,6 +93,7 @@ async function ligar(tx: Prisma.TransactionClient, ctx: Awaited<ReturnType<typeo
   await registrarEvento({ organizationId: org, tipo: "estudio.vinculado", pacienteId: orden.pacienteId, actorId: ctx.usuario.id, detalle: { estudioId, ordenId: orden.id, orden: numeroOrden(orden.numero) } }, tx);
   if (orden.estado === "AGENDADA") {
     await tx.orden.update({ where: { id: orden.id }, data: { estado: "TOMADA" } });
+    await sincronizarPlanConOrden(tx, { organizationId: org, ordenId: orden.id, estadoOrden: "TOMADA" });
     await registrarEvento({ organizationId: org, tipo: "orden.estado", pacienteId: orden.pacienteId, actorId: ctx.usuario.id, detalle: { ordenId: orden.id, orden: numeroOrden(orden.numero), de: "AGENDADA", a: "TOMADA", origen: "vinculacion" } }, tx);
   }
 }

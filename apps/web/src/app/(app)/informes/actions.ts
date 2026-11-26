@@ -8,6 +8,7 @@ import { calcularAlertas } from "@/lib/historia-clinica";
 import { generarPdfInforme } from "@/lib/informe-pdf";
 import { generarCodigo, informeEditable, puedeArchivar, puedeCorregir, puedeEmitir } from "@/lib/informes";
 import { registrarEvento } from "@/lib/eventos";
+import { sincronizarPlanConOrden } from "@/lib/planes-servidor";
 import { encolarMensaje } from "@/lib/notificar";
 import { numeroOrden, transicionValida } from "@/lib/ordenes";
 import { calcularEdad } from "@/lib/pacientes";
@@ -162,6 +163,7 @@ export async function emitirInforme(id: string): Promise<R> {
     await registrarEvento({ organizationId: org, pacienteId: inf.pacienteId, actorId: ctx.usuario.id, tipo: "informe.emitido", detalle: { informeId: id, version: inf.version, codigo } }, tx);
     if (orden && transicionValida(orden.estado, "INFORMADA")) {
       await tx.orden.update({ where: { id: orden.id }, data: { estado: "INFORMADA" } });
+      await sincronizarPlanConOrden(tx, { organizationId: org, ordenId: orden.id, estadoOrden: "INFORMADA" });
       await registrarEvento({ organizationId: org, pacienteId: inf.pacienteId, actorId: ctx.usuario.id, tipo: "orden.estado", detalle: { ordenId: orden.id, orden: numeroOrden(orden.numero), de: orden.estado, a: "INFORMADA", origen: "informe" } }, tx);
     }
     // Avisos: al paciente y al doctor remitente (se envían después, desde la cola).

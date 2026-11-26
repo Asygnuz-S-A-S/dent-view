@@ -7,6 +7,14 @@ import { agruparCartera, TRAMOS } from "../../src/lib/cartera";
 import { saldo } from "../../src/lib/facturacion";
 import { calcularDoctor } from "../../src/lib/seguimiento-doctores";
 import { s3 } from "../../src/lib/s3";
+import { hashAdenda, hashEvolucion } from "../../src/lib/evolucion-hash";
+import { variacion } from "../../src/components/comunes/variacion";
+import { datosReporte } from "../../src/lib/reportes";
+import { rangoReporte } from "../../src/lib/reportes-rango";
+import { armarEntrada } from "../../src/lib/rips/datos";
+import { generarRips } from "../../src/lib/rips/generar";
+import { moduloHabilitado } from "../../src/lib/tipo-centro";
+import { transicionRemision, type EstadoRemision } from "../../src/lib/remisiones";
 import { bog } from "./util";
 
 const ORTHANC = process.env.ORTHANC_URL?.replace(/\/+$/, "");
@@ -24,6 +32,7 @@ const tablas: [string, string][] = [
   ["pacientes", "PacienteTenant"], ["órdenes", "Orden"], ["citas", "Cita"], ["estudios", "Estudio"], ["informes", "Informe"], ["entregas", "EnlaceEntrega"], ["facturas", "Factura"], ["pagos", "Pago\" p JOIN \"Factura\" f ON f.id = p.\"facturaId"],
   ["notas crédito", "NotaCredito"], ["anticipos", "Anticipo"], ["cajas", "SesionCaja"], ["egresos", "Egreso"], ["seguimientos", "Seguimiento"], ["seg. doctores", "SeguimientoDoctor"], ["servicios", "Servicio"], ["convenios", "Convenio"],
   ["casos lab", "CasoLaboratorio"], ["valoraciones", "Valoracion"], ["leads", "Lead"], ["secuencias", "SecuenciaCRM"], ["tareas CRM", "TareaCRM"], ["presupuestos", "Presupuesto"], ["notas clínicas", "NotaClinica\" x JOIN \"PacienteTenant\" pt ON pt.id = x.\"pacienteId"],
+  ["evolutivos", "EvolucionClinica"], ["adendas", "AdendaEvolucion"], ["tomas", "RegistroToma"], ["RIPS generados", "EnvioRips"],
   ["mensajes", "Mensaje"], ["autorizaciones", "Autorizacion"], ["solicitudes", "SolicitudTitular"], ["estaciones", "EstacionIngesta"], ["tokens API", "TokenApi"], ["usuarios (miembros)", "Member"],
 ];
 const porCentro: Record<string, Record<string, number>> = {};
@@ -99,6 +108,140 @@ await cero("destinatarios/solicitantes con dominio real", `SELECT 1 FROM "Mensaj
 await cero("celulares de pacientes con formato 3xx555xxxx", `SELECT 1 FROM "PacienteTenant" WHERE celular !~ '^3[0-9]{2}555[0-9]{4}$'`);
 await cero("documentos ficticios (prefijo 99, 10 dígitos)", `SELECT 1 FROM "Persona" WHERE "numeroDocumento" !~ '^99[0-9]{8}$'`);
 await cero("estaciones/tokens: solo hash en BD", `SELECT 1 FROM "EstacionIngesta" WHERE length("tokenHash") <> 64 UNION ALL SELECT 1 FROM "TokenApi" WHERE length("tokenHash") <> 64`);
+
+// ---------- Módulos nuevos: fechas, RIPS, evolutivos, presupuestos, FE, remisiones, reportes, menú ----------
+const idDe = (slug: string) => orgs.find((o) => o.slug === slug)?.id;
+const hoy0 = bog(0);
+
+console.log("\nFechas (nada que \"ya ocurrió\" puede estar en el futuro):");
+{
+  const cols = await prisma.$queryRaw<{ t: string; c: string }[]>`SELECT table_name AS t, column_name AS c FROM information_schema.columns WHERE table_schema = 'public' AND data_type LIKE 'timestamp%' AND column_name IN ('creadoEn','actualizadoEn','emitidoEn','firmadaEn','tomadoEn','enviadoEn','vistoEn','aceptadoEn','rechazadoEn','otorgadaEn','resueltaEn','completadoEn','completadaEn','cerradoEn','ultimoAccesoEn','ultimoIntentoEn','ultimoContactoEn','recibido','enviado','devueltaEn','consentimientoEn','recibidaEn','respondidoEn')`;
+  const ahora = new Date().toISOString();
+  const malas: string[] = [];
+  for (const { t: tabla, c } of cols) { const k = await n(`SELECT 1 FROM "${tabla}" WHERE "${c}" > '${ahora}'`); if (k) malas.push(`${tabla}.${c}: ${k}`); }
+  ok(`${cols.length} columnas de fecha-de-ocurrencia sin valores futuros`, malas.length === 0, malas.join("; "));
+}
+
+console.log("\nRIPS (Lumia, Radia y Alejandro):");
+for (const slug of ["lumia", "radia", "alejandro-restrepo"]) {
+  const id = idDe(slug);
+  if (!id) continue;
+  const config = await prisma.configFacturacion.findUnique({ where: { organizationId: id } });
+  ok(`${slug}: ConfigFacturacion con NIT, DV, código de prestador y RIPS activo`, !!config?.nit && !!config.dv && config.codigoPrestador?.length === 12 && config.generaRips);
+  const ordenes = await prisma.orden.findMany({ where: { organizationId: id, estado: { not: "CANCELADA" } }, include: { paciente: { include: { persona: true } }, items: { include: { servicio: { select: { codigoCups: true, tipoRips: true, codServicioReps: true } } } }, documentosElectronicos: { where: { estado: "ACEPTADA" }, take: 1, select: { numeroDian: true } } } });
+  let completas = 0;
+  for (const o of ordenes) if (generarRips(armarEntrada(o, config, null)).errores.length === 0) completas++;
+  ok(`${slug}: ${completas}/${ordenes.length} órdenes con RIPS completo (se espera al menos 70 % y al menos una incompleta en radiología)`, ordenes.length > 0 && completas / ordenes.length >= 0.7 && (slug === "alejandro-restrepo" || completas < ordenes.length), "");
+  const sinCups = await n(`SELECT 1 FROM "Servicio" WHERE "organizationId" = '${id}' AND "codigoCups" IS NOT NULL`);
+  ok(`${slug}: servicios con código CUPS`, sinCups >= 5, `${sinCups}`);
+  await cero(`${slug}: pacientes con sexo y municipio (RIPS)`, `SELECT 1 FROM "PacienteTenant" WHERE "organizationId" = '${id}' AND id NOT IN (SELECT "pacienteDestinoId" FROM "Remision" WHERE "pacienteDestinoId" IS NOT NULL) AND (sexo IS NULL OR "codMunicipio" IS NULL OR "zonaTerritorial" IS NULL)`);
+  const envios = await prisma.envioRips.findMany({ where: { organizationId: id } });
+  ok(`${slug}: RIPS ya generados con JSON en S3`, envios.length >= 4, `${envios.length}`);
+  let faltan = 0;
+  for (const e of envios) await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key: e.jsonKey })).catch(() => { faltan++; });
+  ok(`${slug}: el JSON de cada envío existe en S3`, faltan === 0, faltan ? `${faltan} faltan` : "");
+}
+
+console.log("\nFacturación electrónica (sin proveedor: la demo no emite nada ni usa SIMULADO):");
+await cero("sin conexiones de facturación electrónica", `SELECT 1 FROM "ConexionFE"`);
+await cero("sin documentos electrónicos", `SELECT 1 FROM "DocumentoElectronico"`);
+ok("Lumia muestra la columna FEV (emiteFev) con todas sus cuentas \"no enviadas\"", (await prisma.configFacturacion.findUnique({ where: { organizationId: idDe("lumia") ?? "" } }))?.emiteFev === true);
+
+console.log("\nEvolutivos clínicos (Alejandro):");
+{
+  const id = idDe("alejandro-restrepo");
+  if (id) {
+    const evs = await prisma.evolucionClinica.findMany({ where: { organizationId: id }, include: { adendas: true } });
+    ok("hay evolutivos de varios pacientes, con adendas y plantillas", evs.length >= 30 && new Set(evs.map((e) => e.pacienteId)).size >= 15 && evs.some((e) => e.adendas.length) && (await prisma.plantillaEvolucion.count({ where: { organizationId: id } })) >= 7, `${evs.length} evolutivos`);
+    const malos = evs.filter((e) => hashEvolucion({ ...e, plantillaVersion: e.plantillaVersion }) !== e.hashContenido).length;
+    ok("el hash de cada evolutivo coincide con su contenido (íntegros)", malos === 0, malos ? `${malos} no coinciden` : "");
+    const maloA = evs.flatMap((e) => e.adendas.map((a) => ({ e, a }))).filter(({ e, a }) => hashAdenda({ organizationId: id, evolucionId: e.id, hashEvolucion: e.hashContenido, texto: a.texto, firmanteId: a.firmanteId, firmanteNombre: a.firmanteNombre, firmanteTarjeta: a.firmanteTarjeta, firmadaEn: a.firmadaEn }) !== a.hashContenido).length;
+    ok("el hash de cada adenda coincide", maloA === 0);
+    await cero("folio consecutivo por paciente", `SELECT "pacienteId" FROM "EvolucionClinica" WHERE "organizationId" = '${id}' GROUP BY 1 HAVING max(folio) <> count(*)`);
+    await cero("evolutivo ligado a orden y cita del mismo centro", `SELECT 1 FROM "EvolucionClinica" e WHERE e."ordenId" IS NOT NULL AND NOT EXISTS (SELECT 1 FROM "Orden" o WHERE o.id = e."ordenId" AND o."organizationId" = e."organizationId")`);
+  }
+  for (const slug of ["lumia", "radia"]) ok(`${slug}: registros de toma`, (await prisma.registroToma.count({ where: { organizationId: idDe(slug) ?? "" } })) >= 20);
+}
+
+console.log("\nPresupuestos virtuales (Alejandro):");
+{
+  const id = idDe("alejandro-restrepo");
+  if (id) {
+    const ps = await prisma.presupuesto.findMany({ where: { organizationId: id }, include: { items: true } });
+    const visible = (p: (typeof ps)[number]) => (p.estado === "VENCIDO" ? "ANULADA" : (p.estado === "ENVIADO" || p.estado === "VISTO") && p.validoHasta && p.validoHasta < hoy0 ? "VENCIDA" : p.estado);
+    const vistos = new Set(ps.map(visible));
+    const faltan = ["BORRADOR", "ENVIADO", "VISTO", "ACEPTADO", "RECHAZADO", "VENCIDA", "ANULADA", "CONVERTIDO"].filter((e) => !(vistos as Set<string>).has(e));
+    ok("presupuestos en todos los estados (Borrador, Enviada, Vista, Aceptada, Rechazada, Vencida, Anulada, Convertida)", faltan.length === 0, faltan.join(", "));
+    ok("cada presupuesto tiene ítems y el enviado/visto/aceptado/rechazado lleva token (hash) y fecha de envío", ps.every((p) => p.items.length > 0 && (["BORRADOR", "VENCIDO"].includes(p.estado) || (p.tokenHash?.length === 64 && p.codigoHash?.length === 64 && !!p.enviadoEn))));
+    ok("aceptados con nombre, documento, texto firmado y rechazados con motivo", ps.filter((p) => ["ACEPTADO", "CONVERTIDO"].includes(p.estado)).every((p) => p.aceptadoNombre && p.aceptadoDocumento && p.textoAceptacionHash) && ps.filter((p) => p.estado === "RECHAZADO").every((p) => p.rechazoMotivo));
+    await cero("sin token en claro: tokenHash/codigoHash de 64 hex", `SELECT 1 FROM "Presupuesto" WHERE "tokenHash" IS NOT NULL AND "tokenHash" !~ '^[0-9a-f]{64}$'`);
+  }
+}
+
+console.log("\nRemisiones Lumia <-> Radia:");
+{
+  const L = idDe("lumia"), R = idDe("radia");
+  if (L && R) {
+    ok("vínculo ACTIVO en los dos sentidos", (await prisma.vinculoCentro.count({ where: { estado: "ACTIVO", OR: [{ solicitanteId: L, receptorId: R }, { solicitanteId: R, receptorId: L }] } })) === 2);
+    const rems = await prisma.remision.findMany({ include: { eventos: { orderBy: { creadoEn: "asc" } } } });
+    const porEstado = rems.reduce<Record<string, number>>((m, r) => ((m[r.estado] = (m[r.estado] ?? 0) + 1), m), {});
+    ok("remisiones Lumia->Radia en ENVIADA, RECIBIDA, EN_PROCESO, DEVUELTA y RECHAZADA", ["ENVIADA", "RECIBIDA", "EN_PROCESO", "DEVUELTA", "RECHAZADA"].every((e) => rems.some((r) => r.estado === e && r.origenId === L && r.destinoId === R)), JSON.stringify(porEstado));
+    ok("hay una remisión Radia->Lumia", rems.some((r) => r.origenId === R && r.destinoId === L));
+    ok("eventos coherentes: empieza en ENVIADA, termina en el estado actual, cada paso es una transición válida", rems.every((r) => r.eventos[0]?.tipo === "ENVIADA" && r.eventos.at(-1)?.tipo === r.estado && r.eventos.slice(1).every((e, i) => transicionRemision(r.eventos[i]!.tipo as EstadoRemision, e.tipo as EstadoRemision, ["RECIBIDA", "EN_PROCESO", "DEVUELTA", "RECHAZADA"].includes(e.tipo) ? "destino" : "origen", e.nota ?? "motivo").ok)));
+    ok("cada remisión tiene su Autorizacion otorgada en el centro origen", (await Promise.all(rems.map((r) => prisma.autorizacion.count({ where: { id: r.autorizacionId, organizationId: r.origenId, otorgada: true, version: r.consentimientoVersion } })))).every((c) => c === 1));
+    ok("RECHAZADA con motivo; EN_PROCESO y DEVUELTA con orden destino; RECIBIDA con paciente destino", rems.filter((r) => r.estado === "RECHAZADA").every((r) => r.motivoRechazo) && rems.filter((r) => ["EN_PROCESO", "DEVUELTA"].includes(r.estado)).every((r) => r.ordenDestinoId && r.pacienteDestinoId) && rems.filter((r) => r.estado === "RECIBIDA").every((r) => r.pacienteDestinoId));
+    // Copia mínima: el paciente del destino solo tiene lo autorizado (nunca correo, dirección, alertas, foto ni RIPS).
+    const copias = await prisma.pacienteTenant.findMany({ where: { id: { in: rems.flatMap((r) => (r.pacienteDestinoId ? [r.pacienteDestinoId] : [])) } } });
+    ok(`copia mínima: ${copias.length} pacientes destino sin correo, dirección, alertas, foto ni datos RIPS`, copias.every((p) => !p.correo && !p.direccion && !p.alertas && !p.fotoKey && !p.sexo && !p.codMunicipio));
+    const dev = rems.find((r) => r.estado === "DEVUELTA");
+    if (dev) {
+      const inf = await prisma.informe.findFirst({ where: { id: dev.informeId ?? "", organizationId: R, estado: "EMITIDO", vigente: true, ordenId: dev.ordenDestinoId } });
+      ok("DEVUELTA: informe EMITIDO vigente con PDF en el destino", !!inf?.pdf && inf.pdf.length > 1000);
+      const ests = await prisma.estudio.findMany({ where: { organizationId: R, studyInstanceUid: { in: dev.estudioUids }, ordenId: dev.ordenDestinoId } });
+      ok("DEVUELTA: estudio(s) DICOM vinculados a la orden destino y publicados", ests.length === dev.estudioUids.length && ests.length > 0 && ests.every((e) => e.estado === "PUBLICADO"));
+    }
+  }
+}
+
+console.log("\nReportes (variación coherente entre periodos: sin porcentajes absurdos):");
+for (const slug of ["lumia", "radia", "orion-laboratorio"]) {
+  const id = idDe(slug);
+  if (!id) continue;
+  const con = (a: number, b: number) => ({ ini: bog(a), fin: bog(b) });
+  const compara = async (etiqueta: string, act: { ini: Date; fin: Date }, ant: { ini: Date; fin: Date }) => {
+    const [d, p] = await Promise.all([datosReporte(id, act), datosReporte(id, ant)]);
+    const suma = (x: { total: number }[]) => x.reduce((t, e) => t + e.total, 0);
+    const pares: [string, number, number][] = [["producción", d.produccion, p.produccion], ["cobros", d.cobros, p.cobros], ["órdenes", suma(d.ordenesPorEstado), suma(p.ordenesPorEstado)]];
+    if (slug !== "orion-laboratorio") pares.push(["estudios", suma(d.estudiosPorModalidad), suma(p.estudiosPorModalidad)]);
+    for (const [nombre, a, b] of pares) {
+      const v = variacion(a, b);
+      const pocos = nombre === "estudios" || slug === "radia";
+      ok(`${slug} ${etiqueta}: ${nombre} ${a.toLocaleString("es-CO")} vs ${b.toLocaleString("es-CO")} (${v.pct === null ? "sin base" : `${v.pct} %`})`, b > 0 && (v.pct === null || Math.abs(v.pct) <= (pocos ? 120 : 100) || (pocos && Math.abs(v.dif) <= 3)));
+    }
+  };
+  await compara("últimos 30 días vs 30 anteriores", con(-30, 0), con(-60, -30));
+  await compara("30 días de hace dos meses vs el mes previo", con(-60, -30), con(-90, -60));
+  const mesActual = rangoReporte();
+  if (Number(mesActual.desde.slice(8)) === 1 && Number(mesActual.hasta.slice(8)) >= 12) {
+    const dur = mesActual.fin.getTime() - mesActual.ini.getTime();
+    await compara("mes en curso (vista por defecto)", mesActual, { ini: new Date(mesActual.ini.getTime() - dur), fin: mesActual.ini });
+  }
+}
+
+console.log("\nTipo de centro y menú:");
+{
+  const orion = await prisma.configCentro.findFirst({ where: { organizationId: idDe("orion-laboratorio") ?? "" } });
+  if (orion) {
+    ok("Orion es LABORATORIO_DENTAL", orion.tipoCentro === "LABORATORIO_DENTAL");
+    ok("Orion no ve Agenda, Estudios ni Informes; sí Laboratorio, Órdenes y Cartera", (["agenda", "estudios", "informes"] as const).every((m) => !moduloHabilitado("LABORATORIO_DENTAL", m)) && (["laboratorio", "ordenes", "cartera"] as const).every((m) => moduloHabilitado("LABORATORIO_DENTAL", m)));
+  }
+  ok("Lumia y Radia siguen siendo radiológicos y Alejandro odontólogo particular", (await prisma.configCentro.count({ where: { OR: [{ organizationId: { in: [idDe("lumia") ?? "", idDe("radia") ?? ""] }, tipoCentro: "CENTRO_RADIOLOGICO" }, { organizationId: idDe("alejandro-restrepo") ?? "", tipoCentro: "ODONTOLOGO_PARTICULAR" }] } })) === 3);
+  const volumen = await prisma.estudio.groupBy({ by: ["organizationId"], _count: { _all: true } });
+  const de = (slug: string) => volumen.find((v) => v.organizationId === idDe(slug))?._count._all ?? 0;
+  ok(`estudios: Lumia ${de("lumia")} (>= 30), Radia ${de("radia")} (>= 14), Alejandro ${de("alejandro-restrepo")} (>= 8)`, de("lumia") >= 30 && de("radia") >= 14 && de("alejandro-restrepo") >= 8);
+  const antiguo = await prisma.estudio.findMany({ where: { organizationId: idDe("lumia") ?? "" }, select: { creadoEn: true }, orderBy: { creadoEn: "asc" }, take: 1 });
+  ok("estudios de Lumia con historia de 4+ meses", !!antiguo[0] && antiguo[0].creadoEn < bog(-120));
+}
 
 // ---------- Cartera por tramos y semáforo de doctores ----------
 console.log("\nCartera por tramos (saldo abierto agrupado por antigüedad desde el vencimiento):");

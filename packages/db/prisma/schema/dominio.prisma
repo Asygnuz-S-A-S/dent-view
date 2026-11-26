@@ -68,6 +68,7 @@ model PacienteTenant {
   odontogramaHistorial   OdontogramaHistorial[]
   anticipos              Anticipo[]
   presupuestos           Presupuesto[]
+  planesTratamiento      PlanTratamiento[]
   remisionesOrigen       Remision[]             @relation("RemisionPacienteOrigen")
   remisionesDestino      Remision[]             @relation("RemisionPacienteDestino")
 
@@ -141,6 +142,7 @@ model Servicio {
   codServicioReps        Int?
   creadoEn               DateTime                @default(now())
   items                  OrdenItem[]
+  itemsPlan              PlanItem[]
   tarifas                TarifaEspecial[]
   serviciosSala          ServicioSala[]
   serviciosProfesional   ServicioProfesional[]
@@ -230,6 +232,11 @@ model OrdenItem {
   tipoRips    TipoRips  @default(PROCEDIMIENTO)
   finalidad   String?
   diagnostico String?   @db.VarChar(4)
+  // Ítem del plan de tratamiento que originó esta línea (precio congelado del plan). Se conserva en órdenes canceladas.
+  planItemId  String?
+  planItem    PlanItem? @relation(fields: [planItemId], references: [id], onDelete: SetNull)
+
+  @@index([planItemId])
 }
 
 // Tipo de servicio para el archivo RIPS (Res. 2275/2023).

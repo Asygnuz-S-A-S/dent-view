@@ -8,18 +8,22 @@ import { ESTADOS_LAB, ETIQUETA_LAB } from "@/lib/laboratorio";
 import { CLINICOS, GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
+import { Paginacion } from "@/components/comunes/paginacion";
+import { calcularPagina } from "@/lib/paginacion";
 
 export const dynamic = "force-dynamic";
 
-export default async function Laboratorio({ searchParams }: { searchParams: Promise<{ estado?: string }> }) {
+export default async function Laboratorio({ searchParams }: { searchParams: Promise<{ estado?: string; pagina?: string }> }) {
   const ctx = await exigirContexto(CLINICOS);
-  const { estado } = await searchParams;
+  const { estado, pagina } = await searchParams;
   const estadoValido = ESTADOS_LAB.find((e) => e === estado);
   const gestionar = (GESTION as readonly string[]).includes(ctx.rol);
   const where: Prisma.CasoLaboratorioWhereInput = { organizationId: ctx.organizationId, ...(estadoValido && { estado: estadoValido }) };
 
+  const total = await prisma.casoLaboratorio.count({ where });
+  const pg = calcularPagina(pagina, total);
   const [casos, pacientes, ordenes] = await Promise.all([
-    prisma.casoLaboratorio.findMany({ where, include: { paciente: { include: { persona: true } } }, orderBy: { creadoEn: "desc" }, take: 200 }),
+    prisma.casoLaboratorio.findMany({ where, include: { paciente: { include: { persona: true } } }, orderBy: { creadoEn: "desc" }, skip: pg.skip, take: pg.take }),
     gestionar ? prisma.pacienteTenant.findMany({ where: { organizationId: ctx.organizationId }, include: { persona: true }, orderBy: { nombre: "asc" } }) : [],
     gestionar ? prisma.orden.findMany({ where: { organizationId: ctx.organizationId }, select: { id: true, pacienteId: true, numero: true }, orderBy: { numero: "desc" } }) : [],
   ]);
@@ -43,6 +47,7 @@ export default async function Laboratorio({ searchParams }: { searchParams: Prom
         gestionar={gestionar} pacientes={opciones} ordenes={ordenes}
         casos={casos.map((c) => ({ ...c, paciente: c.paciente.nombre }))}
       />
+      <Paginacion ruta="/laboratorio" params={{ estado: estadoValido }} {...pg} total={total} />
     </div>
   );
 }

@@ -108,7 +108,7 @@ export default async function Cartera({ searchParams }: { searchParams: Promise<
                 {grupos.map((g) => (
                   <TableRow key={g.clave}>
                     <TableCell className="pl-4 md:pl-6 capitalize">
-                      <span className="font-medium">{nombre(g)}</span> <span className="text-xs text-muted-foreground">{TIPO[porId.get(g.filas[0].id)!.responsable]}</span>
+                      <span className="font-medium capitalize">{nombre(g)}</span> <span className="text-xs text-muted-foreground">{TIPO[porId.get(g.filas[0].id)!.responsable]}</span>
                     </TableCell>
                     {g.porTramo.map((v, i) => <TableCell key={i} className="hidden text-right lg:table-cell">{v ? cop(v) : "—"}</TableCell>)}
                     <TableCell className="pr-4 md:pr-6 text-right font-medium">{cop(g.total)}</TableCell>

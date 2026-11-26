@@ -25,12 +25,15 @@ export function crearPacientes(o: { slug: string; rng: Rng; n: number; nombre: (
 }
 
 /** Inserta personas y pacientes del centro (sin correo) y el evento de creación de cada uno. */
-export function registrarPacientes(A: Acum, o: { orgId: string; slug: string; pacientes: Pac[]; actor: string }) {
+/** `rips` = código DIVIPOLA del municipio (5 dígitos): con él los pacientes llevan los datos que pide el RIPS (sexo H/M, municipio, zona urbana, tipo de usuario). */
+export function registrarPacientes(A: Acum, o: { orgId: string; slug: string; pacientes: Pac[]; actor: string; rips?: { codMunicipio: string } }) {
   o.pacientes.forEach((p, i) => {
     A.add("persona", { id: p.personaId, tipoDocumento: p.tipoDoc, numeroDocumento: p.doc, creadoEn: p.creadoEn });
     A.add("pacienteTenant", {
       id: p.id, organizationId: o.orgId, personaId: p.personaId, nombre: p.nombre, fechaNacimiento: p.nac, celular: p.celular, correo: null, direccion: p.direccion,
       alertas: p.alertas, fotoKey: p.fotoKey, ultimaVisitaEn: p.ultimaVisitaEn, proximoControlEn: p.proximoControlEn, creadoEn: p.creadoEn,
+      sexo: p.sexo === "F" ? "M" : "H",
+      ...(o.rips ? { codMunicipio: o.rips.codMunicipio, zonaTerritorial: "U", tipoUsuarioDefecto: "05" } : {}),
     });
     eventoCreacion(A, { orgId: o.orgId, slug: o.slug, pacienteId: p.id, fecha: p.creadoEn, actor: o.actor, n: i + 1 });
   });

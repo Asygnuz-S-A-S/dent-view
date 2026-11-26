@@ -58,7 +58,7 @@ export default async function Informes() {
             <ul className="divide-y">
               {pendientes.map((o) => (
                 <li key={o.id} className="flex flex-wrap items-center justify-between gap-3 py-2.5 text-sm">
-                  <span className="min-w-0"><span className="mr-3 font-medium tabular-nums">{numeroOrden(o.numero)}</span><span className="capitalize">{o.paciente.nombre.toLowerCase()}</span></span>
+                  <span className="min-w-0"><span className="mr-3 font-medium tabular-nums">{numeroOrden(o.numero)}</span><span className="inline-block align-bottom capitalize">{o.paciente.nombre.toLowerCase()}</span></span>
                   <CrearInformeBoton ordenId={o.id} />
                 </li>
               ))}

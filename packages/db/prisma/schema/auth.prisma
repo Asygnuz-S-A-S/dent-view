@@ -152,6 +152,8 @@ model Organization {
   anticipos               Anticipo[]
   notasCredito            NotaCredito[]
   presupuestos            Presupuesto[]
+  planesTratamiento       PlanTratamiento[]
+  itemsPlan               PlanItem[]
   itemsPresupuesto        ItemPresupuesto[]
   cuotasFactura           CuotaFactura[]
   promesasPago            PromesaPago[]

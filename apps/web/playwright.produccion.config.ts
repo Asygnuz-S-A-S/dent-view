@@ -29,5 +29,11 @@ export default defineConfig({
       dependencies: ["setup"],
       testMatch: /demo-produccion\.spec\.ts$/,
     },
+    // Remisiones Lumia <-> Radia (solo lectura). Se loguea solo; usa CLAVE_DEMO y BASE_URL del entorno, sin el proyecto "setup".
+    {
+      name: "remision",
+      use: { ...devices["Desktop Chrome"], channel: "chrome", viewport: { width: 1440, height: 900 } },
+      testMatch: /remision-produccion\.spec\.ts$/,
+    },
   ],
 });

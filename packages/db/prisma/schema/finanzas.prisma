@@ -53,32 +53,35 @@ enum EstadoLiquidacion {
 
 // Dinero recibido antes de la atención (cita, reserva pública o paciente). Idempotente por linkPagoId.
 model Anticipo {
-  id                   String          @id @default(cuid())
+  id                   String           @id @default(cuid())
   organizationId       String
-  organization         Organization    @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  estado               EstadoAnticipo  @default(DISPONIBLE)
+  organization         Organization     @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  estado               EstadoAnticipo   @default(DISPONIBLE)
   pacienteId           String?
-  paciente             PacienteTenant? @relation(fields: [pacienteId], references: [id])
+  paciente             PacienteTenant?  @relation(fields: [pacienteId], references: [id])
   citaId               String?
-  cita                 Cita?           @relation(fields: [citaId], references: [id])
+  cita                 Cita?            @relation(fields: [citaId], references: [id])
   reservaId            String?
-  reserva              ReservaPublica? @relation(fields: [reservaId], references: [id])
-  linkPagoId           String?         @unique
-  linkPago             LinkPago?       @relation(fields: [linkPagoId], references: [id])
+  reserva              ReservaPublica?  @relation(fields: [reservaId], references: [id])
+  linkPagoId           String?          @unique
+  linkPago             LinkPago?        @relation(fields: [linkPagoId], references: [id])
   valor                Int
-  valorAplicado        Int             @default(0)
-  medio                MedioPago       @default(PASARELA)
+  valorAplicado        Int              @default(0)
+  medio                MedioPago        @default(PASARELA)
   referencia           String?
   // Copia de la política del centro al momento del cobro (no cambia si el centro la edita después).
-  reembolsable         Boolean         @default(true)
-  horasLimiteReembolso Int             @default(24)
-  retieneSiNoAsiste    Boolean         @default(true)
+  reembolsable         Boolean          @default(true)
+  horasLimiteReembolso Int              @default(24)
+  retieneSiNoAsiste    Boolean          @default(true)
   motivo               String? // por qué se reembolsó, retuvo o anuló
   resueltoEn           DateTime?
   registradoPorId      String?
-  creadoEn             DateTime        @default(now())
+  creadoEn             DateTime         @default(now())
+  planId               String? // anticipo de un plan de tratamiento
+  plan                 PlanTratamiento? @relation(fields: [planId], references: [id], onDelete: SetNull)
   pagos                Pago[]
 
+  @@index([planId])
   @@index([organizationId, estado])
   @@index([pacienteId])
   @@index([citaId])
@@ -138,6 +141,7 @@ model Presupuesto {
   creadoEn               DateTime          @default(now())
   actualizadoEn          DateTime          @updatedAt
   items                  ItemPresupuesto[]
+  planes                 PlanTratamiento[]
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])

@@ -18,6 +18,7 @@ async function menu(p: Page): Promise<{ href: string; label: string }[]> {
 // ================= 1) Login y menu por rol =================
 const SOLO_RADIO = ["Seguimiento de doctores"];
 const ODONTO = ["CRM", "Valoraciones virtuales", "Laboratorio"];
+const SIN_LAB = ["Agenda", "Estudios", "Cargar estudios", "Informes", "CRM", "Valoraciones virtuales", "Remisiones"];
 const ESPERADO: Record<Usuario, { con: string[]; sin: string[] }> = {
   LUMIA_ADMIN: { con: [...SOLO_RADIO, "Reportes", "Cartera", "Usuarios del centro", "Convenios y tarifas"], sin: ODONTO },
   LUMIA_RECEPCION: { con: [...SOLO_RADIO, "Cartera", "Facturación"], sin: [...ODONTO, "Reportes", "Usuarios del centro"] },
@@ -27,8 +28,9 @@ const ESPERADO: Record<Usuario, { con: string[]; sin: string[] }> = {
   RADIA_RECEPCION: { con: [...SOLO_RADIO, "Cartera"], sin: [...ODONTO, "Reportes", "Usuarios del centro"] },
   RADIA_RADIOLOGO: { con: ["Informes", "Estudios"], sin: [...ODONTO, ...SOLO_RADIO, "Cartera", "Reportes"] },
   ALEJANDRO_ADMIN: { con: [...ODONTO, "Facturación", "Catálogo y precios"], sin: ["Usuarios del centro", "Cartera", "Reportes", ...SOLO_RADIO] },
-  ORION_ADMIN: { con: [...ODONTO, "Cartera", "Reportes", "Usuarios del centro", "Facturación"], sin: [...SOLO_RADIO, "Convenios y tarifas"] },
-  ORION_TECNICO: { con: [...ODONTO, "Cartera", "Facturación"], sin: [...SOLO_RADIO, "Reportes", "Usuarios del centro"] },
+  // Orion es LABORATORIO_DENTAL: trabajos, cartera y convenios por volumen; sin agenda, imágenes ni informes, CRM ni valoraciones.
+  ORION_ADMIN: { con: ["Laboratorio", "Órdenes", "Cartera", "Reportes", "Usuarios del centro", "Facturación", "Convenios y tarifas"], sin: [...SOLO_RADIO, ...SIN_LAB] },
+  ORION_TECNICO: { con: ["Laboratorio", "Órdenes", "Cartera", "Facturación"], sin: [...SOLO_RADIO, ...SIN_LAB, "Reportes", "Usuarios del centro"] },
 };
 test.describe("C1 login y menu por rol", () => {
   for (const u of Object.keys(ESPERADO) as Usuario[]) {

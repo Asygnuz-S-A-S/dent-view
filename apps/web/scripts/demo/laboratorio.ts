@@ -80,23 +80,24 @@ export async function construirOrion(env: Entorno, hash: string, g: { nombre: ()
   // ---- Pacientes de los odontólogos clientes ----
   const pacs = crearPacientes({ slug, rng, n: 70, nombre: g.nombre, documento: g.documento, ciudad: "Medellín", menores: 4 });
 
-  // ---- 120 trabajos: orden + caso de laboratorio, con fechas y vencimientos coherentes ----
+  // ---- 440 trabajos: orden + caso de laboratorio, con fechas y vencimientos coherentes ----
   const etapaPorEdad = (edad: number): Etapa =>
     edad > 28 ? rng.weighted<Etapa>(["entregado", "repetir", "cancelado"], [93, 2, 5])
       : edad > 12 ? rng.weighted<Etapa>(["entregado", "terminado", "prueba", "proceso", "repetir"], [56, 18, 10, 11, 5])
       : edad > 4 ? rng.weighted<Etapa>(["proceso", "prueba", "terminado", "diseno", "entregado", "repetir"], [30, 18, 20, 14, 14, 4])
       : rng.weighted<Etapa>(["recibido", "diseno", "proceso"], [40, 40, 20]);
-  const dias = Array.from({ length: 180 }, (_, i) => i + 1);
-  const pesoDia = (d: number) => (diaSemana(-d) === 7 ? 0.02 : diaSemana(-d) === 6 ? 0.4 : 1) * (0.65 + 0.35 * (1 - d / 180));
+  const HIST = 210; // siete meses: los reportes comparan periodos y necesitan un volumen parejo antes del mes en curso
+  const dias = Array.from({ length: HIST }, (_, i) => i + 1);
+  const pesoDia = (d: number) => (diaSemana(-d) === 7 ? 0.02 : diaSemana(-d) === 6 ? 0.4 : 1) * (0.65 + 0.35 * (1 - d / HIST));
   type Trabajo = { n: number; cli: (typeof cli)[number]; pac: (typeof pacs)[number]; srv: (typeof servicios)[number]; dientes: string; recibido: Date; esperada: Date; terminado: Date | null; etapa: Etapa; precio: number; conv: (typeof planes)[number] };
   const trabajos: Trabajo[] = [];
-  const N = 120;
+  const N = 440;
   const dienteTxt = () => rng.pick(["36", "46", "11", "21", "14", "24", "37", "13-23", "34-36", "44-46", "16", "26", "47"]);
   // Trabajos en curso fijados a propósito (todas las etapas visibles), nueve atrasados y el resto histórico ya entregado.
   const forzados: [Etapa, number, number, number][] = [["recibido", 1, 2, 4], ["diseno", 1, 4, 6], ["proceso", 2, 9, 7], ["prueba", 4, 12, 5], ["terminado", 5, 14, 5], ["repetir", 8, 30, 3]];
   const cola = forzados.flatMap(([e, a, b, n]) => Array.from({ length: n }, () => ({ e, a, b, atrasado: false })));
   for (let i = 0; i < 9; i++) cola.push({ e: rng.pick<Etapa>(["proceso", "prueba", "diseno"]), a: 8, b: 20, atrasado: true });
-  const historicos = dias.filter((d) => d > 13);
+  const historicos = dias.filter((d) => d > 20); // los trabajos de las últimas tres semanas son los "en curso" de arriba (si no, el último mes se dispara en los reportes)
   const pesosHist = historicos.map(pesoDia);
   for (let i = 0; i < N; i++) {
     const f = cola[i];
@@ -160,7 +161,7 @@ export async function construirOrion(env: Entorno, hash: string, g: { nombre: ()
   });
 
   // ---- Facturación por cliente-odontólogo (a crédito, con tramos de cartera) ----
-  const fac = facturar(A, { orgId, rng, docs, cajeros: tecnicos, admin, probAbierta: (e) => (e <= 30 ? 0.5 : e <= 60 ? 0.38 : e <= 90 ? 0.26 : e <= 150 ? 0.14 : 0.05) });
+  const fac = facturar(A, { orgId, rng, docs, cajeros: tecnicos, admin, probAbierta: (e) => (e <= 30 ? 0.36 : e <= 60 ? 0.28 : e <= 90 ? 0.2 : e <= 150 ? 0.1 : 0.04) });
   caja(A, { orgId, rng, pagos: fac.pagos, dias: 40, cajero: tecnicos[0]!, admin });
   egresosMensuales(A, { orgId, rng, meses: 6, escala: 0.9, admin });
 

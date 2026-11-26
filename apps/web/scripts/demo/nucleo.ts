@@ -9,13 +9,20 @@ import { bog, DIA, diaUtc, enLotes, enMin, type Entorno, type Rng } from "./util
 // ---------- Acumulador de filas con orden de inserción que respeta las llaves foráneas ----------
 const ORDEN_INSERCION = [
   "persona", "pacienteTenant", "contextoMedico", "alergiaPaciente", "medicacionPaciente", "enfermedadPaciente", "contactoEmergencia", "representanteLegal",
-  "preferenciaContacto", "orden", "ordenItem", "cita", "estudio", "imagenEstudio", "anticipo", "sesionCaja", "factura", "facturaItem", "pago",
+  "preferenciaContacto", "orden", "ordenItem", "cita", "plantillaEvolucion", "evolucionClinica", "adendaEvolucion", "estudio", "imagenEstudio", "anticipo", "sesionCaja", "factura", "facturaItem", "pago",
   "notaCredito", "promesaPago", "cuotaFactura", "egreso", "informe", "enlaceEntrega", "seguimiento", "intentoContacto", "seguimientoDoctor",
   "contactoDoctor", "mensaje", "plantillaMensaje", "autorizacion", "solicitudTitular", "condicionDental", "odontogramaHistorial", "planTratamientoItem",
   "notaClinica", "presupuesto", "itemPresupuesto", "casoLaboratorio", "lead", "valoracion", "valoracionMedia", "valoracionMensaje", "actividadLead",
   "tareaCRM", "secuenciaCRM", "pasoSecuencia", "doctorPaciente", "registroToma", "horarioAtencion", "excepcionHorario", "evento",
 ] as const;
 export type Modelo = (typeof ORDEN_INSERCION)[number];
+
+// Columnas de "cuándo ocurrió algo": nunca pueden quedar en el futuro (la pantalla mostraría "Recibido 26/11" con hoy = 25/11).
+// Las fechas de agenda, vencimientos y próximos contactos (inicio, fin, vence*, proximo*) SÍ pueden ser futuras y no están aquí.
+const OCURRIDO = new Set([
+  "creadoEn", "actualizadoEn", "emitidoEn", "firmadaEn", "tomadoEn", "enviadoEn", "vistoEn", "aceptadoEn", "rechazadoEn", "otorgadaEn", "resueltaEn",
+  "completadoEn", "completadaEn", "cerradoEn", "ultimoAccesoEn", "ultimoIntentoEn", "ultimoContactoEn", "recibido", "enviado", "devueltaEn", "consentimientoEn", "recibidaEn",
+]);
 
 export class Acum {
   filas = new Map<Modelo, Record<string, unknown>[]>();
@@ -27,6 +34,8 @@ export class Acum {
   n(m: Modelo) { return this.filas.get(m)?.length ?? 0; }
   async volcar() {
     const cuentas: Record<string, number> = {};
+    const tope = new Date(Math.min(Date.now(), bog(1).getTime()) - 60_000);
+    for (const rows of this.filas.values()) for (const r of rows) for (const k of Object.keys(r)) if (OCURRIDO.has(k) && r[k] instanceof Date && (r[k] as Date) > tope) r[k] = tope;
     for (const m of ORDEN_INSERCION) {
       const rows = this.filas.get(m);
       if (!rows?.length) continue;
@@ -41,7 +50,7 @@ export class Acum {
 
 // ---------- Centro y usuarios ----------
 export type DefCentro = {
-  slug: string; nombre: string; tipo: "CENTRO_RADIOLOGICO" | "CENTRO_ODONTOLOGICO" | "ODONTOLOGO_PARTICULAR" | "CLINICA_ODONTOLOGICA";
+  slug: string; nombre: string; tipo: "CENTRO_RADIOLOGICO" | "CENTRO_ODONTOLOGICO" | "ODONTOLOGO_PARTICULAR" | "CLINICA_ODONTOLOGICA" | "LABORATORIO_DENTAL";
   color: string; iniciales: string; ciudad: string; direccion: string; telefono: string; correo: string; registro: string;
 };
 

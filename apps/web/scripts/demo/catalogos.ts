@@ -111,6 +111,41 @@ export const CATALOGO_ORION: SrvDef[] = [
   s("OTRO", "Corona atornillada sobre implante", null, 520000, 0, 0, "cons", 2),
 ];
 
+// ---------- Códigos CUPS por servicio (RIPS) ----------
+// Solo códigos del catálogo embebido de la app (lib/catalogos/cups.json, parcial: se valida contra SISPRO antes de reportar).
+// Los servicios sin equivalente claro quedan SIN código a propósito (el RIPS de esas órdenes sale "incompleto", como en la vida real).
+const CUPS_POR_NOMBRE: [RegExp, string][] = [
+  [/^Panorámica( \+ cefalométrica)?$|^Paquete ortodoncia( inicial)?$|^Paquete diseño/i, "870114"],
+  [/^ATM \(|^ATM boca/i, "870131"],
+  [/^Periapical completo|^Serie periapical/i, "870456"],
+  [/^Cefalométrica/i, "870002"],
+  [/^Periapical (individual|completo)|^Periapical$|^Serie periapical|^Radiografía periapical/i, "870450"],
+  [/^Bite wing/i, "870460"],
+  [/^Oclusal$/i, "870440"],
+  [/^Fotografías clínicas/i, "893102"],
+  [/^Modelos? (digitales|de estudio)/i, "893101"],
+  [/^CBCT senos/i, "879131"],
+  [/^CBCT ATM/i, "879150"],
+  [/^CBCT|^Paquete (implantes|cirugía|ortodoncia \+ CBCT)/i, "879141"],
+  [/^Radiografía panorámica/i, "870114"],
+  [/^Consulta de valoración/i, "890203"],
+  [/^Profilaxis/i, "997001"],
+  [/^Detartraje/i, "240201"],
+  [/^Resina/i, "232102"],
+  [/^Sellantes/i, "997107"],
+  [/^Fluorización/i, "997106"],
+  [/^Endodoncia unirradicular/i, "237301"],
+  [/^Exodoncia simple/i, "230101"],
+];
+export const cupsDe = (nombre: string) => CUPS_POR_NOMBRE.find(([re]) => re.test(nombre))?.[1] ?? null;
+export const tipoRipsDe = (nombre: string): "CONSULTA" | "PROCEDIMIENTO" => (/^Consulta/i.test(nombre) ? "CONSULTA" : "PROCEDIMIENTO");
+
+/** Diagnósticos CIE-10 (4 caracteres, del catálogo embebido) frecuentes según el estudio. */
+export const DX_POR_ESTUDIO: Record<string, string[]> = {
+  PX: ["K021", "K053", "K011", "K081", "K073", "K010"], CEFALO: ["K073", "K074", "K071"], IO: ["K021", "K041", "K045", "K044"], BW: ["K021", "K053"],
+  CBCT: ["K011", "K081", "K048", "K076", "K083"], FACIAL: ["K078"], DEFECTO: ["Z012", "K021"],
+};
+
 // ---------- Textos de informes radiológicos (ficticios, genéricos) ----------
 export const HALLAZGOS: Record<string, { hallazgos: string[]; impresion: string[]; recomendaciones: string[] }> = {
   PX: {

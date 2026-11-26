@@ -10,6 +10,7 @@ import { asegurarSuperadmin, hashDemo } from "./nucleo";
 import { construirAlejandro } from "./odontologo";
 import { construirOrion } from "./laboratorio";
 import { construirRadiologico } from "./radiologico";
+import { construirRemisiones } from "./remisiones";
 import { generarYSubir } from "./estudios";
 import { borrarTodo, imprimirResumen, usuariosReales } from "./reset";
 import { crearRng, FECHA_BASE, generadorDocumentos, generadorNombres, leerEntorno, log } from "./util";
@@ -49,7 +50,7 @@ const generador = { nombre: generadorNombres(crearRng("nombres")), documento: ge
 const resumen: Record<string, unknown> = {};
 const exentos: string[] = [];
 
-type Resultado = { A: { volcar: () => Promise<Record<string, number>> }; org: { id: string }; planes: Parameters<typeof generarYSubir>[2]; resumen: unknown } | null;
+type Resultado = { A: { volcar: () => Promise<Record<string, number>> }; org: { id: string }; planes: Parameters<typeof generarYSubir>[2]; resumen: unknown; despues?: () => Promise<void> } | null;
 const centros: [string, () => Promise<Resultado>][] = [
   ["lumia", (async () => construirRadiologico(env, hash, LUMIA, generador, await yaPoblado("lumia"))) as () => Promise<Resultado>],
   ["radia", (async () => construirRadiologico(env, hash, RADIA, generador, await yaPoblado("radia"))) as () => Promise<Resultado>],
@@ -67,9 +68,13 @@ for (const [slug, construir] of centros) {
   if (!r) { log("  ya tiene datos: se actualizaron centro, usuarios y miembros; usa --reset para regenerar."); continue; }
   const cuentas = await r.A.volcar();
   await generarYSubir(env, r.org.id, r.planes);
+  await r.despues?.();
   resumen[slug] = { ...(r.resumen as object), filas: cuentas };
   log(`  listo en ${((Date.now() - t) / 1000).toFixed(1)} s`);
 }
+
+// Remisiones Lumia <-> Radia (necesitan a los dos centros ya poblados).
+if ((await prisma.pacienteTenant.count({ where: { organization: { slug: { in: ["lumia", "radia"] } } } })) > 0) await construirRemisiones(env);
 
 // Los administradores de centro exigen 2FA salvo que el correo esté en MFA_EXENTOS de la app (nunca aplica al superadmin).
 for (const slug of Object.keys(DEF)) exentos.push(`admin@${slug}.ejemplo.invalid`);

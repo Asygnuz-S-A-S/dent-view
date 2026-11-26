@@ -5,7 +5,8 @@ import { revalidatePath } from "next/cache";
 import { z } from "zod";
 import { registrarEvento } from "@/lib/eventos";
 import { ESTADOS_ORDEN, numeroOrden, transicionValida } from "@/lib/ordenes";
-import { crearOrdenEnCentro, esquemaOrden } from "@/lib/ordenes-servicio";
+import { crearOrdenEnCentro, esquemaOrden, esquemaOrdenConPlan } from "@/lib/ordenes-servicio";
+import { sincronizarPlanConOrden } from "@/lib/planes-servidor";
 import { esquemaNumeroDocumento, esquemaTipoDocumento } from "@/lib/pacientes";
 import { crearPacienteEnCentro } from "@/lib/pacientes-centro";
 import { CLINICOS, GESTION, MEDICOS } from "@/lib/roles";
@@ -18,11 +19,18 @@ const CREADORES = [...GESTION, "doctor_remitente"] as const;
 
 export type ResultadoOrden = { error: string } | { id: string };
 
-export async function crearOrden(entrada: z.input<typeof esquemaOrden>, remisionId?: string): Promise<ResultadoOrden> {
+export async function crearOrden(entrada: z.input<typeof esquemaOrden>, remisionId?: string, plan?: { planId: string; itemIds: string[] }): Promise<ResultadoOrden> {
   const ctx = await exigirContexto(CREADORES);
-  const r = esquemaOrden.safeParse(entrada);
+  const conPlan = !!plan?.itemIds.length;
+  const r = (conPlan ? esquemaOrdenConPlan : esquemaOrden).safeParse(entrada);
   if (!r.success) return { error: r.error.issues[0]?.message ?? "Datos inválidos" };
   const esDoctor = ctx.rol === "doctor_remitente";
+  // Ítems de un plan de tratamiento: solo el personal del centro, con el módulo habilitado (el reclamo atómico lo hace crearOrdenEnCentro).
+  if (conPlan) {
+    if (esDoctor) return { error: "Solo el personal del centro crea órdenes desde un plan" };
+    await exigirModulo(ctx, "planes");
+    if (plan.itemIds.length > 200) return { error: "Demasiados ítems del plan" };
+  }
   // Orden de una remisión: la reclama el centro destino (RECIBIDA -> EN_PROCESO, una sola vez, para el paciente de la copia mínima).
   if (remisionId) {
     if (esDoctor) return { error: "Solo el personal del centro crea la orden de una remisión" };
@@ -43,6 +51,7 @@ export async function crearOrden(entrada: z.input<typeof esquemaOrden>, remision
       esDoctor,
       datos: { ...r.data, doctorId: esDoctor ? ctx.usuario.id : r.data.doctorId },
       detalleEvento: remisionId ? { remisionId } : undefined,
+      plan: conPlan ? plan : undefined,
     });
   } catch (e) {
     await revertir();
@@ -58,6 +67,7 @@ export async function crearOrden(entrada: z.input<typeof esquemaOrden>, remision
     revalidatePath(`/remisiones/${remisionId}`);
   }
   revalidatePath("/ordenes");
+  if (conPlan) revalidatePath(`/planes/${plan.planId}`);
   return { id: res.id };
 }
 
@@ -92,6 +102,7 @@ export async function cambiarEstadoOrden(id: string, estado: string): Promise<{ 
   if (!transicionValida(orden.estado, nuevo)) return { error: `No se puede pasar de ${orden.estado} a ${nuevo}` };
   await prisma.$transaction(async (tx) => {
     await tx.orden.update({ where: { id }, data: { estado: nuevo } });
+    await sincronizarPlanConOrden(tx, { organizationId: ctx.organizationId, ordenId: id, estadoOrden: nuevo });
     await registrarEvento(
       { organizationId: ctx.organizationId, pacienteId: orden.pacienteId, actorId: ctx.usuario.id, tipo: "orden.estado", detalle: { ordenId: id, orden: numeroOrden(orden.numero), de: orden.estado, a: nuevo } },
       tx,
@@ -99,6 +110,7 @@ export async function cambiarEstadoOrden(id: string, estado: string): Promise<{ 
   });
   revalidatePath("/ordenes");
   revalidatePath(`/ordenes/${id}`);
+  revalidatePath("/planes", "layout");
   return {};
 }
 

@@ -27,7 +27,7 @@ type Servicio = {
 type Seleccion = { opciones: string; dientes: string[] };
 
 export function OrdenForm({
-  pacientes: inicial, doctores, servicios, esDoctor, pacienteInicial, remisionId, convenios, tarifasDoctor, doctorPropioId, fecha,
+  pacientes: inicial, doctores, servicios, esDoctor, pacienteInicial, remisionId, convenios, tarifasDoctor, doctorPropioId, fecha, plan,
 }: {
   pacientes: PacienteOpcion[];
   doctores: { id: string; nombre: string }[];
@@ -42,6 +42,8 @@ export function OrdenForm({
   /** Solo para doctores remitentes: su propio id (siempre se aplica su tarifa). */
   doctorPropioId?: string;
   fecha: string;
+  /** Plan de tratamiento activo del paciente: sus ítems pendientes se pueden agregar a la orden a su precio congelado. */
+  plan?: { id: string; titulo: string; items: { id: string; descripcion: string; diente: number | null; fase: number; precio: number }[] };
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -54,6 +56,10 @@ export function OrdenForm({
   const [observaciones, setObservaciones] = useState("");
   const [sel, setSel] = useState<Record<string, Seleccion>>({});
   const [nuevo, setNuevo] = useState(false);
+  const [planSel, setPlanSel] = useState<string[]>([]);
+  // Los ítems del plan son del paciente del plan: si se cambia de paciente no aplican.
+  const planAplica = !!plan && pacienteId === pacienteInicial;
+  const elegidosPlan = planAplica ? plan.items.filter((i) => planSel.includes(i.id)) : [];
 
   const convenio = convenios.find((c) => c.id === convenioId);
   const doctorEfectivo = esDoctor ? doctorPropioId : doctorId;
@@ -68,7 +74,7 @@ export function OrdenForm({
     return { precio: r.precio, origen: etiquetaOrigen(r.origen, nombreDoctor, convenio) };
   };
   const elegidos = servicios.filter((s) => sel[s.id]);
-  const total = totalOrden(elegidos.map((s) => ({ precio: aplicado(s).precio ?? 0 })));
+  const total = totalOrden(elegidos.map((s) => ({ precio: aplicado(s).precio ?? 0 }))) + totalOrden(elegidosPlan);
 
   const alternar = (id: string, on: boolean) =>
     setSel((p) => {
@@ -91,7 +97,7 @@ export function OrdenForm({
           const partes = [dientes.length ? `Dientes: ${dientes.join(", ")}` : "", opciones.trim()].filter(Boolean);
           return { servicioId: s.id, opciones: partes.join(" · ") };
         }),
-      }, remisionId);
+      }, remisionId, elegidosPlan.length ? { planId: plan!.id, itemIds: elegidosPlan.map((i) => i.id) } : undefined);
       if ("error" in r) return void toast.error(r.error);
       toast.success("Orden creada");
       router.push(`/ordenes/${r.id}`);
@@ -147,6 +153,25 @@ export function OrdenForm({
             </div>
           </CardContent>
         </Card>
+
+        {planAplica && plan.items.length > 0 && (
+          <Card>
+            <CardHeader><CardTitle>Plan de tratamiento: {plan.titulo}</CardTitle></CardHeader>
+            <CardContent className="space-y-3">
+              <p className="text-xs text-muted-foreground">Los ítems del plan entran a la orden con el precio congelado del plan, sin recalcular.</p>
+              {plan.items.map((i) => (
+                <div key={i.id} className="flex items-start gap-3 rounded-lg border p-3">
+                  <Checkbox id={`p-${i.id}`} className="mt-0.5" checked={planSel.includes(i.id)} onCheckedChange={(v) => setPlanSel((l) => (v === true ? [...l, i.id] : l.filter((x) => x !== i.id)))} />
+                  <Label htmlFor={`p-${i.id}`} className="flex-1 flex-col items-start gap-0.5">
+                    <span>{i.descripcion}{i.diente ? ` · diente ${i.diente}` : ""}</span>
+                    <span className="text-xs font-normal text-muted-foreground">Fase {i.fase}</span>
+                  </Label>
+                  <span className="text-sm font-medium">{cop(i.precio)}</span>
+                </div>
+              ))}
+            </CardContent>
+          </Card>
+        )}
 
         {CATEGORIAS.map((c) => {
           const lista = servicios.filter((s) => s.categoria === c.valor);
@@ -213,10 +238,16 @@ export function OrdenForm({
         <Card>
           <CardHeader><CardTitle>Resumen</CardTitle></CardHeader>
           <CardContent className="space-y-3 text-sm">
-            {elegidos.length === 0 ? (
+            {elegidos.length + elegidosPlan.length === 0 ? (
               <p className="text-muted-foreground">Aún no hay servicios seleccionados.</p>
             ) : (
               <ul className="space-y-1">
+                {elegidosPlan.map((i) => (
+                  <li key={i.id} className="flex justify-between gap-2">
+                    <span>{i.descripcion}<span className="block text-xs text-muted-foreground">Precio del plan</span></span>
+                    <span className="text-muted-foreground">{cop(i.precio)}</span>
+                  </li>
+                ))}
                 {elegidos.map((s) => {
                   const { precio, origen } = aplicado(s);
                   return (
@@ -234,7 +265,7 @@ export function OrdenForm({
             <div className="flex justify-between border-t pt-3 text-base font-semibold" aria-live="polite">
               <span>Total</span><span>{cop(total)}</span>
             </div>
-            <Button className="w-full" disabled={pendiente || !pacienteId || elegidos.length === 0} onClick={guardar}>
+            <Button className="w-full" disabled={pendiente || !pacienteId || elegidos.length + elegidosPlan.length === 0} onClick={guardar}>
               {pendiente && <Loader2 className="animate-spin" />} Crear orden
             </Button>
           </CardContent>

@@ -11,6 +11,7 @@ Cambios 100 % aditivos (columnas opcionales o con default, tablas y enums nuevos
 - FKs fiscales/clínicas con `Restrict` (`DocumentoElectronico`, `EnvioRips` hacia Organization; `DocumentoElectronico`->Factura/NotaCredito/ConexionFE; `EvolucionClinica`->Orden). `ConfigFacturacion` y `ConexionFE` caen en cascada con la organización.
 - `BorradorEvolucion` recibió `ordenId` sin FK (el borrador es desechable). `PlantillaEvolucion` y `EvolucionClinica` ya tenían motivo, hallazgos, procedimiento, diagnósticos, plan e indicaciones: no se tocaron. `RegistroToma.ordenId` ya existía.
 - Módulos (`tipo-centro.ts`): `convenios` habilitado en CENTRO_ODONTOLOGICO y CLINICA_ODONTOLOGICA (no en ODONTOLOGO_PARTICULAR); nuevo módulo `facturacion-electronica` (ruta `/integraciones/facturacion`) en todos los tipos; `rips` NO es módulo (es pestaña).
+- Tipo de centro `LABORATORIO_DENTAL` (migración `20261126100000_tipo_laboratorio_dental`, `ALTER TYPE ... ADD VALUE`): laboratorio de prótesis. Excluye `agenda`, `agenda-publica`, `estudios`, `informes`, `cargar`, `ingesta`, `seguimiento-doctores`, `valoraciones`, `crm`, `evolucion`, `presupuestos`, `remisiones` y `planes`; conserva órdenes, laboratorio, convenios (volumen), facturación, cartera y reportes. Lo usa Orion en la demo.
 
 ## Modelo -> campos nuevos -> quién los usa
 

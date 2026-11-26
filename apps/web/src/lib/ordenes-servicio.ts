@@ -6,16 +6,21 @@ import { conReintentoNumero } from "./ordenes";
 import { convenioVigente, hoyBogota, resolverPrecio } from "./precios";
 import { cargarConvenios, cargarTarifasDoctor } from "./precios-datos";
 
-export const esquemaOrden = z.object({
+const esquemaItemsOrden = z.array(z.object({ servicioId: z.string(), opciones: z.string().trim().max(500).optional() }));
+const baseOrden = z.object({
   pacienteId: z.string().min(1, "Selecciona un paciente"),
   doctorId: z.string().nullish(),
   convenioId: z.string().nullish(),
   entrega: z.enum(["IMPRESA", "DIGITAL"]),
   embarazo: z.boolean(),
   observaciones: z.string().trim().max(2000).optional(),
-  items: z.array(z.object({ servicioId: z.string(), opciones: z.string().trim().max(500).optional() })).min(1, "Agrega al menos un servicio"),
 });
+export const esquemaOrden = baseOrden.extend({ items: esquemaItemsOrden.min(1, "Agrega al menos un servicio") });
+/** Orden con ítems de un plan de tratamiento: los servicios sueltos pueden ir vacíos (el servidor exige al menos uno entre ambos). */
+export const esquemaOrdenConPlan = baseOrden.extend({ items: esquemaItemsOrden });
 export type EntradaOrden = z.output<typeof esquemaOrden>;
+export type ReclamoPlan = { planId: string; itemIds: string[] };
+class ItemsPlanNoDisponibles extends Error {}
 
 /**
  * `esDoctor`: quien crea es un doctor remitente (`doctorId` ya es él mismo y no puede elegir convenio).
@@ -27,6 +32,8 @@ export async function crearOrdenEnCentro(a: {
   esDoctor: boolean;
   datos: EntradaOrden;
   detalleEvento?: object;
+  /** Ítems PENDIENTES de un plan de tratamiento: entran a la orden a su precio congelado (sin recalcular). */
+  plan?: ReclamoPlan;
 }): Promise<{ error: string } | { id: string; numero: number }> {
   const { organizationId: org, datos: d } = a;
   const paciente = await prisma.pacienteTenant.findFirst({ where: { id: d.pacienteId, organizationId: org } });
@@ -49,8 +56,22 @@ export async function crearOrdenEnCentro(a: {
   if (d.convenioId && !a.esDoctor && (!convenio || !convenioVigente(convenio, fecha))) return { error: "Convenio no válido o fuera de vigencia" };
   const tarifasDoctor = doctorId ? ((await cargarTarifasDoctor(org, [doctorId]))[doctorId] ?? {}) : {};
 
+  const idsPlan = a.plan ? [...new Set(a.plan.itemIds)] : [];
+  const serviciosPlan = idsPlan.length ? await prisma.servicio.findMany({ where: { organizationId: org, itemsPlan: { some: { id: { in: idsPlan }, organizationId: org } } } }) : [];
+
   const orden = await conReintentoNumero(() =>
     prisma.$transaction(async (tx) => {
+      // Reclamo atómico: un ítem solo está en una orden. Si otro se adelantó (o el plan ya no está activo) count no coincide y todo se revierte.
+      let itemsPlan: { id: string; servicioId: string | null; descripcion: string; precio: number }[] = [];
+      if (a.plan) {
+        const { count } = await tx.planItem.updateMany({
+          where: { id: { in: idsPlan }, planId: a.plan.planId, organizationId: org, estado: "PENDIENTE", plan: { estado: "ACTIVO", pacienteId: paciente.id, organizationId: org } },
+          data: { estado: "EN_ORDEN" },
+        });
+        if (count !== idsPlan.length) throw new ItemsPlanNoDisponibles();
+        itemsPlan = await tx.planItem.findMany({ where: { id: { in: idsPlan }, organizationId: org }, orderBy: [{ fase: "asc" }, { posicion: "asc" }] });
+      }
+      const porIdPlan = new Map(serviciosPlan.map((s) => [s.id, s]));
       const max = await tx.orden.aggregate({ where: { organizationId: org }, _max: { numero: true } });
       const creada = await tx.orden.create({
         data: {
@@ -64,20 +85,27 @@ export async function crearOrdenEnCentro(a: {
           observaciones: d.observaciones || null,
           creadoPorId: a.actorId,
           items: {
-            create: d.items.map((i) => {
+            create: [...itemsPlan.map((p) => {
+              const s = p.servicioId ? porIdPlan.get(p.servicioId) : undefined;
+              return { servicioId: p.servicioId, nombre: p.descripcion, codigoCups: s?.codigoCups ?? null, tipoRips: s?.tipoRips ?? "PROCEDIMIENTO", precio: p.precio, planItemId: p.id };
+            }), ...d.items.map((i) => {
               const s = porId.get(i.servicioId)!;
               // Precio congelado: nombre y precio final al momento de la orden.
               return { servicioId: s.id, nombre: s.nombre, codigoCups: s.codigoCups, tipoRips: s.tipoRips, opciones: i.opciones || null, precio: resolverPrecio({ servicio: s, entrega: d.entrega, tarifaDoctor: tarifasDoctor[s.id], convenio: convenio && { ...convenio, tarifa: convenio.tarifas[s.id] }, fecha }).precio ?? 0 };
-            }),
+            })],
           },
         },
       });
       await registrarEvento(
-        { organizationId: org, pacienteId: paciente.id, actorId: a.actorId, tipo: "orden.creada", detalle: { ordenId: creada.id, numero: creada.numero, ...a.detalleEvento } },
+        { organizationId: org, pacienteId: paciente.id, actorId: a.actorId, tipo: "orden.creada", detalle: { ordenId: creada.id, numero: creada.numero, ...(a.plan ? { planId: a.plan.planId, itemsPlan: idsPlan.length } : {}), ...a.detalleEvento } },
         tx,
       );
       return creada;
     }),
-  );
+  ).catch((e) => {
+    if (e instanceof ItemsPlanNoDisponibles) return null;
+    throw e;
+  });
+  if (!orden) return { error: "Algún ítem del plan ya no está disponible (otra orden lo tomó o el plan cambió)" };
   return { id: orden.id, numero: orden.numero };
 }

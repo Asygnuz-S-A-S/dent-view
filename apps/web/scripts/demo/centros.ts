@@ -7,12 +7,12 @@ export const DEF: Record<"lumia" | "radia" | "alejandro-restrepo" | "orion-labor
   lumia: { slug: "lumia", nombre: "Lumia Imágenes Dentales", tipo: "CENTRO_RADIOLOGICO", color: "#0f766e", iniciales: "LI", ciudad: "Manizales", direccion: "Carrera 23 # 62-45, Edificio Torre Médica, piso 3", telefono: "606 555 0142", correo: "contacto@lumia.ejemplo.invalid", registro: "Registro sanitario DEMO-17-0042" },
   radia: { slug: "radia", nombre: "Radia Centro Radiológico", tipo: "CENTRO_RADIOLOGICO", color: "#1d4ed8", iniciales: "RC", ciudad: "Bogotá", direccion: "Calle 127 # 19-30, Consultorio 405", telefono: "601 555 0188", correo: "contacto@radia.ejemplo.invalid", registro: "Registro sanitario DEMO-11-0317" },
   "alejandro-restrepo": { slug: "alejandro-restrepo", nombre: "Alejandro Restrepo Odontología", tipo: "ODONTOLOGO_PARTICULAR", color: "#15803d", iniciales: "AR", ciudad: "Manizales", direccion: "Avenida Santander # 53-18, Consultorio 202", telefono: "606 555 0173", correo: "consultorio@alejandro-restrepo.ejemplo.invalid", registro: "Registro profesional DEMO-RO-2291" },
-  "orion-laboratorio": { slug: "orion-laboratorio", nombre: "Orion Laboratorio Dental", tipo: "CENTRO_ODONTOLOGICO", color: "#7c3aed", iniciales: "OL", ciudad: "Medellín", direccion: "Carrera 43A # 14-25, Local 118", telefono: "604 555 0166", correo: "pedidos@orion-laboratorio.ejemplo.invalid", registro: "Registro sanitario DEMO-05-0129" },
+  "orion-laboratorio": { slug: "orion-laboratorio", nombre: "Orion Laboratorio Dental", tipo: "LABORATORIO_DENTAL", color: "#7c3aed", iniciales: "OL", ciudad: "Medellín", direccion: "Carrera 43A # 14-25, Local 118", telefono: "604 555 0166", correo: "pedidos@orion-laboratorio.ejemplo.invalid", registro: "Registro sanitario DEMO-05-0129" },
 };
 
 export const LUMIA: ParamsRad = {
   def: DEF.lumia, catalogo: CATALOGO_LUMIA, salas: [["CBCT · Tomografía", "teal", "cbct"], ["Panorámico", "sky", "pano"], ["Intraoral", "violet", "intra"]],
-  nPacientes: 80, nOrdenes: 450, histDias: 365, adminNombre: "Camila Restrepo Ospina", esGrande: true,
+  nPacientes: 80, nOrdenes: 720, histDias: 365, adminNombre: "Camila Restrepo Ospina", esGrande: true,
   recepcion: [{ email: "recepcion@lumia.ejemplo.invalid", nombre: "Paola Giraldo Marín" }, { email: "tecnico1@lumia.ejemplo.invalid", nombre: "Sebastián Henao Toro" }, { email: "tecnico2@lumia.ejemplo.invalid", nombre: "Lina Cifuentes Arias" }],
   radiologos: [{ email: "radiologo1@lumia.ejemplo.invalid", nombre: "Dra. Sofía Arango Villegas", tarjeta: "TP-61850" }, { email: "radiologo2@lumia.ejemplo.invalid", nombre: "Dr. Daniel Cortés Pardo", tarjeta: "TP-61904" }],
   doctores: [
@@ -33,13 +33,14 @@ export const LUMIA: ParamsRad = {
     { nombre: "Clínica del Eje (convenio institucional)", nit: "900.555.303-3", contacto: "Cartera · 606 555 0320", descuento: 8, tarifas: [] },
     { nombre: "Asociación Odontológica de Caldas", nit: "800.555.404-4", contacto: "Secretaría · 606 555 0330", descuento: 15, tarifas: [["Periapical individual", 12000]] },
   ],
-  nEstudios: { PX: 4, CEFALO: 2, IO: 2, BW: 1, CBCT: 4, FACIAL: 1 },
-  hoy: ["A", "A", "A", "E", "L", "L", "C", "C", "P", "P", "P"], futuras: [2, 4], solicitadas: 6, cajaDias: 45, mensajes: 70, solicitudes: 6,
+  nEstudios: { PX: 12, CEFALO: 5, IO: 6, BW: 3, CBCT: 12, FACIAL: 2 }, ventanaEstudios: 170,
+  rips: { codMunicipio: "17001", nit: "9015550173", codigoPrestador: "DEMO17001001", prefijo: "LUM", emiteFev: true },
+  hoy: ["A", "A", "A", "E", "L", "L", "C", "C", "P", "P", "P"], futuras: [0, 1], solicitadas: 3, cajaDias: 45, mensajes: 70, solicitudes: 6,
 };
 
 export const RADIA: ParamsRad = {
   def: DEF.radia, catalogo: CATALOGO_RADIA, salas: [["Tomografía", "sky", "cbct"], ["Panorámico y cefalométrico", "indigo", "pano"], ["Intraoral", "violet", "intra"]],
-  nPacientes: 35, nOrdenes: 150, histDias: 180, adminNombre: "Andrés Mauricio Pardo Lozano", esGrande: false,
+  nPacientes: 35, nOrdenes: 320, histDias: 180, adminNombre: "Andrés Mauricio Pardo Lozano", esGrande: false,
   recepcion: [{ email: "recepcion@radia.ejemplo.invalid", nombre: "Natalia Moreno Rojas" }, { email: "recepcion2@radia.ejemplo.invalid", nombre: "Diego Torres Cano" }],
   radiologos: [{ email: "radiologo@radia.ejemplo.invalid", nombre: "Dra. Isabella Acosta Bermúdez", tarjeta: "TP-70212" }],
   doctores: [
@@ -53,6 +54,7 @@ export const RADIA: ParamsRad = {
     { nombre: "Plan Dental Capital (convenio)", nit: "900.555.505-5", contacto: "Convenios · 601 555 0400", descuento: 10, tarifas: [["Panorámica", 42000]] },
     { nombre: "Colegio Odontológico (afiliados)", nit: "800.555.606-6", contacto: "Secretaría · 601 555 0410", descuento: 12, tarifas: [] },
   ],
-  nEstudios: { PX: 2, CEFALO: 1, IO: 1, CBCT: 2 },
-  hoy: ["A", "A", "E", "L", "C", "P"], futuras: [1, 2], solicitadas: 3, cajaDias: 30, mensajes: 30, solicitudes: 4,
+  nEstudios: { PX: 8, CEFALO: 3, IO: 4, BW: 2, CBCT: 7 }, ventanaEstudios: 150,
+  rips: { codMunicipio: "11001", nit: "9015551883", codigoPrestador: "DEMO11001001", prefijo: "RAD", emiteFev: false },
+  hoy: ["A", "A", "E", "L", "C", "P"], futuras: [0, 1], solicitadas: 2, cajaDias: 30, mensajes: 30, solicitudes: 4,
 };

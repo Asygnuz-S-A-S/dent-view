@@ -1,11 +1,12 @@
 "use client";
 
-import { Copy, FilePlus2, Pencil, Send, ShoppingCart, XCircle } from "lucide-react";
+import { Copy, FilePlus2, ListChecks, Pencil, Send, ShoppingCart, XCircle } from "lucide-react";
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useEffect, useState, useTransition } from "react";
 import { toast } from "sonner";
 import { anularPresupuesto, convertirEnOrden, duplicarPresupuesto, enviarPresupuesto, previsualizarConversion, type CredencialesPres, type VistaConversion } from "@/app/(app)/presupuestos/actions";
+import { crearPlanDePresupuesto } from "@/app/(app)/planes/actions";
 import { SelectNativo } from "@/components/crm/comun";
 import { DialogoMotivo } from "@/components/comunes/dialogo-motivo";
 import { Button } from "@/components/ui/button";
@@ -15,8 +16,8 @@ import { Label } from "@/components/ui/label";
 import { cop } from "@/lib/precios";
 import { CredencialesPresupuesto } from "./credenciales-presupuesto";
 
-export function AccionesPresupuesto({ id, puedeEditar, puedeEnviar, puedeReenviar, puedeAnular, puedeConvertir, convenios }: {
-  id: string; puedeEditar: boolean; puedeEnviar: boolean; puedeReenviar: boolean; puedeAnular: boolean; puedeConvertir: boolean; convenios: { id: string; nombre: string }[];
+export function AccionesPresupuesto({ id, puedeEditar, puedeEnviar, puedeReenviar, puedeAnular, puedeConvertir, puedeCrearPlan, convenios }: {
+  id: string; puedeEditar: boolean; puedeEnviar: boolean; puedeReenviar: boolean; puedeAnular: boolean; puedeConvertir: boolean; puedeCrearPlan: boolean; convenios: { id: string; nombre: string }[];
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -36,11 +37,19 @@ export function AccionesPresupuesto({ id, puedeEditar, puedeEnviar, puedeReenvia
     router.push(`/presupuestos/${r.id}/editar`);
   });
 
+  const crearPlan = () => iniciar(async () => {
+    const r = await crearPlanDePresupuesto(id);
+    if ("error" in r) return void toast.error(r.error);
+    toast.success("Plan de tratamiento creado");
+    router.push(`/planes/${r.id}`);
+  });
+
   return (
     <div className="flex flex-wrap gap-2">
       {puedeEditar && <Button asChild variant="outline"><Link href={`/presupuestos/${id}/editar`}><Pencil /> Editar</Link></Button>}
       {(puedeEnviar || puedeReenviar) && <Button onClick={enviar} disabled={pendiente}><Send /> {puedeEnviar ? "Enviar al paciente" : "Reenviar (enlace y código nuevos)"}</Button>}
-      {puedeConvertir && <Button onClick={() => setConvertir(true)}><ShoppingCart /> Convertir en orden</Button>}
+      {puedeCrearPlan && <Button onClick={crearPlan} disabled={pendiente}><ListChecks /> Crear plan de tratamiento</Button>}
+      {puedeConvertir && <Button variant={puedeCrearPlan ? "outline" : "default"} onClick={() => setConvertir(true)}><ShoppingCart /> Convertir en orden</Button>}
       <Button variant="outline" onClick={duplicar} disabled={pendiente}><Copy /> Duplicar</Button>
       {puedeAnular && (
         <DialogoMotivo titulo="Anular cotización" descripcion="El enlace del paciente deja de funcionar de inmediato. Esta acción queda en el historial." confirmar="Anular cotización" exito="Cotización anulada"

@@ -1,6 +1,6 @@
 # Operaciones de producción
 
-Workflows: `.github/workflows/operaciones.yml` (diagnóstico, respaldo, reinicio de demo, respaldo diario) y `.github/workflows/salud.yml` (chequeo cada 15 min). Todo corre en GitHub Actions con la misma autenticación que `desplegar.yml` (Workload Identity Federation, rama `main`) y entra a la VM con `gcloud compute ssh`.
+Workflows: `.github/workflows/operaciones.yml` (diagnóstico, respaldo, reinicio de demo, restablecer 2FA, respaldo diario) y `.github/workflows/salud.yml` (chequeo cada 15 min). Todo corre en GitHub Actions con la misma autenticación que `desplegar.yml` (Workload Identity Federation, rama `main`) y entra a la VM con `gcloud compute ssh`.
 
 ## Cómo pedir una operación
 
@@ -11,8 +11,9 @@ Workflows: `.github/workflows/operaciones.yml` (diagnóstico, respaldo, reinicio
 | `diagnostico` | `pedido.ejemplo-diagnostico.json` | Solo lectura: contenedores, imágenes, disco, volúmenes, 10 últimas migraciones, conteos (totales y por centro), 30 líneas de logs de web/worker/migrador (filtradas), si existen `CRON_SECRET` y `MIGRATE_DATABASE_URL` en la VM (true/false) y días de vigencia del certificado. |
 | `respaldo` | `pedido.ejemplo-respaldo.json` | `pg_dump -Fc` de `dentview` y de la base de Orthanc + roles (`pg_dumpall --globals-only`) en `/opt/backups` (700), verificados con `pg_restore --list`, y snapshot del disco de arranque. |
 | `reiniciar-demo` | `pedido.ejemplo-reiniciar-demo.json` | DESTRUCTIVO. Respaldo previo (aborta si falla el pg_dump), túnel SSH, `scripts/demo/index.ts --reset` con el dueño de la base. |
+| `restablecer-2fa` | `pedido.ejemplo-restablecer-2fa.json` | Quita el segundo factor (TOTP) de UNA cuenta admin para que lo enrole de nuevo (ver abajo). Respaldo previo (aborta si falla el pg_dump). |
 
-**B. Desde Actions.** Pestaña Actions > Operaciones > Run workflow: elige `operacion` y, para `reiniciar-demo`, escribe `REINICIAR-DEMO` en `confirmar`. Los parámetros (correo, nombre, hash) siempre se leen de `pedido.json` en `main`.
+**B. Desde Actions.** Pestaña Actions > Operaciones > Run workflow: elige `operacion` y, para `reiniciar-demo`, escribe `REINICIAR-DEMO` en `confirmar` (para `restablecer-2fa`, `RESTABLECER-2FA`). Los parámetros (correo, nombre, hash) siempre se leen de `pedido.json` en `main`.
 
 **Respaldo diario:** 06:30 UTC (01:30 Bogotá), operación `respaldo`.
 
@@ -26,12 +27,27 @@ Workflows: `.github/workflows/operaciones.yml` (diagnóstico, respaldo, reinicio
 
 Condiciones para que borre: commit en `main`, `confirmar` exacto y pg_dump previo exitoso. El snapshot NO es requisito (puede fallar por IAM sin bloquear). El resumen del job lista conteos antes/después y qué se ejecutó.
 
+### Qué carga el reinicio (resumen; detalle en `apps/web/scripts/demo/README.md`)
+
+Cuatro centros: Lumia y Radia (radiología, con vínculo activo en los dos sentidos y siete remisiones de ejemplo), Alejandro Restrepo (consultorio, con evolutivos firmados y presupuestos virtuales) y Orion (tipo `LABORATORIO_DENTAL`: sin Agenda, Estudios ni Informes). Lumia, Radia y Alejandro llevan datos RIPS y RIPS ya generados; **no** hay proveedor de facturación electrónica (nunca `SIMULADO` en producción). El script exige que la migración `20261126100000_tipo_laboratorio_dental` ya esté aplicada (el despliegue la aplica): sin ella falla al crear Orion.
+
 ### Contrato del script de demo (`apps/web/scripts/demo/index.ts`)
 
 Se ejecuta en el runner (`npx tsx scripts/demo/index.ts --reset`, cwd `apps/web`).
 - Argumentos: `--reset` (borra y recarga), `--solo-datos` (sin borrar).
 - Entorno: `DATABASE_URL` (dueño de la base, vía túnel a `127.0.0.1:15432`), `ORTHANC_URL=http://127.0.0.1:18042`, `S3_ENDPOINT=http://127.0.0.1:19000`, `S3_ACCESS_KEY`, `S3_SECRET_KEY`, `S3_BUCKET_ESTUDIOS`, `S3_BUCKET_ORTHANC`, `BETTER_AUTH_SECRET`, `CIFRADO_SECRETO` (puede venir vacío), `ADMIN_EMAIL`, `ADMIN_NOMBRE`, `ADMIN_HASH`, `DEMO_CLAVE` (opcional).
 - Debe terminar con código distinto de 0 si falla y no imprimir ninguna de esas variables.
+
+## Restablecer 2FA de una cuenta
+
+Para quien perdió su app de autenticación y sus códigos de respaldo. Solo funciona para cuentas que ya existen y son **superadmin** (`User.role = admin`) o **admin de algún centro** (`Member.role = admin_tenant`); para cualquier otro correo termina en error sin tocar nada.
+
+1. Copia `pedido.ejemplo-restablecer-2fa.json` a `pedido.json`, pon el `correo` de la cuenta y deja `confirmar` = `RESTABLECER-2FA` (exacto). El correo se valida con regex en el primer paso y otra vez en la VM; viaja como argumento entre comillas y como variable de psql, nunca pegado en SQL.
+2. Push a `main` (o Run workflow con `operacion = restablecer-2fa` y `confirmar = RESTABLECER-2FA`).
+3. El workflow hace el respaldo previo (pg_dump; si falla, no continúa; el snapshot es opcional como en las demás operaciones) y en la VM, en una sola transacción: borra las filas de `TwoFactor` del usuario (secreto y códigos de respaldo), pone `User.twoFactorEnabled = false` y borra TODAS sus `Session` (cierra sesión en todos los dispositivos). Imprime solo conteos antes y después (`ANTES`, `RESULTADO`, `DESPUÉS`; pasan por `filtrar-secretos.sh`) y deja el resumen en el job. Falla si el estado final no es `0 filas / false / 0 sesiones`.
+4. Vuelve `pedido.json` a `diagnostico` (si no, cualquier cambio posterior al archivo repetiría la operación).
+
+**Qué verá la persona:** inicia sesión solo con correo y clave (ya no pide código). Para un superadmin o un admin de centro la app NO lo deja usar nada más hasta enrolar de nuevo: `debeActivarMfa` (`lib/perfil.ts`) lo redirige a `/perfil` en cuanto abre cualquier pantalla del centro, y allí activa el TOTP con su clave y escanea el QR nuevo. La única excepción son los correos de `MFA_EXENTOS` (los admin de la demo), que nunca se ven obligados. Para otros roles (recepción, especialista, doctor) el 2FA es opcional: quedan sin él hasta que lo activen en `/perfil`. Un `admin_tenant` no puede saltarse el enrolamiento; el superadmin tampoco, y a ninguno se le quita el acceso.
 
 ## Restaurar un dump
 
@@ -93,4 +109,5 @@ Sin esto el paso de snapshot falla con un mensaje claro y el job termina en rojo
 
 - Ninguna entrada del pedido se interpola en comandos: pasan por variables de entorno y regex estrictas; los scripts remotos son `bash -s` con heredoc entre comillas.
 - Los logs de web/worker del diagnóstico pasan por `filtrar-secretos.sh` (heurístico). Pueden contener datos personales (correos, nombres): si el repo es visible a terceros, los logs de Actions también lo son.
+- `restablecer-2fa` deja solo conteos en el log (nunca secretos ni códigos de respaldo) y en el resumen aparece el correo enmascarado (`ab***@dominio`). Quitar el 2FA baja la seguridad de la cuenta hasta que se enrole de nuevo: confirma la identidad de la persona por otro canal antes de pedirlo.
 - `operaciones.yml` comparte el grupo de concurrencia `desplegar`: GitHub conserva un solo run pendiente por grupo, así que un pedido hecho mientras corre un despliegue y otro pendiente puede desplazar al pendiente. No hagas pedidos justo tras un push de código.

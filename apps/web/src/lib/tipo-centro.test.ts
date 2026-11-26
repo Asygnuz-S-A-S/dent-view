@@ -7,7 +7,7 @@ vi.mock("react", () => ({ cache: <T,>(f: T) => f }));
 
 describe("matriz de módulos", () => {
   it("radiológico: flujo completo sin laboratorio; seguimiento de doctores solo aquí", () => {
-    const SIN = ["laboratorio", "valoraciones", "crm", "evolucion"]; // exclusivos de odontología (evolucion: historia clínica)
+    const SIN = ["laboratorio", "valoraciones", "crm", "evolucion", "planes"]; // exclusivos de odontología (evolucion: historia clínica)
     for (const m of SIN) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m as never)).toBe(false);
     for (const m of MODULOS.filter((m) => !SIN.includes(m))) expect(moduloHabilitado("CENTRO_RADIOLOGICO", m)).toBe(true);
     for (const t of ["CENTRO_ODONTOLOGICO", "CLINICA_ODONTOLOGICA", "ODONTOLOGO_PARTICULAR"] as const) {
@@ -36,6 +36,7 @@ describe("matriz de módulos", () => {
       expect(moduloHabilitado(t, "remisiones")).toBe(true);
       expect(moduloHabilitado(t, "caja")).toBe(t !== "ODONTOLOGO_PARTICULAR");
       expect(moduloHabilitado(t, "evolucion")).toBe(t !== "CENTRO_RADIOLOGICO");
+      expect(moduloHabilitado(t, "planes")).toBe(t !== "CENTRO_RADIOLOGICO");
     }
   });
   it("ruta /integraciones/facturacion pertenece al módulo facturacion-electronica", () => {
@@ -49,6 +50,15 @@ describe("matriz de módulos", () => {
   });
 });
 
+describe("laboratorio dental", () => {
+  it("tiene laboratorio, órdenes, facturación, cartera y odontólogos clientes; no agenda, estudios, informes ni CRM", () => {
+    for (const m of ["inicio", "pacientes", "ordenes", "laboratorio", "facturacion", "cartera", "reportes", "convenios", "doctores", "usuarios"] as const) expect(moduloHabilitado("LABORATORIO_DENTAL", m)).toBe(true);
+    for (const m of ["agenda", "estudios", "informes", "cargar", "crm", "valoraciones", "evolucion", "remisiones", "seguimiento-doctores"] as const) expect(moduloHabilitado("LABORATORIO_DENTAL", m)).toBe(false);
+    expect(rutaBloqueada("LABORATORIO_DENTAL", "/informes")).toBe(true);
+    expect(etiquetaModulo("LABORATORIO_DENTAL", "doctores", "Doctores remitentes")).toBe("Odontólogos");
+  });
+});
+
 describe("moduloDeRuta / rutaBloqueada", () => {
   it("usa el prefijo más específico", () => {
     expect(moduloDeRuta("/seguimiento-doctores")).toBe("seguimiento-doctores");
@@ -58,10 +68,10 @@ describe("moduloDeRuta / rutaBloqueada", () => {
     expect(moduloDeRuta("/integraciones/api")).toBe("integraciones");
     expect(moduloDeRuta("/ajustes/agenda-publica")).toBe("agenda-publica");
     expect(moduloDeRuta("/ajustes/marca")).toBe("ajustes");
-    for (const m of ["inventario", "caja", "gastos", "presupuestos", "remisiones"] as const) expect(moduloDeRuta(`/${m}/x`)).toBe(m);
+    for (const m of ["inventario", "caja", "gastos", "presupuestos", "remisiones", "planes"] as const) expect(moduloDeRuta(`/${m}/x`)).toBe(m);
   });
-  it("cargar estudios está habilitado en todos los tipos de centro", () => {
-    for (const t of TIPOS_CENTRO) {
+  it("cargar estudios está habilitado en todos los tipos de centro salvo el laboratorio dental", () => {
+    for (const t of TIPOS_CENTRO.filter((x) => x !== "LABORATORIO_DENTAL")) {
       expect(moduloHabilitado(t, "cargar")).toBe(true);
       expect(rutaBloqueada(t, "/cargar")).toBe(false);
     }

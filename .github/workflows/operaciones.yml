@@ -1,4 +1,4 @@
-# Operaciones puntuales en producción desde el repo: diagnostico | respaldo | reiniciar-demo.
+# Operaciones puntuales en producción desde el repo: diagnostico | respaldo | reiniciar-demo | restablecer-2fa.
 # Disparadores: pestaña Actions (workflow_dispatch), un push a main que cambie infra/operaciones/pedido.json, o el respaldo diario.
 # Guía de uso, restauración e IAM: infra/operaciones/README.md.
 #
@@ -16,10 +16,10 @@ on:
       operacion:
         description: Operación a ejecutar
         type: choice
-        options: [diagnostico, respaldo, reiniciar-demo]
+        options: [diagnostico, respaldo, reiniciar-demo, restablecer-2fa]
         default: diagnostico
       confirmar:
-        description: 'Solo reiniciar-demo: escribe REINICIAR-DEMO (los parámetros salen de infra/operaciones/pedido.json)'
+        description: 'reiniciar-demo: escribe REINICIAR-DEMO; restablecer-2fa: escribe RESTABLECER-2FA (los parámetros salen de infra/operaciones/pedido.json)'
         type: string
         default: ''
   push:
@@ -77,7 +77,7 @@ jobs:
               OP=$(jq -r '.operacion // empty' "$P"); CONF=$(jq -r '.confirmar // empty' "$P") ;;
             *) echo "::error::Evento no soportado"; exit 1 ;;
           esac
-          [[ "$OP" =~ ^(diagnostico|respaldo|reiniciar-demo)$ ]] || { echo "::error::operacion inválida"; exit 1; }
+          [[ "$OP" =~ ^(diagnostico|respaldo|reiniciar-demo|restablecer-2fa)$ ]] || { echo "::error::operacion inválida"; exit 1; }
           if [ "$OP" = "reiniciar-demo" ]; then
             [ "$CONF" = "REINICIAR-DEMO" ] || { echo "::error::Para reiniciar-demo, confirmar debe ser exactamente REINICIAR-DEMO"; exit 1; }
             jq -e . "$P" >/dev/null || { echo "::error::pedido.json no es JSON válido"; exit 1; }
@@ -89,6 +89,12 @@ jobs:
             [[ "$n" =~ ^[[:alnum:]\ .\'-]{1,80}$ ]] || { echo "::error::admin_nombre inválido"; exit 1; }
             [[ "$h" =~ ^[A-Za-z0-9\$./+=:_-]{20,255}$ ]] || { echo "::error::admin_hash inválido o ausente"; exit 1; }
             [ -z "$d" ] || [[ "$d" =~ ^[A-Za-z0-9._!@#%+=-]{8,64}$ ]] || { echo "::error::demo_clave inválida"; exit 1; }
+          fi
+          if [ "$OP" = "restablecer-2fa" ]; then
+            [ "$CONF" = "RESTABLECER-2FA" ] || { echo "::error::Para restablecer-2fa, confirmar debe ser exactamente RESTABLECER-2FA"; exit 1; }
+            jq -e . "$P" >/dev/null || { echo "::error::pedido.json no es JSON válido"; exit 1; }
+            c=$(jq -r '.parametros.correo // empty' "$P")
+            [[ "$c" =~ ^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$ ]] || { echo "::error::parametros.correo inválido o ausente"; exit 1; }
           fi
           echo "op=$OP" >> "$GITHUB_OUTPUT"
           echo "Operación: $OP (evento: $GITHUB_EVENT_NAME, commit: $GITHUB_SHA)"
@@ -131,10 +137,10 @@ jobs:
           echo "== Certificado TLS =="
           echo "Días para vencer: $(infra/operaciones/dias-certificado.sh "$DOMINIO")"
 
-      # ---------------------------------------------------------------- respaldo (también precede a reiniciar-demo)
+      # ---------------------------------------------------------------- respaldo (también precede a reiniciar-demo y restablecer-2fa)
       - name: Respaldo - pg_dump en la VM
         id: dump
-        if: steps.pedido.outputs.op == 'respaldo' || steps.pedido.outputs.op == 'reiniciar-demo'
+        if: steps.pedido.outputs.op == 'respaldo' || steps.pedido.outputs.op == 'reiniciar-demo' || steps.pedido.outputs.op == 'restablecer-2fa'
         run: |
           set -uo pipefail
           gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet \
@@ -174,7 +180,7 @@ jobs:
       # Falla sola (permiso IAM faltante, cuota) sin romper el pg_dump ya hecho; el resumen final la marca FALLO.
       - name: Respaldo - snapshot del disco de arranque
         id: snap
-        if: steps.pedido.outputs.op == 'respaldo' || steps.pedido.outputs.op == 'reiniciar-demo'
+        if: steps.pedido.outputs.op == 'respaldo' || steps.pedido.outputs.op == 'reiniciar-demo' || steps.pedido.outputs.op == 'restablecer-2fa'
         continue-on-error: true
         run: |
           set -uo pipefail
@@ -296,6 +302,62 @@ jobs:
           [ "$code" = "200" ] || { echo "::error::/ingresar no respondió 200"; exit 1; }
           echo "::warning::El login del admin NO se pudo probar desde aquí: pruébalo a mano."
 
+      # ---------------------------------------------------------------- restablecer-2fa
+      # Quita el segundo factor (TOTP) de UNA cuenta admin (plataforma o de centro) para que se enrole de nuevo en su próximo ingreso.
+      # Solo corre con confirmar exacto, correo validado (regex arriba y otra vez en la VM) y el pg_dump previo exitoso.
+      # El correo viaja como argumento entre comillas (ya validado: sin comillas ni metacaracteres) y como variable de psql (:'correo'), nunca pegado en SQL.
+      # Solo imprime conteos y "true/false": nunca secretos ni códigos de respaldo.
+      - name: Restablecer 2FA de una cuenta
+        id: dosfa
+        if: steps.pedido.outputs.op == 'restablecer-2fa' && steps.dump.outcome == 'success'
+        run: |
+          set -uo pipefail
+          CORREO=$(jq -r '.parametros.correo // empty' infra/operaciones/pedido.json)
+          [[ "$CORREO" =~ ^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$ ]] || { echo "::error::parametros.correo inválido"; exit 1; }
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet \
+            --command "sudo bash -s -- '$CORREO'" -- -T <<'REMOTO' 2>&1 | infra/operaciones/filtrar-secretos.sh | tee "$RUNNER_TEMP/2fa.log"
+          set -euo pipefail
+          CORREO="${1:-}"
+          [[ "$CORREO" =~ ^[A-Za-z0-9._%+-]{1,64}@[A-Za-z0-9.-]{1,190}\.[A-Za-z]{2,24}$ ]] || { echo "FALLO correo inválido"; exit 2; }
+          q() { docker exec -i dent-view-postgres-1 psql -U dentview -d dentview -X -v ON_ERROR_STOP=1 -v "correo=$CORREO" -At -f -; }
+          # 1) La cuenta debe existir y ser admin de plataforma (role admin) o admin de algún centro (Member.role admin_tenant).
+          OBJ=$(q <<'SQL'
+          SELECT count(*) FROM "User" u WHERE lower(u.email) = lower(:'correo')
+            AND (u.role = 'admin' OR EXISTS (SELECT 1 FROM "Member" m WHERE m."userId" = u.id AND m.role = 'admin_tenant'));
+          SQL
+          )
+          [ "$OBJ" = "1" ] || { echo "FALLO no hay exactamente una cuenta admin (plataforma o de centro) con ese correo ($OBJ)"; exit 1; }
+          ESTADO() { q <<'SQL'
+          SELECT (SELECT count(*) FROM "TwoFactor" t JOIN "User" u ON u.id = t."userId" WHERE lower(u.email) = lower(:'correo'))
+            || ' ' || (SELECT coalesce(bool_or("twoFactorEnabled"), false) FROM "User" WHERE lower(email) = lower(:'correo'))
+            || ' ' || (SELECT count(*) FROM "Session" s JOIN "User" u ON u.id = s."userId" WHERE lower(u.email) = lower(:'correo'));
+          SQL
+          }
+          echo "ANTES  (filas de segundo factor / segundo factor activo / sesiones): $(ESTADO)"
+          # 2) Todo en una transacción: borra el segundo factor (secreto y códigos de respaldo), lo marca apagado y cierra TODAS las sesiones.
+          RES=$(q <<'SQL'
+          WITH u AS (SELECT id FROM "User" WHERE lower(email) = lower(:'correo')),
+               d AS (DELETE FROM "TwoFactor" WHERE "userId" IN (SELECT id FROM u) RETURNING 1),
+               f AS (UPDATE "User" SET "twoFactorEnabled" = false, "updatedAt" = now() WHERE id IN (SELECT id FROM u) RETURNING 1),
+               s AS (DELETE FROM "Session" WHERE "userId" IN (SELECT id FROM u) RETURNING 1)
+          SELECT (SELECT count(*) FROM d) || ' ' || (SELECT count(*) FROM f) || ' ' || (SELECT count(*) FROM s);
+          SQL
+          )
+          echo "RESULTADO (filas de segundo factor borradas / usuarios actualizados / sesiones cerradas): $RES"
+          DESPUES=$(ESTADO)
+          echo "DESPUÉS (filas de segundo factor / segundo factor activo / sesiones): $DESPUES"
+          [ "$DESPUES" = "0 false 0" ] || { echo "FALLO el estado final no es el esperado"; exit 1; }
+          echo "PASO segundo factor restablecido; la cuenta se enrola de nuevo en su próximo ingreso"
+          REMOTO
+          [ "${PIPESTATUS[0]}" -eq 0 ] || { echo "::error::Falló el restablecimiento de 2FA"; exit 1; }
+          MASC="${CORREO:0:2}***@${CORREO#*@}"
+          {
+            echo "### Restablecer 2FA"
+            echo "- Cuenta: \`$MASC\`. Respaldo previo verificado (ver resumen de respaldo)."
+            echo "- Se borraron sus filas de segundo factor, se apagó \`twoFactorEnabled\` y se cerraron todas sus sesiones."
+            echo "- Siguiente ingreso: entra solo con clave; si es admin de centro o superadmin la app lo manda a /perfil a enrolar el 2FA otra vez (salvo correos en MFA_EXENTOS)."
+          } >> "$GITHUB_STEP_SUMMARY"
+
       # ---------------------------------------------------------------- resumen
       - name: Resumen
         if: always()
@@ -304,18 +366,21 @@ jobs:
           DUMP: ${{ steps.dump.outcome }}
           SNAP: ${{ steps.snap.outcome }}
           DEMO: ${{ steps.demo.outcome }}
+          DOSFA: ${{ steps.dosfa.outcome }}
         run: |
           marca() { case "$1" in success) echo PASO ;; skipped|"") echo OMITIDO ;; *) echo FALLO ;; esac; }
           {
             echo "## Operación: ${OP:-inválida}"
-            if [ "$OP" = respaldo ] || [ "$OP" = reiniciar-demo ]; then
+            if [ "$OP" = respaldo ] || [ "$OP" = reiniciar-demo ] || [ "$OP" = restablecer-2fa ]; then
               echo "| Parte | Resultado |"; echo "|---|---|"
               echo "| pg_dump (dentview, orthanc, globales) | $(marca "$DUMP") |"
               echo "| Snapshot del disco | $(marca "$SNAP") |"
               [ "$OP" = reiniciar-demo ] && echo "| Reinicio de demo | $(marca "$DEMO") |"
+              [ "$OP" = restablecer-2fa ] && echo "| Restablecer 2FA | $(marca "$DOSFA") |"
               echo; echo '```'; grep -E '^(PASO|FALLO|AVISO|Retención)' "$RUNNER_TEMP/respaldo.log" 2>/dev/null || true; echo '```'
+              if [ "$OP" = restablecer-2fa ]; then echo; echo '```'; grep -E '^(ANTES|RESULTADO|DESPUÉS|PASO|FALLO)' "$RUNNER_TEMP/2fa.log" 2>/dev/null || true; echo '```'; fi
             fi
           } >> "$GITHUB_STEP_SUMMARY"
-          if [ "$DUMP" = failure ] || [ "$SNAP" = failure ] || [ "$DEMO" = failure ]; then
+          if [ "$DUMP" = failure ] || [ "$SNAP" = failure ] || [ "$DEMO" = failure ] || [ "$DOSFA" = failure ]; then
             echo "::error::Alguna parte falló: ver el resumen"; exit 1
           fi
