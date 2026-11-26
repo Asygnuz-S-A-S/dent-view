@@ -3,5 +3,6 @@
   "confirmar": "RESTABLECER-2FA",
   "parametros": {
     "correo": "andres.agudelo@asygnuz.com"
-  }
+  },
+  "nota": "reintento"
 }
