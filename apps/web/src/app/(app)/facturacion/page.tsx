@@ -17,6 +17,8 @@ import { exigirContexto } from "@/lib/sesion";
 import { fechaCorta } from "@/lib/fechas";
 import { calcularPagina } from "@/lib/paginacion";
 import { Paginacion } from "@/components/comunes/paginacion";
+import { InsigniaFev } from "@/components/facturacion/insignia-fev";
+import type { EstadoDoc } from "@/lib/fe/estados";
 import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
@@ -50,6 +52,9 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
     skip: pg.skip,
     take: pg.take,
   });
+  // Columna FEV solo si el centro emite factura electrónica.
+  const emiteFev = !!(await prisma.configFacturacion.findUnique({ where: { organizationId: ctx.organizationId }, select: { emiteFev: true } }))?.emiteFev;
+  const estadoFev = new Map(emiteFev ? (await prisma.documentoElectronico.findMany({ where: { organizationId: ctx.organizationId, tipo: "FACTURA", facturaId: { in: facturas.map((f) => f.id) } }, select: { facturaId: true, estado: true } })).map((d) => [d.facturaId, d.estado as EstadoDoc]) : []);
   const doctores = await nombresDoctores(ctx.organizationId, facturas.map((f) => f.responsableId));
   const enlace = (e?: string) => `/facturacion?${new URLSearchParams({ ...(e ? { estado: e } : {}), ...(busqueda ? { q: busqueda } : {}) })}`;
 
@@ -92,7 +97,8 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
                   <TableHead className="hidden text-right lg:table-cell">Total</TableHead>
                   <TableHead className="hidden text-right lg:table-cell">Abonado</TableHead>
                   <TableHead className="text-right">Saldo</TableHead>
-                  <TableHead className="pr-4 md:pr-6">Estado</TableHead>
+                  <TableHead className={emiteFev ? undefined : "pr-4 md:pr-6"}>Estado</TableHead>
+                  {emiteFev && <TableHead className="hidden pr-4 md:table-cell md:pr-6">FEV</TableHead>}
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -109,7 +115,8 @@ export default async function Facturacion({ searchParams }: { searchParams: Prom
                     <TableCell className="hidden text-right lg:table-cell">{cop(f.total)}</TableCell>
                     <TableCell className="hidden text-right lg:table-cell">{cop(totalPagado(f.pagos))}</TableCell>
                     <TableCell className="text-right">{f.estado === "ANULADA" ? "—" : cop(saldo(f.total, f.pagos))}</TableCell>
-                    <TableCell className="pr-4 md:pr-6"><BadgeCuenta estado={estadoCuenta(f)} /></TableCell>
+                    <TableCell className={emiteFev ? undefined : "pr-4 md:pr-6"}><BadgeCuenta estado={estadoCuenta(f)} /></TableCell>
+                    {emiteFev && <TableCell className="hidden pr-4 md:table-cell md:pr-6">{estadoFev.get(f.id) ? <InsigniaFev estado={estadoFev.get(f.id)!} /> : <span className="text-muted-foreground">—</span>}</TableCell>}
                   </TableRow>
                 ))}
               </TableBody>

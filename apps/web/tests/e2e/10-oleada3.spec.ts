@@ -18,7 +18,7 @@ test("convenios: crear convenio con 20 % de descuento", async ({ page }) => {
   await page.getByRole("button", { name: "Nuevo convenio" }).click();
   const dlg = page.getByRole("dialog", { name: "Nuevo convenio" });
   await dlg.getByLabel("Nombre").fill(CONVENIO);
-  await dlg.getByLabel(/^NIT/).fill(`9${SUFIJO}-1`);
+  await dlg.getByLabel("NIT / identificación").fill(`9${SUFIJO}-1`);
   await dlg.getByLabel("Descuento general (%)").fill("20");
   await dlg.getByRole("button", { name: "Guardar" }).click();
   await expect(page.getByText("Convenio guardado")).toBeVisible();
@@ -90,6 +90,7 @@ test("vínculo manual orden↔estudio y desvincular", async ({ page }) => {
   await expect(page.getByText("Estudio vinculado")).toBeVisible();
 
   await page.goto(ordenUrl);
+  await page.getByRole("tab", { name: "Estudios y documentos" }).click();
   await expect(page.getByText("Aún no hay estudios vinculados")).toHaveCount(0);
   await page.getByRole("button", { name: "Desvincular" }).click();
   await expect(page.getByText("Aún no hay estudios vinculados")).toBeVisible();

@@ -90,6 +90,8 @@ jobs:
         run: |
           cat > "$RUNNER_TEMP/desplegar.sh" <<'REMOTO'
           set -euo pipefail
+          # Versión desplegada (se muestra en la app y en /api/version): $1 versión, $2 commit corto, $3 fecha UTC.
+          [[ "${1:-}" =~ ^[0-9A-Za-z._-]{1,40}$ && "${2:-}" =~ ^[0-9a-f]{7,40}$ && "${3:-}" =~ ^[0-9TZ:.-]{10,30}$ ]] || { echo "argumentos de versión inválidos"; exit 1; }
           VIGENTE=/opt/dent-view
           NUEVO=/opt/dent-view.nuevo
           ANTERIOR=/opt/dent-view.anterior
@@ -100,6 +102,9 @@ jobs:
           sudo cp -p "$VIGENTE/infra/.env" "$NUEVO/infra/.env"
           sudo cp -p "$VIGENTE/infra/Caddyfile.produccion" "$NUEVO/infra/Caddyfile.produccion"
           sudo chown --reference="$VIGENTE" "$NUEVO"
+          for kv in "APP_VERSION=$1" "APP_SHA=$2" "APP_BUILT_AT=$3"; do
+            sudo sed -i "/^${kv%%=*}=/d" "$NUEVO/infra/.env"; echo "$kv" | sudo tee -a "$NUEVO/infra/.env" >/dev/null
+          done
           # El worker dispara los procesos programados (notificaciones, CRM) con este secreto; se crea una sola vez y se conserva el existente.
           sudo grep -q '^CRON_SECRET=' "$NUEVO/infra/.env" || echo "CRON_SECRET=$(openssl rand -hex 24)" | sudo tee -a "$NUEVO/infra/.env" >/dev/null
           sudo mv "$VIGENTE" "$ANTERIOR"
@@ -113,13 +118,21 @@ jobs:
           sudo rm -rf "$ANTERIOR"
           REMOTO
           gcloud compute scp "$RUNNER_TEMP/desplegar.sh" "$VM:/tmp/desplegar.sh" --project="$PROYECTO" --zone="$ZONA" --quiet
-          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command 'bash /tmp/desplegar.sh; r=$?; rm -f /tmp/desplegar.sh; exit $r'
+          APP_SHA="${GITHUB_SHA:0:7}"
+          APP_VERSION="$(date -u +%Y.%m.%d)-r${GITHUB_RUN_NUMBER}"
+          APP_BUILT_AT="$(date -u +%Y-%m-%dT%H:%M:%SZ)"
+          echo "Desplegando versión $APP_VERSION ($APP_SHA)"
+          gcloud compute ssh "$VM" --project="$PROYECTO" --zone="$ZONA" --quiet --command "bash /tmp/desplegar.sh '$APP_VERSION' '$APP_SHA' '$APP_BUILT_AT'; r=\$?; rm -f /tmp/desplegar.sh; exit \$r"
 
       - name: Verificar
         run: |
-          for i in $(seq 1 30); do
+          ESPERADO="${GITHUB_SHA:0:7}"
+          for i in $(seq 1 40); do
             code=$(curl -s -o /dev/null -w "%{http_code}" "$URL/ingresar" || true)
-            [ "$code" = "200" ] && { echo "OK $code"; exit 0; }
+            ver=$(curl -s --max-time 10 "$URL/api/version" || true)
+            sha=$(printf '%s' "$ver" | sed -n 's/.*"sha":"\([0-9a-f]*\)".*/\1/p')
+            echo "intento $i: /ingresar=$code, version servida=${sha:-?} (esperada $ESPERADO)"
+            if [ "$code" = "200" ] && [ "$sha" = "$ESPERADO" ]; then echo "OK: producción sirve $ver"; exit 0; fi
             sleep 10
           done
-          echo "El sitio no respondió 200"; exit 1
+          echo "El sitio no sirve la versión esperada ($ESPERADO): el despliegue no se reflejó"; exit 1

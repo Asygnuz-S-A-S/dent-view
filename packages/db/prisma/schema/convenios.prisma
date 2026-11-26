@@ -6,6 +6,10 @@ model Convenio {
   nombre           String
   nit              String?
   contacto         String?
+  tipoPagador      String? // PARTICULAR | EPS | PREPAGADA | POLIZA | EMPRESA | OTRO
+  cucon            String?
+  coberturaPlan    String?
+  nitPagador       String?
   descuentoGeneral Int? // porcentaje 0-100 sobre el precio final del catálogo
   activo           Boolean          @default(true)
   vigenteDesde     DateTime?        @db.Date

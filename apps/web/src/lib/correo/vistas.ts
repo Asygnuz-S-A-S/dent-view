@@ -18,6 +18,12 @@ const POR_TIPO: Record<TipoMensaje, { titulo: string; boton?: string; aviso?: st
   VALORACION_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },
   VALORACION_RESULTADO: { titulo: "Tu valoración está lista", boton: "Ver valoración", aviso: IGNORAR },
   VALORACION_AVISO: { titulo: "Valoración por revisar", boton: "Abrir valoración" },
+  PRESUPUESTO_ENLACE: { titulo: "Tu cotización está lista", boton: "Ver cotización", aviso: IGNORAR },
+  PRESUPUESTO_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },
+  PRESUPUESTO_RESPUESTA: { titulo: "Novedad en una cotización", boton: "Abrir cotización" },
+  VINCULO_SOLICITADO: { titulo: "Solicitud de vínculo", boton: "Revisar solicitud" },
+  REMISION_RECIBIDA: { titulo: "Tienes una remisión nueva", boton: "Abrir remisión" },
+  REMISION_RESPONDIDA: { titulo: "Novedad en una remisión", boton: "Abrir remisión" },
 };
 
 export function vistaMensaje(tipo: string, cuerpo: string, codigo?: string | null): Vista {

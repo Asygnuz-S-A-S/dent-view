@@ -1,5 +1,5 @@
 // Planificador: llama por HTTP interno a las rutas /api/cron/* de la app, que nadie más dispara en producción.
-// - notificaciones y crm: cada 5 minutos; seguimiento-doctores: lunes 7:00 (America/Bogota).
+// - notificaciones, crm y fe (reintentos de facturación electrónica): cada 5 minutos; seguimiento-doctores: lunes 7:00 (America/Bogota).
 // Sin CRON_SECRET no corre. Cada tarea espera a que termine la anterior (sin solaparse) y reintenta con espera creciente.
 const TIMEOUT_MS = 60_000;
 const REINTENTOS = 3;
@@ -28,7 +28,7 @@ export function iniciarPlanificador(env: Record<string, string | undefined> = pr
   const secreto = env.CRON_SECRET;
   if (!secreto) return console.warn('[scheduler] CRON_SECRET vacío: el planificador NO corre (las colas de correo, el CRM y el seguimiento de doctores no se dispararán solos)');
   const base = (env.WEB_INTERNAL_URL || 'http://web:3000').replace(/\/+$/, '');
-  console.log(`[scheduler] activo: notificaciones y crm cada 5 min, seguimiento-doctores los lunes 7:00 (Bogotá) -> ${base}`);
+  console.log(`[scheduler] activo: notificaciones, crm y fe cada 5 min, seguimiento-doctores los lunes 7:00 (Bogotá) -> ${base}`);
 
   const enCurso = new Set<string>();
   const correr = async (ruta: string) => {
@@ -36,7 +36,7 @@ export function iniciarPlanificador(env: Record<string, string | undefined> = pr
     enCurso.add(ruta);
     try { await llamar(base, ruta, secreto); } finally { enCurso.delete(ruta); }
   };
-  const cada5 = () => { void correr('/api/cron/notificaciones'); void correr('/api/cron/crm'); };
+  const cada5 = () => { void correr('/api/cron/notificaciones'); void correr('/api/cron/crm'); void correr('/api/cron/fe'); };
   setTimeout(cada5, 30_000); // deja que la app termine de arrancar
   setInterval(cada5, CADA_5_MIN);
 

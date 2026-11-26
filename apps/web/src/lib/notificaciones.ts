@@ -3,9 +3,9 @@
 
 export const CANALES = ["CORREO", "SMS", "WHATSAPP"] as const;
 export type Canal = (typeof CANALES)[number];
-export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "VALORACION_AVISO"] as const;
+export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "VALORACION_AVISO", "PRESUPUESTO_ENLACE", "PRESUPUESTO_CODIGO", "PRESUPUESTO_RESPUESTA", "VINCULO_SOLICITADO", "REMISION_RECIBIDA", "REMISION_RESPONDIDA"] as const;
 /** Mensajes con credenciales de acceso: una vez enviados no se conserva su contenido. */
-export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO"];
+export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "PRESUPUESTO_ENLACE", "PRESUPUESTO_CODIGO"];
 export type TipoMensaje = (typeof TIPOS_MENSAJE)[number];
 export const ETIQUETA_TIPO_MENSAJE: Record<TipoMensaje, string> = {
   CITA_CREADA: "Cita agendada", CITA_RECORDATORIO: "Recordatorio de cita", INFORME_PACIENTE: "Informe listo (paciente)",
@@ -14,6 +14,8 @@ export const ETIQUETA_TIPO_MENSAJE: Record<TipoMensaje, string> = {
   ESTUDIO_ENLACE: "Estudio compartido (enlace)", ESTUDIO_CODIGO: "Estudio compartido (código)",
   VALORACION_ENLACE: "Valoración virtual (enlace)", VALORACION_CODIGO: "Valoración virtual (código)",
   VALORACION_RESULTADO: "Valoración virtual (resultado)", VALORACION_AVISO: "Valoración virtual (aviso al odontólogo)",
+  PRESUPUESTO_ENLACE: "Cotización virtual (enlace)", PRESUPUESTO_CODIGO: "Cotización virtual (código)", PRESUPUESTO_RESPUESTA: "Cotización virtual (aviso al centro)",
+  VINCULO_SOLICITADO: "Remisiones (solicitud de vínculo)", REMISION_RECIBIDA: "Remisiones (remisión recibida)", REMISION_RESPONDIDA: "Remisiones (respuesta del centro)",
 };
 
 export type Preferencia = { noContactar: boolean; correo: boolean; sms: boolean; whatsapp: boolean; tiposRechazados: string[] } | null;
@@ -109,6 +111,32 @@ export const PLANTILLAS_DEFECTO: Record<TipoMensaje, { asunto: string; cuerpo: s
   VALORACION_AVISO: {
     asunto: "Tienes una valoración virtual por revisar",
     cuerpo: "Llegó una valoración virtual para revisar en {{centro}}.\nÁbrela en: {{enlace}}",
+  },
+  // Cotización virtual: sin nombre del paciente, ítems ni valores (Ley 1581); solo el aviso y el enlace.
+  PRESUPUESTO_ENLACE: {
+    asunto: "{{centro}}: tu cotización está lista",
+    cuerpo: "Hola, {{centro}} te comparte tu cotización.\nÁbrela en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
+  },
+  PRESUPUESTO_CODIGO: {
+    asunto: "Código de acceso a tu cotización de {{centro}}",
+    cuerpo: "Tu código de acceso es {{codigo}}. Úsalo en el enlace que recibiste por separado; no lo compartas.",
+  },
+  PRESUPUESTO_RESPUESTA: {
+    asunto: "Novedad en la cotización {{numero}}",
+    cuerpo: "En {{centro}} hay una novedad en la cotización {{numero}}: {{novedad}}.\nRevísala en: {{enlace}}",
+  },
+  // Remisiones entre centros: sin datos del paciente (Ley 1581); solo el aviso y el enlace.
+  VINCULO_SOLICITADO: {
+    asunto: "{{centro}} quiere vincularse contigo",
+    cuerpo: "{{centro}} pidió vincularse con tu centro para enviarse remisiones.\nRevisa la solicitud en: {{enlace}}",
+  },
+  REMISION_RECIBIDA: {
+    asunto: "Tienes una remisión nueva de {{centro}}",
+    cuerpo: "{{centro}} te envió una remisión.\nÁbrela en: {{enlace}}",
+  },
+  REMISION_RESPONDIDA: {
+    asunto: "{{centro}} respondió tu remisión",
+    cuerpo: "{{centro}} actualizó una remisión que enviaste.\nConsúltala en: {{enlace}}",
   },
   ENTREGA_CODIGO: {
     asunto: "Código de acceso a los resultados de {{centro}}",

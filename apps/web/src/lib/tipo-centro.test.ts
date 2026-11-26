@@ -16,13 +16,14 @@ describe("matriz de módulos", () => {
       expect(moduloHabilitado(t, "crm")).toBe(true);
     }
   });
-  it("odontológico y clínica: laboratorio y cartera sí; ingesta y convenios no", () => {
+  it("odontológico y clínica: laboratorio y cartera sí; ingesta no; convenios sí (el particular no)", () => {
     for (const t of ["CENTRO_ODONTOLOGICO", "CLINICA_ODONTOLOGICA"] as const) {
       expect(moduloHabilitado(t, "laboratorio")).toBe(true);
       expect(moduloHabilitado(t, "cartera")).toBe(true);
       expect(moduloHabilitado(t, "ingesta")).toBe(false);
-      expect(moduloHabilitado(t, "convenios")).toBe(false);
+      expect(moduloHabilitado(t, "convenios")).toBe(true);
     }
+    expect(moduloHabilitado("ODONTOLOGO_PARTICULAR", "convenios")).toBe(false);
   });
   it("particular: sin usuarios múltiples, doctores ni cartera; con pacientes, agenda y estudios", () => {
     for (const m of ["usuarios", "doctores", "cartera", "reportes"] as const) expect(moduloHabilitado("ODONTOLOGO_PARTICULAR", m)).toBe(false);
@@ -31,9 +32,15 @@ describe("matriz de módulos", () => {
   it("módulos nuevos: agenda pública, inventario, gastos y presupuestos en todos; caja no en el particular; evolucion no en radiología", () => {
     for (const t of ["CENTRO_RADIOLOGICO", "CENTRO_ODONTOLOGICO", "CLINICA_ODONTOLOGICA", "ODONTOLOGO_PARTICULAR"] as const) {
       for (const m of ["agenda-publica", "inventario", "gastos", "presupuestos"] as const) expect(moduloHabilitado(t, m)).toBe(true);
+      expect(moduloHabilitado(t, "facturacion-electronica")).toBe(true);
+      expect(moduloHabilitado(t, "remisiones")).toBe(true);
       expect(moduloHabilitado(t, "caja")).toBe(t !== "ODONTOLOGO_PARTICULAR");
       expect(moduloHabilitado(t, "evolucion")).toBe(t !== "CENTRO_RADIOLOGICO");
     }
+  });
+  it("ruta /integraciones/facturacion pertenece al módulo facturacion-electronica", () => {
+    expect(moduloDeRuta("/integraciones/facturacion")).toBe("facturacion-electronica");
+    expect(moduloDeRuta("/integraciones/api")).toBe("integraciones");
   });
   it("etiqueta de doctores según tipo", () => {
     expect(etiquetaModulo("CENTRO_RADIOLOGICO", "doctores", "Doctores remitentes")).toBe("Doctores remitentes");
@@ -51,7 +58,7 @@ describe("moduloDeRuta / rutaBloqueada", () => {
     expect(moduloDeRuta("/integraciones/api")).toBe("integraciones");
     expect(moduloDeRuta("/ajustes/agenda-publica")).toBe("agenda-publica");
     expect(moduloDeRuta("/ajustes/marca")).toBe("ajustes");
-    for (const m of ["inventario", "caja", "gastos", "presupuestos"] as const) expect(moduloDeRuta(`/${m}/x`)).toBe(m);
+    for (const m of ["inventario", "caja", "gastos", "presupuestos", "remisiones"] as const) expect(moduloDeRuta(`/${m}/x`)).toBe(m);
   });
   it("cargar estudios está habilitado en todos los tipos de centro", () => {
     for (const t of TIPOS_CENTRO) {

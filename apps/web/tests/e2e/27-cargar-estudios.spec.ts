@@ -122,7 +122,7 @@ test.describe("recepción", () => {
     expect((await page.request.delete(`/api/imagenes/${docId}`)).status()).toBe(403);
 
     // Detalle de la orden: documento adjunto y estudio vinculado.
-    await page.goto(`/ordenes/${ordenId}`);
+    await page.goto(`/ordenes/${ordenId}?tab=estudios`);
     await expect(page.getByText("Documentos adjuntos (2)")).toBeVisible();
     await expect(page.getByText("orden-remision.pdf")).toBeVisible();
     await expect(page.getByText("QA carga web")).toBeVisible();

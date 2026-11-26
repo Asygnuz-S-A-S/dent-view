@@ -98,3 +98,13 @@ Las credenciales de conectores y los secretos de webhooks se cifran (AES-256-GCM
 **Configuración de OHIF 3.13 (`viewer/config/dent-view.js`, sin recompilar).**
 - Configurado: `investigationalUseDialog: { option: 'never' }`; logo/nombre "dent-view" con enlace "Volver" mediante `whiteLabeling.createLogoComponentFn` (vuelve a la página de origen según `document.referrer`: `/estudios`, `/informes/…` o `/resultados/<token>`; por defecto `/estudios`); idioma español por defecto con `defaultLanguage: 'es'` (parche `viewer/patches/0001-dent-view-es.patch`; quien elige otro idioma en Preferencias lo conserva; también acepta `?lng=es`).
 - Requiere tocar el fork (`viewer/ohif`): ocultar o renombrar otros textos "OHIF" (menú Acerca de, título de la pestaña), cambiar el favicon y traducir cadenas que falten en el locale `es`.
+
+## RIPS desde la orden (Documento Técnico 1 v003)
+
+La orden es el eje: desde `/ordenes/[id]` hay pestañas *Resumen*, *Servicios y precio*, *RIPS* (solo si `ConfigFacturacion.generaRips`), *Estudios y documentos*, *Factura* y *Evolución*. Con `generaRips = false` (valor por defecto) la pestaña RIPS no existe y nada se exige.
+
+- Generador y validador puros: `apps/web/src/lib/rips/generar.ts` (`generarRips(entrada) -> { json, errores, advertencias }`). Los errores impiden generar; las advertencias no. Lo que no se conoce va como `null`/`0`: no se inventan valores de tablas SISPRO.
+- `GET /api/rips/[ordenId]` (roles admin, recepción, especialista) genera, guarda el JSON en S3 como `EnvioRips` (estado `VALIDADO_LOCAL`, SHA-256, versión `DT1-v003`), audita `rips.generado` y descarga `RIPS-<n.º orden>.json`. Con errores responde 422.
+- **Validado localmente NO es lo mismo que aprobado por el Ministerio (CUV).** El archivo debe cargarse en el validador oficial o en el proveedor tecnológico del centro.
+- Catálogos embebidos y versionados: `apps/web/src/lib/catalogos/cups.json` y `cie10.json` (parciales, odontología) y `referencias-rips.ts` (tablas pequeñas marcadas `TODO verificar contra tablas SISPRO`). Para actualizarlos basta reemplazar el JSON (mismo formato) y subir `version`. Deben validarse contra las tablas oficiales SISPRO.
+- El sistema no guarda el documento del profesional que atiende: se envía `null` con aviso.

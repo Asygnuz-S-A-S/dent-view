@@ -13,6 +13,7 @@ import { auth } from "@/lib/auth";
 import { ETIQUETA_ROL } from "@/lib/invitaciones";
 import { cssMarca } from "@/lib/marca";
 import { contextoActivo, obtenerSesion } from "@/lib/sesion";
+import { versionApp } from "@/lib/version";
 import { rutaBloqueada } from "@/lib/tipo-centro";
 import { tipoDeCentro } from "@/lib/tipo-centro-servidor";
 
@@ -53,6 +54,7 @@ export default async function AppLayout({ children }: { children: React.ReactNod
         tipo={tipo}
         marca={{ nombre: marca?.nombre || activa?.name || "Sin centro", logo: marca?.logo ?? null }}
         usuario={{ nombre: sesion!.user.name, correo: sesion!.user.email }}
+        version={`${versionApp().version} · ${versionApp().sha}`}
       />
       <SidebarInset className="min-w-0">
         {sesion?.session.impersonatedBy && <BannerSuplantacion centro={activa?.name ?? "el centro"} />}

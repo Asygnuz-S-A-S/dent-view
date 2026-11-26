@@ -1,0 +1,111 @@
+// Facturación electrónica DIAN (FEV) y envíos RIPS. Todo opcional/aditivo: un centro sin ConfigFacturacion sigue con la cuenta de cobro interna.
+// Proveedor tecnológico = String validado por el registro de adaptadores (lib/fev), no enum: agregar un proveedor NO exige migración.
+// Valores hoy: SIMULADO, SIIGO, ALEGRA, FACTUS, MATIAS, OTRO. Credenciales siempre cifradas (lib/cifrado.ts). Ids de usuario sin FK.
+
+enum EstadoDocFE {
+  BORRADOR
+  ENVIANDO
+  ACEPTADA
+  RECHAZADA
+  ERROR
+  ANULADA
+}
+
+enum TipoDocFE {
+  FACTURA
+  NOTA_CREDITO
+  NOTA_DEBITO
+}
+
+model ConfigFacturacion {
+  organizationId        String       @id
+  organization          Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  nit                   String?
+  dv                    String?
+  razonSocial           String?
+  nombreComercial       String?
+  codigoPrestador       String?      @db.VarChar(12) // código REPS de habilitación
+  generaRips            Boolean      @default(false)
+  emiteFev              Boolean      @default(false)
+  modalidadDefecto      String? // modalidad de pago/atención RIPS
+  grupoServiciosDefecto String?
+  prefijoFactura        String?
+  regimen               String?
+  responsabilidadFiscal String?
+  actualizadoEn         DateTime     @updatedAt
+}
+
+model ConexionFE {
+  id                   String                 @id @default(cuid())
+  organizationId       String
+  organization         Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  proveedor            String // ver cabecera
+  modo                 ModoPasarela           @default(SANDBOX)
+  credencialesCifradas String
+  webhookSecretCifrado String?
+  configJson           Json? // resolución de numeración, prefijo, etc.
+  activa               Boolean                @default(true)
+  creadoEn             DateTime               @default(now())
+  documentos           DocumentoElectronico[]
+
+  @@unique([organizationId, proveedor])
+}
+
+model DocumentoElectronico {
+  id                String       @id @default(cuid())
+  organizationId    String
+  organization      Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  tipo              TipoDocFE
+  facturaId         String
+  factura           Factura      @relation(fields: [facturaId], references: [id], onDelete: Restrict)
+  notaCreditoId     String?      @unique
+  notaCredito       NotaCredito? @relation(fields: [notaCreditoId], references: [id], onDelete: Restrict)
+  ordenId           String?
+  orden             Orden?       @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  conexionId        String
+  conexion          ConexionFE   @relation(fields: [conexionId], references: [id], onDelete: Restrict)
+  estado            EstadoDocFE  @default(BORRADOR)
+  claveIdempotencia String       @unique
+  idExterno         String?
+  numeroDian        String?
+  cufe              String?      @unique
+  xmlKey            String?
+  pdfKey            String?
+  attachedKey       String?
+  hashXml           String?
+  mensajes          Json?
+  intentos          Int          @default(0)
+  proximoIntento    DateTime     @default(now())
+  emitidoPorId      String?
+  enviadoEn         DateTime?
+  aceptadoEn        DateTime?
+  creadoEn          DateTime     @default(now())
+  actualizadoEn     DateTime     @updatedAt
+  envios            EnvioRips[]
+
+  @@index([organizationId, estado])
+  @@index([estado, proximoIntento])
+  @@index([facturaId])
+}
+
+model EnvioRips {
+  id             String                @id @default(cuid())
+  organizationId String
+  organization   Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  ordenId        String?
+  orden          Orden?                @relation(fields: [ordenId], references: [id], onDelete: SetNull)
+  documentoId    String?
+  documento      DocumentoElectronico? @relation(fields: [documentoId], references: [id], onDelete: SetNull)
+  version        String // versión del documento técnico RIPS
+  jsonKey        String
+  hashJson       String
+  estado         String // GENERADO | VALIDADO_LOCAL | DESCARGADO | ENVIADO | APROBADO | RECHAZADO
+  cuv            String?
+  resultados     Json?
+  generadoPorId  String?
+  creadoEn       DateTime              @default(now())
+
+  @@index([organizationId, estado])
+  @@index([ordenId])
+  @@index([documentoId])
+}

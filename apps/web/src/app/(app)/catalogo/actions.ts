@@ -19,6 +19,10 @@ const esquema = z.object({
   precioImpreso: precio,
   precioDigital: precio,
   descuento: z.preprocess((v) => (v === "" || v == null ? 0 : Number(v)), z.number().int().min(0)),
+  // RIPS: todo opcional (solo se exige al marcar una orden lista para RIPS).
+  codigoCups: z.string().trim().regex(/^\d{6}$/, "El CUPS debe tener 6 dígitos").or(z.literal("")).transform((v) => v || null),
+  tipoRips: z.enum(["CONSULTA", "PROCEDIMIENTO", "OTRO_SERVICIO"]).default("PROCEDIMIENTO"),
+  codServicioReps: z.preprocess((v) => (v === "" || v == null ? null : Number(v)), z.number().int().min(1, "Código de servicio REPS inválido").max(99999, "Código de servicio REPS inválido").nullable()),
 });
 
 export type EstadoForm = { error?: string; ok?: boolean } | undefined;

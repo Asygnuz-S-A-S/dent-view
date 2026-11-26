@@ -5,12 +5,12 @@ test.use({ storageState: authFile("admin") });
 
 // Rutas del menú lateral del admin (app-sidebar.tsx) + subrutas de listado. radex-demo es CENTRO_RADIOLOGICO: /laboratorio no existe para ese tipo (404, ver 15-tipos-centro).
 const RUTAS: [string, string][] = [
-  ["/inicio", "Buen"], ["/pacientes", "Pacientes"], ["/ordenes", "Órdenes"], ["/agenda", "Agenda"],
-  ["/estudios", "Estudios"], ["/cargar", "Cargar"], ["/informes", "Informes"], ["/seguimiento", "Seguimiento"],
+  ["/inicio", "Buen"], ["/pacientes", "Pacientes"], ["/ordenes", "Órdenes"], ["/agenda", "Agenda"], ["/remisiones", "Remisiones"],
+  ["/estudios", "Estudios"], ["/cargar", "Cargar"], ["/presupuestos", "Presupuestos"], ["/informes", "Informes"], ["/seguimiento", "Seguimiento"],
   ["/doctores", "Doctores"], ["/seguimiento-doctores", "Seguimiento"], ["/facturacion", "Facturación"],
   ["/cartera", "Cartera"], ["/reportes", "Reportes"], ["/catalogo", "Catálogo"], ["/usuarios", "Usuarios"],
   ["/ajustes", "Salas"], ["/notificaciones", "Notificaciones"], ["/proteccion-datos", "Protección"],
-  ["/convenios", "Convenios"], ["/ingesta", "ingesta"], ["/integraciones", "Integraciones"], ["/integraciones/api", "Integraciones"], ["/integraciones/webhooks", "Integraciones"], ["/integraciones/conectores", "Integraciones"], ["/integraciones/pasarelas", "Integraciones"], ["/perfil", "perfil"], ["/ordenes/nueva", "Nueva orden"], ["/facturacion/nueva", "cobro"],
+  ["/convenios", "Convenios"], ["/ingesta", "ingesta"], ["/integraciones", "Integraciones"], ["/integraciones/api", "Integraciones"], ["/integraciones/webhooks", "Integraciones"], ["/integraciones/conectores", "Integraciones"], ["/integraciones/pasarelas", "Integraciones"], ["/integraciones/facturacion", "Integraciones"], ["/perfil", "perfil"], ["/ordenes/nueva", "Nueva orden"], ["/facturacion/nueva", "cobro"],
 ];
 
 for (const [ruta, titulo] of RUTAS) {

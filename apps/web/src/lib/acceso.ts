@@ -62,6 +62,8 @@ export type EntradaVisor = {
   enlace?: { estudioUids: string[]; activo: boolean } | null;
   /** Hay un enlace DOCTOR activo que compartió este estudio con el correo del usuario (solo aplica al doctor remitente). */
   compartido?: boolean;
+  /** El estudio fue devuelto por un centro destino a una remisión del centro del usuario (solo lectura en el visor). */
+  remitido?: boolean;
 };
 
 export function decidirAccesoVisor(e: EntradaVisor): 200 | 401 | 403 {
@@ -73,5 +75,6 @@ export function decidirAccesoVisor(e: EntradaVisor): 200 | 401 | 403 {
   if (e.metodo !== "GET" && e.metodo !== "HEAD") return 403;
   if (!e.uid) return 403;
   if (puedeVerEstudio(e.usuarioId, e.rol, e.estudio)) return 200;
+  if (e.remitido) return 200;
   return e.compartido && e.rol === "doctor_remitente" ? 200 : 403;
 }

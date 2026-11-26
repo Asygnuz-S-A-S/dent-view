@@ -7,6 +7,10 @@ const exigir = vi.fn(async (roles?: readonly string[]) => {
 });
 vi.mock("@/lib/sesion", () => ({ exigirContexto: exigir }));
 vi.mock("next/cache", () => ({ revalidatePath: vi.fn() }));
+const fe = { documento: null as string | null, vigentes: 0 };
+const prepararNotaFe = vi.fn(async () => fe.documento);
+const procesarDocumento = vi.fn(async () => "ACEPTADA");
+vi.mock("@/lib/fe/servicio", () => ({ prepararNotaFe, procesarDocumento }));
 vi.mock("@/lib/eventos", () => ({ registrarEvento: vi.fn(async () => ({})) }));
 
 const factura = { id: "F1", pacienteId: "P1", numero: 3, total: 100000, estado: "ABIERTA", pagos: [] as { id: string; valor: number; medio: string; anuladoEn: Date | null; anticipoId: string | null }[] };
@@ -20,16 +24,19 @@ const tx = {
     update: vi.fn(async ({ data }: { data: object }) => { updates.factura.push(data); Object.assign(factura, data); }),
   },
   pago: { update: vi.fn(async ({ data }: { data: object }) => { updates.pago.push(data); }) },
+  documentoElectronico: { count: vi.fn(async () => fe.vigentes) },
   anticipo: { findFirst: vi.fn(async () => ({ id: "A1", valor: 50000, valorAplicado: 50000, estado: "APLICADO" })), update: vi.fn(async ({ data }: { data: object }) => { updates.anticipo.push(data); }) },
   notaCredito: {
     aggregate: vi.fn(async () => ({ _max: { consecutivo: notas.length ? notas.length : null } })),
-    create: vi.fn(async ({ data }: { data: (typeof notas)[number] }) => { notas.push(data); }),
+    create: vi.fn(async ({ data }: { data: (typeof notas)[number] }) => { notas.push(data); return { id: `N${notas.length}` }; }),
   },
 };
 const prisma = {
   $transaction: (f: (t: typeof tx) => unknown) => f(tx),
   pago: { findFirst: vi.fn(async () => ({ facturaId: "F1" })) },
   pacienteTenant: { findFirst: vi.fn(async () => ({ id: "P1" })) },
+  orden: { findFirst: vi.fn(async () => ({ pacienteId: "P1", convenioId: "CV1", items: [{ nombre: "Panorámica", opciones: null, precio: 90000, servicioId: "S1" }, { nombre: "Cefalo", opciones: "A", precio: 10000, servicioId: null }] })) },
+  convenio: { findFirst: vi.fn(async () => ({ id: "CV1" })) },
 };
 vi.mock("@dent-view/db", () => ({ prisma }));
 
@@ -39,6 +46,7 @@ const pago = (over = {}) => ({ id: "G1", valor: 100000, medio: "EFECTIVO", anula
 beforeEach(() => {
   ROLES.actual = "admin_tenant";
   Object.assign(factura, { total: 100000, estado: "ABIERTA", pagos: [] });
+  fe.documento = null; fe.vigentes = 0; procesarDocumento.mockClear(); prepararNotaFe.mockClear();
   notas.length = 0; updates.factura.length = 0; updates.pago.length = 0; updates.anticipo.length = 0;
 });
 
@@ -123,5 +131,45 @@ describe("crearFactura con valores extremos", () => {
   });
   it("un total que no cabe en Int4 se rechaza", async () => {
     expect(await crearFactura({ ...base, items: [{ descripcion: "x", cantidad: 3, valorUnitario: 1_000_000_000 }] })).toEqual({ error: expect.stringContaining("2.000.000.000") });
+  });
+});
+
+describe("facturación electrónica", () => {
+  it("una cuenta con FEV vigente no se anula (se corrige con nota crédito electrónica)", async () => {
+    fe.vigentes = 1;
+    expect(await anularFactura("F1", "Orden duplicada")).toEqual({ error: expect.stringContaining("nota crédito electrónica") });
+    expect(updates.factura).toHaveLength(0);
+  });
+  it("la nota crédito interna con FEV aceptada deja su documento electrónico y lo procesa fuera de la transacción", async () => {
+    factura.estado = "PAGADA"; factura.pagos = [pago()];
+    fe.documento = "D1";
+    expect(await crearNotaCredito("F1", { valor: 30000, motivo: "Descuento pactado" })).toEqual({});
+    expect(prepararNotaFe).toHaveBeenCalledWith(expect.anything(), expect.objectContaining({ notaCreditoId: "N1", facturaId: "F1" }));
+    expect(procesarDocumento).toHaveBeenCalledWith("D1");
+    expect(factura.total).toBe(70000); // la nota interna se conserva
+  });
+  it("si el proveedor falla al procesar, la nota interna igual queda creada", async () => {
+    factura.estado = "PAGADA"; factura.pagos = [pago()];
+    fe.documento = "D1";
+    procesarDocumento.mockRejectedValueOnce(new Error("proveedor caído"));
+    expect(await crearNotaCredito("F1", { valor: 30000, motivo: "Descuento pactado" })).toEqual({});
+    expect(notas).toHaveLength(1);
+  });
+  it("sin FEV no se procesa nada (comportamiento de siempre)", async () => {
+    factura.estado = "PAGADA"; factura.pagos = [pago()];
+    await crearNotaCredito("F1", { valor: 30000, motivo: "Descuento pactado" });
+    expect(procesarDocumento).not.toHaveBeenCalled();
+  });
+});
+
+describe("crearFactura desde una orden conserva servicioId y convenioId", () => {
+  it("copia servicioId de cada ítem y el convenio real", async () => {
+    const creadas: { data: { convenioId: string | null; items: { create: { servicioId?: string | null }[] } } }[] = [];
+    (tx as unknown as { factura: Record<string, unknown> }).factura.aggregate = vi.fn(async () => ({ _max: { numero: 0 } }));
+    (tx as unknown as { factura: Record<string, unknown> }).factura.count = vi.fn(async () => 0);
+    (tx as unknown as { factura: Record<string, unknown> }).factura.create = vi.fn(async (a: (typeof creadas)[number]) => { creadas.push(a); return { id: "F9", numero: 1 }; });
+    expect(await crearFactura({ ordenId: "OR1", responsable: "CONVENIO", convenio: "EPS Sana" })).toEqual({ id: "F9" });
+    expect(creadas[0]!.data.convenioId).toBe("CV1");
+    expect(creadas[0]!.data.items.create.map((i) => i.servicioId)).toEqual(["S1", null]);
   });
 });

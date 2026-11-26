@@ -17,6 +17,7 @@ enum EstadoPresupuesto {
   RECHAZADO
   VENCIDO
   CONVERTIDO
+  VISTO // el paciente abrió el enlace (se agrega al final: ALTER TYPE ADD VALUE no reordena)
 }
 
 enum EstadoCuota {
@@ -86,48 +87,64 @@ model Anticipo {
 
 // Solo se inserta. Una nota crédito por anulación/devolución; consecutivo por centro.
 model NotaCredito {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Restrict)
-  consecutivo    Int
-  facturaId      String
-  factura        Factura      @relation(fields: [facturaId], references: [id], onDelete: Restrict)
-  valor          Int
-  motivo         String
-  creadaPorId    String?
-  creadoEn       DateTime     @default(now())
+  id                   String                @id @default(cuid())
+  organizationId       String
+  organization         Organization          @relation(fields: [organizationId], references: [id], onDelete: Restrict)
+  consecutivo          Int
+  facturaId            String
+  factura              Factura               @relation(fields: [facturaId], references: [id], onDelete: Restrict)
+  valor                Int
+  motivo               String
+  creadaPorId          String?
+  creadoEn             DateTime              @default(now())
+  documentoElectronico DocumentoElectronico?
 
   @@unique([organizationId, consecutivo])
   @@index([facturaId])
 }
 
 model Presupuesto {
-  id             String            @id @default(cuid())
-  organizationId String
-  organization   Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  numero         Int // consecutivo por centro
-  pacienteId     String
-  paciente       PacienteTenant    @relation(fields: [pacienteId], references: [id])
-  profesionalId  String?
-  estado         EstadoPresupuesto @default(BORRADOR)
-  titulo         String?
-  notas          String?
-  margen         Decimal?          @db.Decimal(5, 2) // % sobre costo usado al cotizar
-  validoHasta    DateTime?         @db.Date
+  id                     String            @id @default(cuid())
+  organizationId         String
+  organization           Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero                 Int // consecutivo por centro
+  pacienteId             String
+  paciente               PacienteTenant    @relation(fields: [pacienteId], references: [id])
+  profesionalId          String?
+  estado                 EstadoPresupuesto @default(BORRADOR)
+  titulo                 String?
+  notas                  String?
+  margen                 Decimal?          @db.Decimal(5, 2) // % sobre costo usado al cotizar
+  validoHasta            DateTime?         @db.Date
   // Aceptación pública (/presupuesto/[token]): el token en claro solo viaja por correo.
-  tokenHash      String?           @unique
-  aceptadoEn     DateTime?
-  aceptadoNombre String?
-  aceptadoIpHash String?
-  rechazadoEn    DateTime?
-  creadoPorId    String?
-  creadoEn       DateTime          @default(now())
-  actualizadoEn  DateTime          @updatedAt
-  items          ItemPresupuesto[]
+  tokenHash              String?           @unique
+  aceptadoEn             DateTime?
+  aceptadoNombre         String?
+  aceptadoIpHash         String?
+  rechazadoEn            DateTime?
+  // Cotización virtual: origen y verificación del aceptante. valoracionId/leadId/ordenId = ids sin FK.
+  valoracionId           String?
+  leadId                 String?
+  ordenId                String?
+  codigoHash             String? // hash del código de verificación enviado al paciente
+  intentosCodigo         Int               @default(0)
+  enviadoEn              DateTime?
+  vistoEn                DateTime?
+  textoAceptacionVersion String?
+  textoAceptacionHash    String?
+  aceptadoDocumento      String?
+  rechazoMotivo          String?
+  creadoPorId            String?
+  creadoEn               DateTime          @default(now())
+  actualizadoEn          DateTime          @updatedAt
+  items                  ItemPresupuesto[]
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])
   @@index([pacienteId])
+  @@index([organizationId, ordenId])
+  @@index([organizationId, valoracionId])
+  @@index([organizationId, leadId])
 }
 
 // facturaId se llena al convertir (parcial por fase): un ítem se factura una sola vez.

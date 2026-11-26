@@ -25,7 +25,7 @@ export const MODULOS = [
   "inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "seguimiento-doctores", "doctores",
   "laboratorio", "facturacion", "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta",
   "integraciones", "pasarelas", "notificaciones", "proteccion-datos", "valoraciones", "crm",
-  "cargar", "agenda-publica", "inventario", "caja", "gastos", "presupuestos", "evolucion",
+  "cargar", "agenda-publica", "inventario", "caja", "gastos", "presupuestos", "evolucion", "facturacion-electronica", "remisiones",
 ] as const;
 export type Modulo = (typeof MODULOS)[number];
 
@@ -35,9 +35,9 @@ const SIN_MODULOS: Record<TipoCentro, readonly Modulo[]> = {
   // Sin historia clínica odontológica (evolucion): usa RegistroToma y el evolutivo de imágenes.
   CENTRO_RADIOLOGICO: ["laboratorio", "valoraciones", "crm", "evolucion"],
   // (valoración virtual y CRM de pacientes son de odontología; el radiológico retiene doctores con seguimiento-doctores)
-  // Odontología: sin ingesta, sin convenios con remitentes ni seguimiento de doctores remitentes.
-  CENTRO_ODONTOLOGICO: ["seguimiento-doctores", "convenios", "ingesta"],
-  CLINICA_ODONTOLOGICA: ["seguimiento-doctores", "convenios", "ingesta"],
+  // Odontología: sin ingesta ni seguimiento de doctores remitentes; convenios sí (EPS, prepagadas, pólizas).
+  CENTRO_ODONTOLOGICO: ["seguimiento-doctores", "ingesta"],
+  CLINICA_ODONTOLOGICA: ["seguimiento-doctores", "ingesta"],
   // Particular (centro de 1 usuario): además sin usuarios, doctores, reportes ni cartera (facturación simple).
   ODONTOLOGO_PARTICULAR: ["seguimiento-doctores", "convenios", "ingesta", "usuarios", "doctores", "reportes", "cartera", "caja"],
 };
@@ -57,11 +57,12 @@ export function etiquetaModulo(tipo: TipoCentro, modulo: Modulo, base: string) {
 const RUTAS: readonly (readonly [string, Modulo])[] = [
   ["/ajustes/agenda-publica", "agenda-publica"],
   ["/integraciones/pasarelas", "pasarelas"],
+  ["/integraciones/facturacion", "facturacion-electronica"],
   ["/seguimiento-doctores", "seguimiento-doctores"],
   ["/proteccion-datos", "proteccion-datos"],
   ...(["inicio", "pacientes", "ordenes", "agenda", "estudios", "informes", "seguimiento", "doctores", "laboratorio", "facturacion",
     "cartera", "reportes", "catalogo", "convenios", "usuarios", "ajustes", "ingesta", "integraciones", "notificaciones", "valoraciones", "crm",
-    "inventario", "caja", "gastos", "presupuestos", "cargar"] as const).map(
+    "inventario", "caja", "gastos", "presupuestos", "evolucion", "cargar", "remisiones"] as const).map(
     (m) => [`/${m}`, m] as const,
   ),
 ];

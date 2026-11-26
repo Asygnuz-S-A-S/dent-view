@@ -80,6 +80,18 @@ describe("decidirAccesoVisor", () => {
   it("sin UID → 403", () => expect(decidirAccesoVisor({ ...base, uid: null })).toBe(403));
 });
 
+describe("decidirAccesoVisor con remisión devuelta", () => {
+  const ajeno = { ...base, rol: null };
+  it("remitido true + GET → 200", () => expect(decidirAccesoVisor({ ...ajeno, remitido: true })).toBe(200));
+  it("remitido false o ausente → 403", () => {
+    expect(decidirAccesoVisor({ ...ajeno, remitido: false })).toBe(403);
+    expect(decidirAccesoVisor(ajeno)).toBe(403);
+  });
+  it("remitido + POST → 403", () => expect(decidirAccesoVisor({ ...ajeno, remitido: true, metodo: "POST" })).toBe(403));
+  it("remitido sin uid → 403", () => expect(decidirAccesoVisor({ ...ajeno, remitido: true, uid: null })).toBe(403));
+  it("remitido sin usuario → 401", () => expect(decidirAccesoVisor({ ...ajeno, remitido: true, usuarioId: null })).toBe(401));
+});
+
 describe("decidirAccesoVisor con cookie de resultados", () => {
   const sin = { ...base, usuarioId: null, rol: null, estudio: null };
   const enlace = { estudioUids: [UID, "1.2.3"], activo: true };

@@ -3,6 +3,7 @@ import { prisma } from "@dent-view/db";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { AnularPagoBoton, AplicarAnticipoBoton } from "@/components/facturacion/acciones-pago";
+import { BloqueFev } from "@/components/facturacion/bloque-fev";
 import { AccionesFactura } from "@/components/facturacion/acciones-factura";
 import { LinksPago } from "@/components/facturacion/links-pago";
 import { BadgeCuenta, estadoCuenta } from "@/components/comunes/estado-badge";
@@ -98,6 +99,8 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
         </CardContent>
       </Card>
 
+      <BloqueFev facturaId={f.id} />
+
       {anticipos.length > 0 && (
         <Card className="py-0">
           <CardHeader className="pt-6"><CardTitle>Anticipos disponibles</CardTitle></CardHeader>
@@ -163,7 +166,7 @@ export default async function DetalleFactura({ params }: { params: Promise<{ id:
           </CardContent>
         </Card>
       )}
-      <p className="text-xs text-muted-foreground">Cuenta de cobro interna del centro; no es factura electrónica DIAN.</p>
+      <p className="text-xs text-muted-foreground">Cuenta de cobro interna del centro; solo es factura electrónica DIAN si aparece aceptada en la sección «Factura electrónica».</p>
     </div>
   );
 }

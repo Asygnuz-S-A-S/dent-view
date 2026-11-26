@@ -3,12 +3,16 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { BotonWhatsapp, Convertir, EditarLead, CambiarEtapa, InscribirSecuencia, NotaForm, Perdido, Preferencias, RegistrarContacto, TareaCheck, TareaForm, type DatosLead } from "@/components/crm/ficha-lead";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
+import { BadgePresupuesto } from "@/components/presupuestos/badge-presupuesto";
 import { Badge } from "@/components/ui/badge";
+import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { ETIQUETA_ACTIVIDAD, ETIQUETA_ETAPA, etiquetaOrigen, type Etapa, type TipoActividad } from "@/lib/crm";
 import { alcanceLeads, cargarResponsables, esGestion } from "@/lib/crm-datos";
 import { fechaCorta, fechaHoraCompleta, fechaIso } from "@/lib/fechas";
 import { cop } from "@/lib/formato";
+import { estadoVisible, numeroPresupuesto, type EstadoPres } from "@/lib/presupuestos";
+import { ambitoPresupuestos } from "@/lib/presupuestos-servidor";
 import { CLINICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
 
@@ -22,13 +26,14 @@ export default async function FichaLead({ params }: { params: Promise<{ id: stri
   const lead = await prisma.lead.findFirst({ where: { id, ...alcanceLeads(ctx) }, include: { responsable: { select: { name: true } } } });
   if (!lead) notFound();
   const org = ctx.organizationId;
-  const [actividades, tareas, inscripciones, secuencias, responsables, centro] = await Promise.all([
+  const [actividades, tareas, inscripciones, secuencias, responsables, centro, cotizacion] = await Promise.all([
     prisma.actividadLead.findMany({ where: { organizationId: org, leadId: id }, orderBy: { creadoEn: "desc" }, take: 100 }),
     prisma.tareaCRM.findMany({ where: { organizationId: org, leadId: id }, orderBy: [{ estado: "asc" }, { vence: "asc" }], include: { asignado: { select: { name: true } } }, take: 50 }),
     prisma.inscripcionSecuencia.findMany({ where: { organizationId: org, leadId: id }, orderBy: { creadoEn: "desc" }, include: { secuencia: { select: { nombre: true } } }, take: 20 }),
     gestion ? prisma.secuenciaCRM.findMany({ where: { organizationId: org }, select: { id: true, nombre: true }, orderBy: { nombre: "asc" } }) : [],
     gestion ? cargarResponsables(org) : [],
     prisma.configCentro.findUnique({ where: { organizationId: org }, select: { nombre: true } }).then(async (c) => c?.nombre || (await prisma.organization.findUnique({ where: { id: org }, select: { name: true } }))?.name || "nuestro centro"),
+    prisma.presupuesto.findFirst({ where: { AND: [ambitoPresupuestos(ctx), { OR: [{ leadId: id }, ...(lead.pacienteId ? [{ pacienteId: lead.pacienteId }] : [])] }] }, orderBy: { creadoEn: "desc" }, select: { id: true, numero: true, estado: true, validoHasta: true } }),
   ]);
   const autores = new Map((await prisma.user.findMany({ where: { id: { in: [...new Set(actividades.flatMap((a) => (a.autorId ? [a.autorId] : [])))] } }, select: { id: true, name: true } })).map((u) => [u.id, u.name]));
   const datos: DatosLead = {
@@ -42,9 +47,9 @@ export default async function FichaLead({ params }: { params: Promise<{ id: stri
     <div className="space-y-6">
       <EncabezadoPagina
         titulo={lead.nombre}
-        insignia={<Badge variant={lead.etapa === "GANADO" ? "success" : lead.etapa === "PERDIDO" ? "danger" : "info"}>{ETIQUETA_ETAPA[lead.etapa as Etapa]}</Badge>}
+        insignia={<><Badge variant={lead.etapa === "GANADO" ? "success" : lead.etapa === "PERDIDO" ? "danger" : "info"}>{ETIQUETA_ETAPA[lead.etapa as Etapa]}</Badge>{cotizacion && <Link href={`/presupuestos/${cotizacion.id}`} aria-label={`Cotización ${numeroPresupuesto(cotizacion.numero)}`} className="inline-flex items-center gap-1.5 text-xs"><span className="text-muted-foreground">Cotización {numeroPresupuesto(cotizacion.numero)}</span><BadgePresupuesto estado={estadoVisible({ estado: cotizacion.estado as EstadoPres, validoHasta: cotizacion.validoHasta })} /></Link>}</>}
         descripcion={`${etiquetaOrigen(lead.origen)}${lead.interes ? ` · ${lead.interes}` : ""} · creado el ${fechaCorta(lead.creadoEn)}`}
-        acciones={gestion ? <><EditarLead lead={datos} responsables={responsables} />{!lead.pacienteId && lead.etapa !== "PERDIDO" && <Convertir id={lead.id} />}</> : undefined}
+        acciones={<><Button asChild variant="outline"><Link href={`/presupuestos/nuevo?lead=${lead.id}`}>Crear cotización</Link></Button>{gestion && <><EditarLead lead={datos} responsables={responsables} />{!lead.pacienteId && lead.etapa !== "PERDIDO" && <Convertir id={lead.id} />}</>}</>}
       />
       {lead.pacienteId && <p className="text-sm">Este lead ya es paciente: <Link className="underline" href={`/pacientes/${lead.pacienteId}`}>ver ficha del paciente</Link>.</p>}
       {lead.noContactar && <p role="status" className="rounded-md bg-danger-soft px-3 py-2 text-sm text-danger-ink">Marcado como «no contactar»: no se le envía ningún correo automático.</p>}

@@ -11,6 +11,8 @@ import { GESTION } from "@/lib/roles";
 import { idsPacientesPorNombre } from "@/lib/busqueda";
 import { documentoDeBusqueda } from "@/lib/pacientes";
 import { exigirContexto } from "@/lib/sesion";
+import { Badge } from "@/components/ui/badge";
+import { estadoRipsDeOrdenes } from "@/lib/rips/datos";
 import { fechaCorta } from "@/lib/fechas";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { BadgeOrden } from "@/components/comunes/estado-badge";
@@ -23,9 +25,9 @@ export const dynamic = "force-dynamic";
 
 const fecha = fechaCorta;
 
-export default async function Ordenes({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string; doctor?: string; desde?: string; hasta?: string; pagina?: string }> }) {
+export default async function Ordenes({ searchParams }: { searchParams: Promise<{ estado?: string; q?: string; doctor?: string; desde?: string; hasta?: string; pagina?: string; rips?: string }> }) {
   const ctx = await exigirContexto();
-  const { estado, q, doctor, desde: d0, hasta: h0, pagina } = await searchParams;
+  const { estado, q, doctor, desde: d0, hasta: h0, pagina, rips: rips0 } = await searchParams;
   const estadoValido = ESTADOS_ORDEN.find((e) => e === estado);
   const busqueda = q?.trim();
   const desde = esFecha(d0) ? d0 : undefined;
@@ -52,6 +54,15 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
       ...(numero !== null ? [{ numero }] : []),
     ];
   }
+  // Columna y filtro RIPS: solo si el centro genera RIPS (el doctor remitente no los ve).
+  const conRips = !esDoctor && !!(await prisma.configFacturacion.findUnique({ where: { organizationId: ctx.organizationId }, select: { generaRips: true } }))?.generaRips;
+  const ripsFiltro = conRips && (rips0 === "lista" || rips0 === "incompleta") ? rips0 : undefined;
+  if (ripsFiltro) {
+    // shortcut: el estado RIPS se calcula en memoria; con decenas de miles de órdenes filtradas pasar a una columna persistida.
+    const candidatas = await prisma.orden.findMany({ where, select: { id: true } });
+    const estados = await estadoRipsDeOrdenes(ctx.organizationId, candidatas.map((c) => c.id));
+    where.id = { in: candidatas.filter((c) => estados.get(c.id) === (ripsFiltro === "lista")).map((c) => c.id) };
+  }
   const total = await prisma.orden.count({ where });
   const pg = calcularPagina(pagina, total);
   const ordenes = await prisma.orden.findMany({
@@ -61,10 +72,12 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
     skip: pg.skip,
     take: pg.take,
   });
+  const estadosRips = conRips ? await estadoRipsDeOrdenes(ctx.organizationId, ordenes.map((o) => o.id)) : new Map<string, boolean>();
   const puedeCrear = ctx.rol === "doctor_remitente" || (GESTION as readonly string[]).includes(ctx.rol);
-  const extra = { ...(busqueda ? { q: busqueda } : {}), ...(doctorValido ? { doctor: doctorValido } : {}), ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}) };
+  const extra = { ...(busqueda ? { q: busqueda } : {}), ...(doctorValido ? { doctor: doctorValido } : {}), ...(desde ? { desde } : {}), ...(hasta ? { hasta } : {}), ...(ripsFiltro ? { rips: ripsFiltro } : {}) };
   const enlace = (e?: string) => `/ordenes?${new URLSearchParams({ ...(e ? { estado: e } : {}), ...extra })}`;
-  const hayFiltros = !!(busqueda || estadoValido || doctorValido || desde || hasta);
+  const hayFiltros = !!(busqueda || estadoValido || doctorValido || desde || hasta || ripsFiltro);
+  const enlaceRips = (v?: string) => `/ordenes?${new URLSearchParams({ ...(estadoValido ? { estado: estadoValido } : {}), ...extra, rips: v ?? "" })}`.replace(/&?rips=(&|$)/, "$1");
 
   return (
     <div className="space-y-6">
@@ -87,6 +100,15 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
           <Button type="submit" size="icon" variant="outline" aria-label="Buscar"><Search /></Button>
         </form>
       </div>
+
+      {conRips && (
+        <div className="flex flex-wrap items-center gap-2" role="group" aria-label="Filtro RIPS">
+          <span className="text-sm text-muted-foreground">RIPS:</span>
+          <Button asChild size="sm" variant={ripsFiltro ? "outline" : "default"}><Link href={enlaceRips()}>Todas</Link></Button>
+          <Button asChild size="sm" variant={ripsFiltro === "lista" ? "default" : "outline"}><Link href={enlaceRips("lista")}>Listas</Link></Button>
+          <Button asChild size="sm" variant={ripsFiltro === "incompleta" ? "default" : "outline"}><Link href={enlaceRips("incompleta")}>Incompletas</Link></Button>
+        </div>
+      )}
 
       <FiltrosUrl filtros={[
         ...(esDoctor ? [] : [{ tipo: "select" as const, clave: "doctor", etiqueta: "Doctor remitente", todos: "Todos los doctores", ancho: "w-56", opciones: doctores.map((d) => ({ valor: d.userId, texto: d.user.name })) }]),
@@ -112,6 +134,7 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
                   <TableHead className="hidden xl:table-cell">Servicios</TableHead>
                   <TableHead className="hidden xl:table-cell">Entrega</TableHead>
                   <TableHead className="hidden text-right xl:table-cell">Total</TableHead>
+                  {conRips && <TableHead>RIPS</TableHead>}
                   <TableHead className="pr-4 md:pr-6">Estado</TableHead>
                 </TableRow>
               </TableHeader>
@@ -132,6 +155,7 @@ export default async function Ordenes({ searchParams }: { searchParams: Promise<
                     </TableCell>
                     <TableCell className="hidden xl:table-cell">{o.entrega === "IMPRESA" ? "Impresa" : "Digital"}</TableCell>
                     <TableCell className="hidden text-right xl:table-cell">{cop(totalOrden(o.items))}</TableCell>
+                    {conRips && <TableCell><Badge variant={estadosRips.get(o.id) ? "success" : "warning"}>{estadosRips.get(o.id) ? "Lista" : "Incompleta"}</Badge></TableCell>}
                     <TableCell className="pr-4 md:pr-6"><BadgeOrden estado={o.estado} /></TableCell>
                   </TableRow>
                 ))}

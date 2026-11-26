@@ -36,6 +36,14 @@ model PacienteTenant {
   fotoKey                String? // clave S3 de la foto de perfil (tenants/{org}/pacientes/{id}/…); solo se sirve por ruta autenticada
   ultimaVisitaEn         DateTime? // fidelización: última atención (la mantiene la lógica de CRM)
   proximoControlEn       DateTime? // fidelización: cuándo invitar a control
+  // RIPS (Res. 2275/2023): datos del usuario en el centro. Todos opcionales.
+  sexo                   String? // H | M | I
+  codPaisResidencia      String?                @default("170")
+  codMunicipio           String?                @db.VarChar(5) // DIVIPOLA
+  zonaTerritorial        String? // U | R
+  codPaisOrigen          String?                @default("170")
+  tipoUsuarioDefecto     String? // tipo de usuario RIPS por defecto (01..)
+  aseguradoraNit         String?
   creadoEn               DateTime               @default(now())
   estudios               Estudio[]
   imagenes               ImagenEstudio[]
@@ -60,6 +68,8 @@ model PacienteTenant {
   odontogramaHistorial   OdontogramaHistorial[]
   anticipos              Anticipo[]
   presupuestos           Presupuesto[]
+  remisionesOrigen       Remision[]             @relation("RemisionPacienteOrigen")
+  remisionesDestino      Remision[]             @relation("RemisionPacienteDestino")
 
   @@unique([organizationId, personaId])
   @@index([organizationId])
@@ -125,6 +135,10 @@ model Servicio {
   requiereOrden          Boolean                 @default(false) // radiología: solo con orden
   anticipoTipo           AnticipoTipo            @default(NINGUNO)
   anticipoValor          Int?
+  // RIPS: código CUPS y tipo de servicio.
+  codigoCups             String?                 @db.VarChar(6)
+  tipoRips               TipoRips                @default(PROCEDIMIENTO)
+  codServicioReps        Int?
   creadoEn               DateTime                @default(now())
   items                  OrdenItem[]
   tarifas                TarifaEspecial[]
@@ -156,46 +170,73 @@ enum Entrega {
 
 // Orden de remisión (la ficha que llena el paciente/doctor).
 model Orden {
-  id                String            @id @default(cuid())
-  organizationId    String
-  organization      Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  numero            Int // consecutivo por centro
-  pacienteId        String
-  paciente          PacienteTenant    @relation(fields: [pacienteId], references: [id])
-  doctorRemitenteId String?
-  doctorRemitente   User?             @relation("OrdenDoctor", fields: [doctorRemitenteId], references: [id])
-  estado            EstadoOrden       @default(SOLICITADA)
-  entrega           Entrega           @default(DIGITAL)
-  convenioId        String?
-  convenio          Convenio?         @relation(fields: [convenioId], references: [id], onDelete: SetNull)
-  observaciones     String?
-  embarazo          Boolean           @default(false)
-  creadoPorId       String?
-  creadoEn          DateTime          @default(now())
-  actualizadoEn     DateTime          @updatedAt
-  items             OrdenItem[]
-  estudios          Estudio[]
-  imagenes          ImagenEstudio[]
-  citas             Cita[]
-  facturas          Factura[]
-  casosLab          CasoLaboratorio[]
-  reservasPublicas  ReservaPublica[]
-  registrosToma     RegistroToma[]
+  id                       String                 @id @default(cuid())
+  organizationId           String
+  organization             Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  numero                   Int // consecutivo por centro
+  pacienteId               String
+  paciente                 PacienteTenant         @relation(fields: [pacienteId], references: [id])
+  doctorRemitenteId        String?
+  doctorRemitente          User?                  @relation("OrdenDoctor", fields: [doctorRemitenteId], references: [id])
+  estado                   EstadoOrden            @default(SOLICITADA)
+  entrega                  Entrega                @default(DIGITAL)
+  convenioId               String?
+  convenio                 Convenio?              @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  observaciones            String?
+  embarazo                 Boolean                @default(false)
+  creadoPorId              String?
+  // RIPS (Res. 2275/2023). profesionalAtiendeId = User.id sin FK.
+  tipoUsuario              String?
+  numAutorizacion          String?
+  finalidad                String?
+  causaMotivoAtencion      String?
+  viaIngreso               String?
+  diagnosticoPrincipal     String?                @db.VarChar(4)
+  diagnosticosRelacionados String[]               @default([])
+  tipoDiagnostico          String?
+  profesionalAtiendeId     String?
+  ripsActualizadoEn        DateTime?
+  creadoEn                 DateTime               @default(now())
+  actualizadoEn            DateTime               @updatedAt
+  items                    OrdenItem[]
+  estudios                 Estudio[]
+  imagenes                 ImagenEstudio[]
+  citas                    Cita[]
+  facturas                 Factura[]
+  casosLab                 CasoLaboratorio[]
+  reservasPublicas         ReservaPublica[]
+  registrosToma            RegistroToma[]
+  documentosElectronicos   DocumentoElectronico[]
+  enviosRips               EnvioRips[]
+  evolucionClinicas        EvolucionClinica[]
+  remisionDestino          Remision?              @relation("RemisionOrdenDestino")
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])
 }
 
 model OrdenItem {
-  id         String    @id @default(cuid())
-  ordenId    String
-  orden      Orden     @relation(fields: [ordenId], references: [id], onDelete: Cascade)
-  servicioId String?
-  servicio   Servicio? @relation(fields: [servicioId], references: [id], onDelete: SetNull)
-  nombre     String // copia del nombre al momento de la orden
-  opciones   String? // FOV, zona, dientes (FDI), adicionales
-  precio     Int // precio congelado al crear la orden
-  descuento  Int       @default(0)
+  id          String    @id @default(cuid())
+  ordenId     String
+  orden       Orden     @relation(fields: [ordenId], references: [id], onDelete: Cascade)
+  servicioId  String?
+  servicio    Servicio? @relation(fields: [servicioId], references: [id], onDelete: SetNull)
+  nombre      String // copia del nombre al momento de la orden
+  opciones    String? // FOV, zona, dientes (FDI), adicionales
+  precio      Int // precio congelado al crear la orden
+  descuento   Int       @default(0)
+  // RIPS
+  codigoCups  String?   @db.VarChar(6)
+  tipoRips    TipoRips  @default(PROCEDIMIENTO)
+  finalidad   String?
+  diagnostico String?   @db.VarChar(4)
+}
+
+// Tipo de servicio para el archivo RIPS (Res. 2275/2023).
+enum TipoRips {
+  CONSULTA
+  PROCEDIMIENTO
+  OTRO_SERVICIO
 }
 
 // Sala o equipo donde se toman los estudios (p. ej. "CS 9600", "Panorámico").
@@ -347,26 +388,26 @@ enum MedioPago {
 
 // Cuenta de cobro interna (no es factura electrónica DIAN).
 model Factura {
-  id                        String            @id @default(cuid())
+  id                        String                 @id @default(cuid())
   organizationId            String
-  organization              Organization      @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  organization              Organization           @relation(fields: [organizationId], references: [id], onDelete: Cascade)
   numero                    Int // consecutivo por centro
   pacienteId                String?
-  paciente                  PacienteTenant?   @relation(fields: [pacienteId], references: [id])
+  paciente                  PacienteTenant?        @relation(fields: [pacienteId], references: [id])
   ordenId                   String?
-  orden                     Orden?            @relation(fields: [ordenId], references: [id])
-  responsable               Responsable       @default(PACIENTE)
+  orden                     Orden?                 @relation(fields: [ordenId], references: [id])
+  responsable               Responsable            @default(PACIENTE)
   responsableId             String? // userId del doctor cuando responsable = DOCTOR
   convenio                  String? // nombre del convenio cuando responsable = CONVENIO (texto histórico; convenioId es el vínculo real)
   convenioId                String?
-  convenioRef               Convenio?         @relation(fields: [convenioId], references: [id], onDelete: SetNull)
+  convenioRef               Convenio?              @relation(fields: [convenioId], references: [id], onDelete: SetNull)
   anuladoEn                 DateTime?
   anuladoPorId              String?
   motivoAnulacion           String?
   ultimoRecordatorioCobroEn DateTime?
-  estado                    EstadoFactura     @default(ABIERTA)
+  estado                    EstadoFactura          @default(ABIERTA)
   total                     Int
-  fecha                     DateTime          @default(now())
+  fecha                     DateTime               @default(now())
   vence                     DateTime?
   notas                     String?
   items                     FacturaItem[]
@@ -376,6 +417,7 @@ model Factura {
   cuotas                    CuotaFactura[]
   promesas                  PromesaPago[]
   itemsPresupuesto          ItemPresupuesto[]
+  documentosElectronicos    DocumentoElectronico[]
 
   @@unique([organizationId, numero])
   @@index([organizationId, estado])

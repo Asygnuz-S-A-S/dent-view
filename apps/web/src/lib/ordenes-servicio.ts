@@ -67,7 +67,7 @@ export async function crearOrdenEnCentro(a: {
             create: d.items.map((i) => {
               const s = porId.get(i.servicioId)!;
               // Precio congelado: nombre y precio final al momento de la orden.
-              return { servicioId: s.id, nombre: s.nombre, opciones: i.opciones || null, precio: resolverPrecio({ servicio: s, entrega: d.entrega, tarifaDoctor: tarifasDoctor[s.id], convenio: convenio && { ...convenio, tarifa: convenio.tarifas[s.id] }, fecha }).precio ?? 0 };
+              return { servicioId: s.id, nombre: s.nombre, codigoCups: s.codigoCups, tipoRips: s.tipoRips, opciones: i.opciones || null, precio: resolverPrecio({ servicio: s, entrega: d.entrega, tarifaDoctor: tarifasDoctor[s.id], convenio: convenio && { ...convenio, tarifa: convenio.tarifas[s.id] }, fecha }).precio ?? 0 };
             }),
           },
         },

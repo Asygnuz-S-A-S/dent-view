@@ -8,11 +8,11 @@ import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
 export const dynamic = "force-dynamic";
 
-export default async function NuevaOrden({ searchParams }: { searchParams: Promise<{ paciente?: string }> }) {
+export default async function NuevaOrden({ searchParams }: { searchParams: Promise<{ paciente?: string; remision?: string }> }) {
   const ctx = await exigirContexto([...GESTION, "doctor_remitente"]);
   const org = ctx.organizationId;
   const esDoctor = ctx.rol === "doctor_remitente";
-  const { paciente } = await searchParams;
+  const { paciente, remision } = await searchParams;
   const fecha = hoyBogota();
 
   const [personas, doctores, servicios] = await Promise.all([
@@ -38,6 +38,7 @@ export default async function NuevaOrden({ searchParams }: { searchParams: Promi
       <EncabezadoPagina titulo="Nueva orden de remisión" descripcion="Ficha digital de remisión: selecciona el paciente y los estudios solicitados." />
       <OrdenForm
         esDoctor={esDoctor}
+        remisionId={esDoctor ? undefined : remision}
         pacienteInicial={personas.some((p) => p.id === paciente) ? paciente : undefined}
         pacientes={personas.map((p) => ({ id: p.id, nombre: p.nombre, documento: `${p.persona.tipoDocumento} ${p.persona.numeroDocumento}` }))}
         convenios={convenios}

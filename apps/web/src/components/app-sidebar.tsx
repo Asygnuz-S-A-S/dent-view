@@ -2,7 +2,7 @@
 
 import {
   Building2, CalendarDays, Check, ChevronsUpDown, ClipboardList, House, LogOut, ScanLine, Settings2, ShieldCheck, HardDriveUpload, Plug,
-  Stethoscope, Tags, Upload, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch,
+  Stethoscope, Tags, Upload, Handshake, CircleUser, Users, UserRound, Receipt, Wallet, FlaskConical, ChartColumn, FileText, PhoneCall, Bell, Lock, Video, Target, UserRoundSearch, Calculator, Send,
 } from "lucide-react";
 import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
@@ -40,6 +40,7 @@ const NAV = [
       { href: "/pacientes", label: "Pacientes", icon: UserRound, roles: TODOS },
       { href: "/ordenes", label: "Órdenes", icon: ClipboardList, roles: TODOS },
       { href: "/agenda", label: "Agenda", icon: CalendarDays, roles: ["admin_tenant", "recepcion", "especialista"] },
+      { href: "/remisiones", label: "Remisiones", icon: Send, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/estudios", label: "Estudios", icon: ScanLine, roles: TODOS },
       { href: "/cargar", label: "Cargar estudios", icon: Upload, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/informes", label: "Informes", icon: FileText, roles: TODOS },
@@ -56,6 +57,7 @@ const NAV = [
     items: [
       { href: "/facturacion", label: "Facturación", icon: Receipt, roles: ["admin_tenant", "recepcion"] },
       { href: "/cartera", label: "Cartera", icon: Wallet, roles: ["admin_tenant", "recepcion"] },
+      { href: "/presupuestos", label: "Presupuestos", icon: Calculator, roles: ["admin_tenant", "recepcion", "especialista"] },
       { href: "/reportes", label: "Reportes", icon: ChartColumn, roles: ["admin_tenant"] },
     ],
   },
@@ -95,11 +97,13 @@ type Props = {
   /** Tipo del centro activo (null sin centro): filtra los módulos del menú. */
   tipo: TipoCentro | null;
   usuario: { nombre: string; correo: string };
+  /** Versión desplegada (p. ej. 2026.11.26-r45 · a1b2c3d): sirve para saber qué build se está viendo. */
+  version?: string;
   /** Marca del centro activo: nombre comercial y logo (data URL). */
   marca: { nombre: string; logo: string | null };
 };
 
-export function AppSidebar({ orgs, activa, rol, superadmin, tipo, usuario, marca }: Props) {
+export function AppSidebar({ orgs, activa, rol, superadmin, tipo, usuario, marca, version }: Props) {
   const router = useRouter();
   const pathname = usePathname();
   const activo = (href: string) => pathname === href || pathname.startsWith(`${href}/`);
@@ -227,6 +231,7 @@ export function AppSidebar({ orgs, activa, rol, superadmin, tipo, usuario, marca
             </DropdownMenu>
           </SidebarMenuItem>
         </SidebarMenu>
+        {version && <p className="px-2 pb-1 text-[10px] text-muted-foreground group-data-[collapsible=icon]:hidden" title="Versión desplegada">{version}</p>}
       </SidebarFooter>
       <SidebarRail />
     </Sidebar>

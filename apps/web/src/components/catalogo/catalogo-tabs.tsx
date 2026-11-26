@@ -12,7 +12,9 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
+import { SelectorCodigo } from "@/components/ordenes/selector-codigo";
 import { Tabs, TabsList, TabsTrigger } from "@/components/ui/tabs";
+import { TIPOS_RIPS } from "@/lib/catalogos/referencias-rips";
 import { Textarea } from "@/components/ui/textarea";
 import { CATEGORIAS, cop, precioFinal } from "@/lib/precios";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
@@ -26,6 +28,9 @@ type Servicio = {
   precioDigital: number | null;
   descuento: number;
   activo: boolean;
+  codigoCups: string | null;
+  tipoRips: string;
+  codServicioReps: number | null;
 };
 
 const dinero = (n: number | null) => (n === null ? "—" : cop(n));
@@ -114,6 +119,7 @@ export function CatalogoTabs({ servicios }: { servicios: Servicio[] }) {
 
 function FormServicio({ servicio, categoria, cerrar }: { servicio: Servicio | null; categoria: string; cerrar: () => void }) {
   const [estado, accion, pendiente] = useActionState(guardarServicio, undefined);
+  const [cups, setCups] = useState<string | null>(servicio?.codigoCups ?? null);
   useEffect(() => {
     if (estado?.ok) {
       toast.success("Servicio guardado");
@@ -123,7 +129,7 @@ function FormServicio({ servicio, categoria, cerrar }: { servicio: Servicio | nu
 
   return (
     <Dialog open onOpenChange={(o) => !o && cerrar()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{servicio ? "Editar servicio" : "Nuevo servicio"}</DialogTitle>
           <DialogDescription>Deja un precio vacío si el servicio no se ofrece en esa entrega.</DialogDescription>
@@ -161,6 +167,27 @@ function FormServicio({ servicio, categoria, cerrar }: { servicio: Servicio | nu
               <Input id="descuento" name="descuento" type="number" min={0} step={1000} defaultValue={servicio?.descuento ?? 0} />
             </div>
           </div>
+          <fieldset className="space-y-3 rounded-lg border p-3">
+            <legend className="px-1 text-sm font-medium">RIPS (opcional)</legend>
+            <div className="space-y-2">
+              <Label htmlFor="codigoCups">Código CUPS</Label>
+              <SelectorCodigo id="codigoCups" catalogo="cups" etiqueta="Código CUPS" value={cups} onChange={setCups} />
+              <input type="hidden" name="codigoCups" value={cups ?? ""} />
+            </div>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="tipoRips">Tipo RIPS</Label>
+                <Select name="tipoRips" defaultValue={servicio?.tipoRips ?? "PROCEDIMIENTO"}>
+                  <SelectTrigger id="tipoRips" className="w-full"><SelectValue /></SelectTrigger>
+                  <SelectContent>{TIPOS_RIPS.map((t) => <SelectItem key={t.valor} value={t.valor}>{t.etiqueta}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="codServicioReps">Código de servicio REPS</Label>
+                <Input id="codServicioReps" name="codServicioReps" type="number" min={1} max={99999} defaultValue={servicio?.codServicioReps ?? ""} />
+              </div>
+            </div>
+          </fieldset>
           {estado?.error && <p role="alert" className="text-sm text-destructive">{estado.error}</p>}
           <DialogFooter>
             <Button type="button" variant="outline" onClick={cerrar}>Cancelar</Button>

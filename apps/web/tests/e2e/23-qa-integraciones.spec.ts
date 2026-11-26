@@ -99,8 +99,8 @@ test.describe("centros por tipo", () => {
 // Pantallas por tipo de centro (las que el tipo no ofrece deben dar 404, no error).
 const PANTALLAS: Record<string, { ok: string[]; no: string[] }> = {
   radiologico: { ok: ["/seguimiento-doctores", "/integraciones/api", "/integraciones/webhooks", "/integraciones/conectores", "/integraciones/pasarelas", "/convenios", "/seguimiento"], no: ["/crm", "/crm/leads"] },
-  odontologico: { ok: ["/crm", "/crm/leads", "/crm/tareas", "/crm/secuencias", "/crm/fidelizacion", "/seguimiento", "/integraciones/api", "/integraciones/webhooks", "/integraciones/conectores", "/integraciones/pasarelas"], no: ["/seguimiento-doctores", "/convenios"] },
-  clinica: { ok: ["/crm", "/crm/leads", "/crm/tareas", "/crm/secuencias", "/crm/fidelizacion", "/seguimiento", "/integraciones/api"], no: ["/seguimiento-doctores", "/convenios"] },
+  odontologico: { ok: ["/crm", "/crm/leads", "/crm/tareas", "/crm/secuencias", "/crm/fidelizacion", "/seguimiento", "/integraciones/api", "/integraciones/webhooks", "/integraciones/conectores", "/integraciones/pasarelas", "/convenios"], no: ["/seguimiento-doctores"] },
+  clinica: { ok: ["/crm", "/crm/leads", "/crm/tareas", "/crm/secuencias", "/crm/fidelizacion", "/seguimiento", "/integraciones/api", "/convenios"], no: ["/seguimiento-doctores"] },
   particular: { ok: ["/crm", "/crm/leads", "/crm/tareas", "/crm/secuencias", "/crm/fidelizacion", "/seguimiento", "/integraciones/api"], no: ["/seguimiento-doctores", "/convenios"] },
 };
 

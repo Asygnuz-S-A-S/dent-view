@@ -1,0 +1,156 @@
+{
+ "version": "2026-11-26",
+ "fuente": "Res. 2706/2025 (lista parcial odontológica); validar contra la tabla oficial SISPRO",
+ "items": [
+  {
+   "codigo": "870114",
+   "descripcion": "Radiografía panorámica de maxilares",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870450",
+   "descripcion": "Radiografías periapicales milimetradas",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870451",
+   "descripcion": "Radiografía periapical anterior superior",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870452",
+   "descripcion": "Radiografía periapical anterior inferior",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870453",
+   "descripcion": "Radiografía periapical de caninos",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870454",
+   "descripcion": "Radiografía periapical de premolares",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870455",
+   "descripcion": "Radiografía periapical de molares",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870456",
+   "descripcion": "Radiografías periapicales, juego completo",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870460",
+   "descripcion": "Radiografía intraoral coronal (bite-wing); equivalencia por validar",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870440",
+   "descripcion": "Radiografía intraoral oclusal",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870002",
+   "descripcion": "Perfilograma con cefalometría",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870101",
+   "descripcion": "Radiografía de cara",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870131",
+   "descripcion": "Radiografía de articulación temporomandibular",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "870108",
+   "descripcion": "Radiografía de senos paranasales",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "879141",
+   "descripcion": "Tomografía de maxilares (implantología, lo más cercano a CBCT); por validar",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "879131",
+   "descripcion": "Tomografía de senos paranasales o cara",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "879150",
+   "descripcion": "Tomografía de articulación temporomandibular bilateral",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "893101",
+   "descripcion": "Modelo de estudio",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "893102",
+   "descripcion": "Fotografía clínica",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "893103",
+   "descripcion": "Evaluación ortodóntica",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "890203",
+   "descripcion": "Consulta de odontología general, primera vez",
+   "tipoRips": "CONSULTA"
+  },
+  {
+   "codigo": "890303",
+   "descripcion": "Consulta de odontología general, control",
+   "tipoRips": "CONSULTA"
+  },
+  {
+   "codigo": "890703",
+   "descripcion": "Consulta de urgencias de odontología general",
+   "tipoRips": "CONSULTA"
+  },
+  {
+   "codigo": "997001",
+   "descripcion": "Profilaxis dental",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "997107",
+   "descripcion": "Sellantes",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "997106",
+   "descripcion": "Aplicación de flúor barniz",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "232102",
+   "descripcion": "Obturación con resina de fotocurado",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "237301",
+   "descripcion": "Tratamiento de conducto unirradicular",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "230101",
+   "descripcion": "Exodoncia unirradicular",
+   "tipoRips": "PROCEDIMIENTO"
+  },
+  {
+   "codigo": "240201",
+   "descripcion": "Detartraje subgingival",
+   "tipoRips": "PROCEDIMIENTO"
+  }
+ ]
+}

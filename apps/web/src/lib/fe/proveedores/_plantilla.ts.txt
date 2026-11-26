@@ -1,0 +1,49 @@
+// PLANTILLA de proveedor de facturación electrónica. Copia a lib/fe/proveedores/<proveedor>.ts (quita .txt y renombra),
+// complétala con la documentación OFICIAL del proveedor y súmala a la lista de lib/fe/registro.ts. Sin migración ni cambios de UI.
+// Reglas: hosts fijos (nunca URLs del usuario), `llamarApi` (https, tiempo de espera, sin redirecciones), errores en español sin llaves,
+// bloqueadoProduccion: true hasta probar con una cuenta real, y lo no confirmado en la doc queda como TODO.
+import { aObjeto, aTexto, ErrorFE, llamarApi, type ProveedorFacturacionElectronica, type ResultadoEmision } from "../proveedor";
+
+const BASE = "https://api.PROVEEDOR.example"; // TODO
+const HOSTS: ReadonlySet<string> = new Set(["api.PROVEEDOR.example"]); // TODO: host fijo
+
+function leer(json: unknown): ResultadoEmision {
+  const o = aObjeto(json);
+  // TODO: traducir el estado del proveedor a ACEPTADA | RECHAZADA | PROCESANDO (PROCESANDO = el cron consultará luego)
+  return { estado: "PROCESANDO", idExterno: aTexto(o.id), numeroDian: aTexto(o.numero), cufe: aTexto(o.cufe), mensajes: [] };
+}
+
+export const proveedorNuevo: ProveedorFacturacionElectronica = {
+  clave: "PROVEEDOR", // coincide con ConexionFE.proveedor
+  nombre: "Proveedor",
+  descripcion: "Qué es y cómo se conecta.",
+  bloqueadoProduccion: true,
+  advertencia: "No probado: implementado solo con la documentación.",
+  soportaSalud: false,
+  soportaCuv: false,
+  campos: [{ clave: "token", etiqueta: "Token de API", secreto: true }], // credenciales: se guardan cifradas
+  camposConfig: [], // ajustes no secretos (ids de resolución, etc.) -> ConexionFE.configJson
+  async probarConexion(ctx) {
+    const r = await llamarApi(HOSTS, BASE, "/ping", { cabeceras: { Authorization: `Bearer ${ctx.llaves.token}` }, reintentar: true });
+    return r.estado < 300 ? { ok: true, mensaje: "Conexión correcta" } : { ok: false, mensaje: "Credenciales rechazadas" };
+  },
+  async emitirFactura(ctx, f, clave) {
+    // f = FacturaFE ya mapeada (ver lib/fe/proveedor.ts). Envía `clave` como cabecera de idempotencia si el proveedor la admite.
+    void f; void clave;
+    const r = await llamarApi(HOSTS, BASE, "/facturas", { metodo: "POST", cabeceras: { Authorization: `Bearer ${ctx.llaves.token}` }, cuerpo: {} });
+    if (r.estado >= 400 && r.estado < 500) return { estado: "RECHAZADA", idExterno: null, mensajes: ["TODO: mensajes del proveedor"] };
+    return leer(r.json);
+  },
+  async emitirNotaCredito(_ctx, n) {
+    // n.origen.cufe y n.origen.idExterno identifican la factura que se acredita.
+    void n;
+    throw new ErrorFE("Notas crédito no implementadas", false);
+  },
+  async consultarEstado() {
+    throw new ErrorFE("TODO", false);
+  },
+  async descargar() {
+    return null; // TODO: pdf | xml | attached (máx. TAMANO_MAX_DESCARGA)
+  },
+  // verificarWebhook(e) / mapearEvento(payload, e): solo si el proveedor ofrece webhooks firmados (comparar con igualesSeguro).
+};

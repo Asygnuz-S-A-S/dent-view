@@ -27,13 +27,15 @@ type Servicio = {
 type Seleccion = { opciones: string; dientes: string[] };
 
 export function OrdenForm({
-  pacientes: inicial, doctores, servicios, esDoctor, pacienteInicial, convenios, tarifasDoctor, doctorPropioId, fecha,
+  pacientes: inicial, doctores, servicios, esDoctor, pacienteInicial, remisionId, convenios, tarifasDoctor, doctorPropioId, fecha,
 }: {
   pacientes: PacienteOpcion[];
   doctores: { id: string; nombre: string }[];
   servicios: Servicio[];
   esDoctor: boolean;
   pacienteInicial?: string;
+  /** Orden creada a partir de una remisión recibida (el servidor la valida y reclama). */
+  remisionId?: string;
   /** Convenios activos y vigentes (vacío para doctores remitentes). */
   convenios: ConvenioOpcion[];
   tarifasDoctor: TarifasDoctor;
@@ -89,7 +91,7 @@ export function OrdenForm({
           const partes = [dientes.length ? `Dientes: ${dientes.join(", ")}` : "", opciones.trim()].filter(Boolean);
           return { servicioId: s.id, opciones: partes.join(" · ") };
         }),
-      });
+      }, remisionId);
       if ("error" in r) return void toast.error(r.error);
       toast.success("Orden creada");
       router.push(`/ordenes/${r.id}`);

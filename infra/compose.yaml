@@ -125,7 +125,12 @@ services:
       - S3_BUCKET_ESTUDIOS
       - CRON_SECRET
       - MFA_EXENTOS
+      # Versión desplegada (la escribe el flujo de despliegue en .env): se muestra en la app y en /api/version.
+      - APP_VERSION
+      - APP_SHA
+      - APP_BUILT_AT
       - PAGOS_SIMULADO
+      - FEV_SIMULADO
       - WEBHOOKS_PERMITIR_LOCAL
       - INGESTA_MAX_BYTES
       - CRM_TOPE_DIARIO

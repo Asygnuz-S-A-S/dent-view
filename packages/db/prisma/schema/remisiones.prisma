@@ -1,0 +1,97 @@
+// Remisión entre centros: el origen remite un paciente a un centro vinculado, el destino crea SU orden
+// y devuelve estudio + informe emitido. El destino solo ve una copia mínima autorizada por el paciente (Ley 1581).
+// Sin RLS: toda consulta filtra por origenId / destinoId = organización activa.
+
+enum EstadoVinculo {
+  PENDIENTE
+  ACTIVO
+  RECHAZADO
+  REVOCADO
+}
+
+enum EstadoRemision {
+  ENVIADA
+  RECIBIDA
+  EN_PROCESO
+  DEVUELTA
+  RECHAZADA
+  CANCELADA
+}
+
+model VinculoCentro {
+  id              String        @id @default(cuid())
+  solicitanteId   String
+  solicitante     Organization  @relation("VinculoSolicitante", fields: [solicitanteId], references: [id], onDelete: Cascade)
+  receptorId      String
+  receptor        Organization  @relation("VinculoReceptor", fields: [receptorId], references: [id], onDelete: Cascade)
+  estado          EstadoVinculo @default(PENDIENTE)
+  solicitadoPorId String
+  respondidoPorId String?
+  respondidoEn    DateTime?
+  creadoEn        DateTime      @default(now())
+  remisiones      Remision[]
+
+  @@unique([solicitanteId, receptorId])
+  @@index([receptorId, estado])
+}
+
+model Remision {
+  id                    String           @id @default(cuid())
+  vinculoId             String
+  vinculo               VinculoCentro    @relation(fields: [vinculoId], references: [id], onDelete: Restrict)
+  origenId              String
+  origen                Organization     @relation("RemisionOrigen", fields: [origenId], references: [id], onDelete: Restrict)
+  destinoId             String
+  destino               Organization     @relation("RemisionDestino", fields: [destinoId], references: [id], onDelete: Restrict)
+  estado                EstadoRemision   @default(ENVIADA)
+  // Lado origen: nunca se proyecta hacia el destino (ver SELECT_DESTINO en lib/remisiones.ts).
+  pacienteOrigenId      String
+  pacienteOrigen        PacienteTenant   @relation("RemisionPacienteOrigen", fields: [pacienteOrigenId], references: [id], onDelete: Restrict)
+  autorizacionId        String // Autorizacion (sala limpia), sin FK
+  creadoPorId           String
+  // Copia mínima autorizada
+  tipoDocumento         String
+  numeroDocumento       String
+  nombre                String
+  fechaNacimiento       DateTime?        @db.Date
+  celular               String?
+  embarazo              Boolean?
+  motivo                String
+  estudiosSolicitados   String
+  remitenteNombre       String
+  // Consentimiento explícito
+  alcance               String[] // IDENTIFICACION | CONTACTO | FECHA_NACIMIENTO | EMBARAZO
+  consentimientoTexto   String
+  consentimientoVersion String
+  consentimientoPorId   String
+  consentimientoEn      DateTime
+  // Lado destino
+  pacienteDestinoId     String?
+  pacienteDestino       PacienteTenant?  @relation("RemisionPacienteDestino", fields: [pacienteDestinoId], references: [id], onDelete: Restrict)
+  ordenDestinoId        String?          @unique
+  ordenDestino          Orden?           @relation("RemisionOrdenDestino", fields: [ordenDestinoId], references: [id], onDelete: Restrict)
+  motivoRechazo         String?
+  // Devolución
+  informeId             String?
+  estudioUids           String[]         @default([])
+  devueltaEn            DateTime?
+  creadoEn              DateTime         @default(now())
+  actualizadoEn         DateTime         @updatedAt
+  eventos               RemisionEvento[]
+
+  @@index([origenId, estado, creadoEn])
+  @@index([destinoId, estado, creadoEn])
+}
+
+model RemisionEvento {
+  id             String   @id @default(cuid())
+  remisionId     String
+  remision       Remision @relation(fields: [remisionId], references: [id], onDelete: Cascade)
+  organizationId String
+  actorId        String?
+  tipo           String
+  nota           String?
+  creadoEn       DateTime @default(now())
+
+  @@index([remisionId, creadoEn])
+}

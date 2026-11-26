@@ -10,12 +10,14 @@ import { Card, CardContent } from "@/components/ui/card";
 import { Dialog, DialogContent, DialogDescription, DialogFooter, DialogHeader, DialogTitle } from "@/components/ui/dialog";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { TIPOS_PAGADOR } from "@/lib/catalogos/referencias-rips";
 import { Switch } from "@/components/ui/switch";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { EstadoVacio } from "@/components/comunes/estado-vacio";
 
 export type ConvenioFila = {
-  id: string; nombre: string; nit: string | null; contacto: string | null; descuentoGeneral: number | null;
+  id: string; nombre: string; nit: string | null; contacto: string | null; tipoPagador: string | null; nitPagador: string | null; cucon: string | null; coberturaPlan: string | null; descuentoGeneral: number | null;
   activo: boolean; vigenteDesde: string | null; vigenteHasta: string | null; tarifas: number;
 };
 
@@ -92,7 +94,7 @@ function FormConvenio({ convenio, cerrar }: { convenio: ConvenioFila | null; cer
   }, [estado, cerrar]);
   return (
     <Dialog open onOpenChange={(o) => !o && cerrar()}>
-      <DialogContent>
+      <DialogContent className="max-h-[90vh] overflow-y-auto">
         <DialogHeader>
           <DialogTitle>{convenio ? "Editar convenio" : "Nuevo convenio"}</DialogTitle>
           <DialogDescription>El descuento general aplica al precio final del catálogo en los servicios sin tarifa propia.</DialogDescription>
@@ -117,6 +119,30 @@ function FormConvenio({ convenio, cerrar }: { convenio: ConvenioFila | null; cer
             <Label htmlFor="contacto">Contacto</Label>
             <Input id="contacto" name="contacto" placeholder="Nombre, teléfono o correo" defaultValue={convenio?.contacto ?? ""} />
           </div>
+          <fieldset className="space-y-3 rounded-lg border p-3">
+            <legend className="px-1 text-sm font-medium">Pagador y RIPS (opcional)</legend>
+            <div className="grid grid-cols-2 gap-3">
+              <div className="space-y-2">
+                <Label htmlFor="tipoPagador">Tipo de pagador</Label>
+                <Select name="tipoPagador" defaultValue={convenio?.tipoPagador ?? ""}>
+                  <SelectTrigger id="tipoPagador" className="w-full"><SelectValue placeholder="Sin definir" /></SelectTrigger>
+                  <SelectContent>{TIPOS_PAGADOR.map((t) => <SelectItem key={t.valor} value={t.valor}>{t.etiqueta}</SelectItem>)}</SelectContent>
+                </Select>
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="nitPagador">NIT del pagador</Label>
+                <Input id="nitPagador" name="nitPagador" defaultValue={convenio?.nitPagador ?? ""} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="cucon">CUCON (contrato)</Label>
+                <Input id="cucon" name="cucon" defaultValue={convenio?.cucon ?? ""} />
+              </div>
+              <div className="space-y-2">
+                <Label htmlFor="coberturaPlan">Cobertura o plan</Label>
+                <Input id="coberturaPlan" name="coberturaPlan" defaultValue={convenio?.coberturaPlan ?? ""} />
+              </div>
+            </div>
+          </fieldset>
           <div className="grid grid-cols-2 gap-3">
             <div className="space-y-2">
               <Label htmlFor="vigenteDesde">Vigente desde</Label>

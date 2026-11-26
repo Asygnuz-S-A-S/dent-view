@@ -1,6 +1,6 @@
 import { ETIQUETA_ESTADO_ORDEN, numeroOrden, VARIANTE_ESTADO_ORDEN } from "@/lib/ordenes";
 import { prisma } from "@dent-view/db";
-import { Box, ClipboardList, ClipboardPlus, Eye, History, Mail, Phone, PhoneCall, ScanLine, ShieldCheck, TriangleAlert, Upload, Wallet } from "lucide-react";
+import { Box, ClipboardList, ClipboardPlus, Eye, History, Mail, Phone, PhoneCall, ScanLine, Send, ShieldCheck, TriangleAlert, Upload, Wallet } from "lucide-react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
@@ -16,6 +16,7 @@ import { FotoPaciente } from "@/components/pacientes/foto-paciente";
 import { HojaDeVida } from "@/components/pacientes/hoja-de-vida";
 import { CasoDialog } from "@/components/laboratorio/caso-dialog";
 import { TablaCasos } from "@/components/laboratorio/tabla-casos";
+import { EvolucionPaciente } from "@/components/evolucion/evolucion-paciente";
 import { NotasClinicas } from "@/components/pacientes/notas-clinicas";
 import { PlanTratamiento } from "@/components/pacientes/plan-tratamiento";
 import { Odontograma } from "@/components/pacientes/odontograma";
@@ -39,6 +40,8 @@ import { cop, precioFinal } from "@/lib/precios";
 import { listarEnlaces } from "@/lib/resultados";
 import { CLINICOS, GESTION, MEDICOS } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
+import { moduloHabilitado } from "@/lib/tipo-centro";
+import { tipoDeCentro } from "@/lib/tipo-centro-servidor";
 import { fechaCorta, fechaDeEstudio, fechaHoraCompleta } from "@/lib/fechas";
 
 export const dynamic = "force-dynamic";
@@ -153,6 +156,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
   if (!p) notFound();
   const org = ctx.organizationId;
   const puedeGestionar = (GESTION as readonly string[]).includes(ctx.rol);
+  const puedeRemitir = !esDoctor && moduloHabilitado(await tipoDeCentro(org), "remisiones");
   await registrarAcceso(ctx, p.id, "ficha");
   // Imágenes y documentos no DICOM del paciente (el doctor remitente solo ve los de sus órdenes/estudios); suben las clínicas, no el doctor.
   const archivos = await cargarArchivos(ctx, { pacienteId: p.id });
@@ -196,9 +200,10 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
       <div className="min-w-0 flex-1">
         <EncabezadoPagina
           titulo={p.nombre}
-          acciones={puedeGestionar && <>
-            <PacienteDialog paciente={editar(p)} />
-            <Button asChild size="sm"><Link href={`/ordenes/nueva?paciente=${p.id}`}><ClipboardPlus /> Crear orden</Link></Button>
+          acciones={(puedeGestionar || puedeRemitir) && <>
+            {puedeGestionar && <PacienteDialog paciente={editar(p)} />}
+            {puedeGestionar && <Button asChild size="sm"><Link href={`/ordenes/nueva?paciente=${p.id}`}><ClipboardPlus /> Crear orden</Link></Button>}
+            {puedeRemitir && <Button asChild size="sm" variant="outline"><Link href={`/remisiones/nueva?paciente=${p.id}`}><Send /> Remitir a otro centro</Link></Button>}
           </>}
         >
           <p className="flex flex-wrap items-center gap-x-4 gap-y-1 text-sm text-muted-foreground">
@@ -246,6 +251,9 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
 
   const enlacesEntrega = await listarEnlaces(ctx.organizationId, { pacienteId: p.id });
   const verClinica = (MEDICOS as readonly string[]).includes(ctx.rol);
+  const tipoCentro = await tipoDeCentro(org);
+  const radiologico = tipoCentro === "CENTRO_RADIOLOGICO";
+  const verEvolucion = verClinica && (radiologico || moduloHabilitado(tipoCentro, "evolucion"));
   const [contexto, alergias, medicaciones, enfermedades, contacto, representante, autorizaciones, preferencia] = await Promise.all([
     verClinica ? prisma.contextoMedico.findUnique({ where: { pacienteId: p.id } }) : null,
     verClinica ? prisma.alergiaPaciente.findMany({ where: { pacienteId: p.id, organizationId: org, activo: true }, orderBy: { creadoEn: "asc" } }) : [],
@@ -297,6 +305,7 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
           <TabsTrigger value="hoja">Hoja de vida</TabsTrigger>
           <TabsTrigger value="entrega">Entrega de resultados ({enlacesEntrega.length})</TabsTrigger>
           <TabsTrigger value="historia">Historia clínica</TabsTrigger>
+          {verEvolucion && <TabsTrigger value="evolucion">{radiologico ? "Línea de tiempo de imágenes" : "Evolución"}</TabsTrigger>}
           <TabsTrigger value="laboratorio">Laboratorio ({p.casosLab.length})</TabsTrigger>
           <TabsTrigger value="clinico">Módulo clínico (opcional)</TabsTrigger>
         </TabsList>
@@ -451,6 +460,23 @@ export default async function FichaPaciente({ params }: { params: Promise<{ id: 
             />
           </div>
         </TabsContent>
+
+        {verEvolucion && (
+          <TabsContent value="evolucion" className="space-y-6">
+            <EvolucionPaciente pacienteId={p.id} />
+            {!radiologico && p.notasClinicas.length > 0 && (
+              <section className="space-y-3" aria-label="Notas anteriores">
+                <h3 className="text-sm font-medium">Notas anteriores ({p.notasClinicas.length})</h3>
+                <p className="text-xs text-muted-foreground">Notas clínicas previas a las evoluciones firmadas. Solo lectura.</p>
+                <NotasClinicas
+                  pacienteId={p.id} soloLectura
+                  notas={p.notasClinicas.map((n) => ({ id: n.id, texto: n.texto, autor: (n.autorId && nombreActor.get(n.autorId)) || "Sin autor", fecha: fechaHoraCompleta(n.fecha) }))}
+                />
+              </section>
+            )}
+            {ctx.rol === "admin_tenant" && !radiologico && <p className="text-sm"><Link href="/evolucion/plantillas" className="underline underline-offset-4">Administrar plantillas de evolución</Link></p>}
+          </TabsContent>
+        )}
 
         <TabsContent value="laboratorio" className="space-y-4">
           {puedeGestionar && (

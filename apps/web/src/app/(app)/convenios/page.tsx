@@ -35,7 +35,7 @@ export default async function Convenios({ searchParams }: { searchParams: Promis
         <TabsContent value="convenios" className="space-y-4">
           <ConveniosLista
             convenios={convenios.map((c) => ({
-              id: c.id, nombre: c.nombre, nit: c.nit, contacto: c.contacto, descuentoGeneral: c.descuentoGeneral, activo: c.activo,
+              id: c.id, nombre: c.nombre, nit: c.nit, contacto: c.contacto, tipoPagador: c.tipoPagador, nitPagador: c.nitPagador, cucon: c.cucon, coberturaPlan: c.coberturaPlan, descuentoGeneral: c.descuentoGeneral, activo: c.activo,
               vigenteDesde: dia(c.vigenteDesde), vigenteHasta: dia(c.vigenteHasta), tarifas: c._count.tarifas,
             }))}
           />

@@ -7,6 +7,7 @@ import { z } from "zod";
 import { registrarEvento } from "@/lib/eventos";
 import { aplicarAnticipo } from "@/lib/anticipos";
 import { estadoTrasPago, MEDIOS_PAGO, MOTIVO_MIN, motivoValido, numeroFactura, saldo, totalItems, totalPagado, validarAbono, validarNotaCredito } from "@/lib/facturacion";
+import { prepararNotaFe, procesarDocumento } from "@/lib/fe/servicio";
 import { conReintentoNumero } from "@/lib/ordenes";
 import { ADMIN, GESTION } from "@/lib/roles";
 import { exigirContexto } from "@/lib/sesion";
@@ -44,19 +45,29 @@ export async function crearFactura(entrada: z.input<typeof esquemaFactura>): Pro
   }
 
   let pacienteId = d.pacienteId;
-  let items = d.items;
+  let items: { descripcion: string; cantidad: number; valorUnitario: number; servicioId?: string | null }[] = d.items;
+  let convenioId: string | null = null;
   if (d.ordenId) {
     // Desde una orden: paciente e ítems salen de la orden (precios congelados), no del cliente.
     const orden = await prisma.orden.findFirst({ where: { id: d.ordenId, organizationId: org }, include: { items: true } });
     if (!orden) return { error: "Orden no encontrada" };
     pacienteId = orden.pacienteId;
-    items = orden.items.map((i) => ({ descripcion: i.opciones ? `${i.nombre} (${i.opciones})` : i.nombre, cantidad: 1, valorUnitario: i.precio }));
+    // servicioId se conserva (el CUPS sale de la orden/catálogo al facturar electrónicamente); convenioId es el vínculo real con el convenio de la orden.
+    items = orden.items.map((i) => ({ descripcion: i.opciones ? `${i.nombre} (${i.opciones})` : i.nombre, cantidad: 1, valorUnitario: i.precio, servicioId: i.servicioId }));
+    convenioId = orden.convenioId;
   } else {
     if (!pacienteId) return { error: "Selecciona un paciente" };
     if (items.length === 0) return { error: "Agrega al menos un ítem" };
     const p = await prisma.pacienteTenant.findFirst({ where: { id: pacienteId, organizationId: org } });
     if (!p) return { error: "Paciente no encontrado" };
   }
+  if (d.responsable === "CONVENIO") {
+    // Convenio real: el de la orden o, si se escribió el nombre, el convenio del centro con ese nombre (sin distinguir mayúsculas).
+    const conv = convenioId
+      ? await prisma.convenio.findFirst({ where: { id: convenioId, organizationId: org }, select: { id: true } })
+      : await prisma.convenio.findFirst({ where: { organizationId: org, nombre: { equals: d.convenio, mode: "insensitive" } }, select: { id: true } });
+    convenioId = conv?.id ?? null;
+  } else convenioId = null;
   const total = totalItems(items);
   if (total <= 0) return { error: "El total debe ser mayor a 0" };
   if (total > TOTAL_MAX) return { error: "El total de la cuenta no puede superar $ 2.000.000.000" }; // columnas Int4: más allá fallaría en la BD
@@ -77,6 +88,7 @@ export async function crearFactura(entrada: z.input<typeof esquemaFactura>): Pro
             responsable: d.responsable,
             responsableId: d.responsable === "DOCTOR" ? d.responsableId : null,
             convenio: d.responsable === "CONVENIO" ? d.convenio : null,
+            convenioId,
             total,
             vence: d.vence ? new Date(`${d.vence}T23:59:59-05:00`) : null,
             notas: d.notas || null,
@@ -152,6 +164,8 @@ export async function anularFactura(facturaId: string, motivo: string): Promise<
     if (!f) return "Cuenta de cobro no encontrada";
     if (f.estado !== "ABIERTA") return "Solo se anulan cuentas abiertas";
     if (f.pagos.length > 0) return "No se puede anular una cuenta con pagos: anula primero los pagos (administrador)";
+    // Una FEV vigente (enviada o aceptada) no se anula en dent-view: se corrige con una nota crédito electrónica.
+    if ((await tx.documentoElectronico.count({ where: { organizationId: org, facturaId, tipo: "FACTURA", estado: { in: ["ENVIANDO", "ACEPTADA"] } } })) > 0) return "La cuenta tiene una factura electrónica vigente: no se anula, se corrige con una nota crédito electrónica";
     await tx.factura.update({ where: { id: facturaId }, data: { estado: "ANULADA", anuladoEn: new Date(), anuladoPorId: ctx.usuario.id, motivoAnulacion: m } });
     await registrarEvento(
       { organizationId: org, pacienteId: f.pacienteId, actorId: ctx.usuario.id, tipo: "factura.anulada", detalle: { facturaId, factura: numeroFactura(f.numero), motivo: m } },
@@ -209,8 +223,10 @@ export async function crearNotaCredito(facturaId: string, entrada: { valor: numb
   const m = motivoValido(entrada.motivo);
   if (!m) return { error: `Escribe el motivo (mínimo ${MOTIVO_MIN} caracteres)` };
   const org = ctx.organizationId;
+  let documentoFeId: string | null = null;
   const resultado = await conReintentoNumero(() =>
     prisma.$transaction(async (tx) => {
+      documentoFeId = null;
       await tx.$queryRaw`SELECT id FROM "Factura" WHERE id = ${facturaId} AND "organizationId" = ${org} FOR UPDATE`;
       const f = await tx.factura.findFirst({ where: { id: facturaId, organizationId: org }, include: { pagos: true } });
       if (!f) return "Cuenta de cobro no encontrada";
@@ -219,7 +235,9 @@ export async function crearNotaCredito(facturaId: string, entrada: { valor: numb
       if (error) return error;
       const max = await tx.notaCredito.aggregate({ where: { organizationId: org }, _max: { consecutivo: true } });
       const consecutivo = (max._max.consecutivo ?? 0) + 1;
-      await tx.notaCredito.create({ data: { organizationId: org, consecutivo, facturaId, valor: entrada.valor, motivo: m, creadaPorId: ctx.usuario.id } });
+      const nota = await tx.notaCredito.create({ data: { organizationId: org, consecutivo, facturaId, valor: entrada.valor, motivo: m, creadaPorId: ctx.usuario.id } });
+      // Con FEV aceptada, la nota interna queda acompañada de su nota crédito electrónica (pendiente de envío); la interna no depende de la respuesta del proveedor.
+      documentoFeId = await prepararNotaFe(tx, { organizationId: org, facturaId, notaCreditoId: nota.id, userId: ctx.usuario.id });
       await tx.factura.update({ where: { id: facturaId }, data: { total: f.total - entrada.valor } });
       await registrarEvento(
         { organizationId: org, pacienteId: f.pacienteId, actorId: ctx.usuario.id, tipo: "factura.nota_credito", detalle: { facturaId, factura: numeroFactura(f.numero), consecutivo, valor: entrada.valor, totalAnterior: f.total, motivo: m } },
@@ -229,6 +247,8 @@ export async function crearNotaCredito(facturaId: string, entrada: { valor: numb
     }),
   );
   if (resultado) return { error: resultado };
+  // Fuera de la transacción: si el proveedor falla, el documento queda ENVIANDO y el cron lo reintenta.
+  if (documentoFeId) await procesarDocumento(documentoFeId).catch((e) => console.error("fe: nota crédito electrónica pendiente", e instanceof Error ? e.message : "error"));
   revalidarCuenta(facturaId);
   return {};
 }

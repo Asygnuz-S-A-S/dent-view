@@ -1,5 +1,7 @@
 import { prisma } from "@dent-view/db";
+import Link from "next/link";
 import { notFound } from "next/navigation";
+import { Button } from "@/components/ui/button";
 import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 import { AccionesValoracion } from "@/components/valoraciones/acciones-valoracion";
 import { BadgeValoracion } from "@/components/valoraciones/estado-valoracion";
@@ -52,7 +54,8 @@ export default async function DetalleValoracion({ params }: { params: Promise<{ 
 
   return (
     <div className="space-y-6">
-      <EncabezadoPagina titulo={v.nombre} insignia={<BadgeValoracion estado={estado} />} descripcion={[v.ciudad, v.telefono, v.correo].filter(Boolean).join(" · ") || undefined}>
+      <EncabezadoPagina titulo={v.nombre} insignia={<BadgeValoracion estado={estado} />} descripcion={[v.ciudad, v.telefono, v.correo].filter(Boolean).join(" · ") || undefined}
+        acciones={v.estado === "COMPLETADA" ? <Button asChild><Link href={`/presupuestos/nuevo?valoracion=${v.id}`}>Crear cotización</Link></Button> : undefined}>
         <p className="text-sm text-muted-foreground">Solicitada el {fechaHora(v.creadoEn)} · {doctor?.name ? `Odontólogo: ${doctor.name}` : "Sin odontólogo asignado"}</p>
       </EncabezadoPagina>
       <AccionesValoracion id={id} doctorId={v.doctorId} odontologos={odontologos.map((o) => ({ id: o.userId, nombre: o.user.name }))}

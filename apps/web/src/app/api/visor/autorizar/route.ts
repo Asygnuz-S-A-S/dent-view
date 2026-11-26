@@ -1,6 +1,7 @@
 import { prisma } from "@dent-view/db";
 import { auth } from "@/lib/auth";
-import { decidirAccesoVisor, extraerEstudioUid } from "@/lib/acceso";
+import { decidirAccesoVisor, extraerEstudioUid, puedeVerEstudio } from "@/lib/acceso";
+import { CLINICOS } from "@/lib/roles";
 import { enlaceDeCookie } from "@/lib/resultados";
 
 export const dynamic = "force-dynamic";
@@ -34,6 +35,17 @@ export async function GET(req: Request) {
           select: { id: true },
         }))
       : false;
+  // Remisión: el centro origen ve en el visor (solo lectura) los estudios que el destino le devolvió.
+  const remitido =
+    sesion && estudio && uid && estudio.pacienteId && !puedeVerEstudio(sesion.user.id, miembro?.role ?? null, estudio)
+      ? !!(await prisma.remision.findFirst({
+          where: {
+            destinoId: estudio.organizationId, pacienteDestinoId: estudio.pacienteId, estado: "DEVUELTA", estudioUids: { has: uid },
+            origen: { members: { some: { userId: sesion.user.id, role: { in: [...CLINICOS] } } } },
+          },
+          select: { id: true },
+        }))
+      : false;
   // Sin sesión, la cookie de resultados (enlace + código) da acceso de solo lectura a los estudios de ese enlace.
   const enlace = sesion ? null : await enlaceDeCookie();
   const status = decidirAccesoVisor({
@@ -43,6 +55,7 @@ export async function GET(req: Request) {
     estudio,
     rol: miembro?.role ?? null,
     compartido,
+    remitido,
     // N3: el estudio debe seguir siendo del paciente y centro del enlace (pudo reasignarse después de entregarlo).
     enlace: enlace && {
       estudioUids: estudio && estudio.organizationId === enlace.organizationId && estudio.pacienteId === enlace.pacienteId ? enlace.estudioUids : [],

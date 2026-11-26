@@ -33,6 +33,7 @@ model BorradorEvolucion {
   paciente       PacienteTenant      @relation(fields: [pacienteId], references: [id], onDelete: Cascade)
   autorId        String
   citaId         String?
+  ordenId        String? // evolución ligada a una orden (sin FK: el borrador es desechable)
   plantillaId    String?
   plantilla      PlantillaEvolucion? @relation(fields: [plantillaId], references: [id], onDelete: SetNull)
   contenido      Json
@@ -40,6 +41,7 @@ model BorradorEvolucion {
   actualizadoEn  DateTime            @updatedAt
 
   @@index([organizationId, pacienteId, autorId])
+  @@index([organizationId, ordenId])
 }
 
 model EvolucionClinica {
@@ -49,6 +51,8 @@ model EvolucionClinica {
   pacienteId          String
   paciente            PacienteTenant      @relation(fields: [pacienteId], references: [id], onDelete: Restrict)
   folio               Int // consecutivo por paciente y centro
+  ordenId             String?
+  orden               Orden?              @relation(fields: [ordenId], references: [id], onDelete: Restrict)
   citaId              String?
   cita                Cita?               @relation(fields: [citaId], references: [id], onDelete: Restrict)
   plantillaId         String?
@@ -75,6 +79,7 @@ model EvolucionClinica {
 
   @@unique([organizationId, pacienteId, folio])
   @@index([organizationId, pacienteId, firmadaEn])
+  @@index([organizationId, ordenId])
 }
 
 model AdendaEvolucion {

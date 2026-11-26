@@ -1,0 +1,278 @@
+{
+ "version": "2026-11-26",
+ "fuente": "CIE-10 (OMS), subconjunto odontológico; validar contra las tablas oficiales SISPRO",
+ "items": [
+  {
+   "codigo": "K000",
+   "descripcion": "Anodoncia"
+  },
+  {
+   "codigo": "K001",
+   "descripcion": "Dientes supernumerarios"
+  },
+  {
+   "codigo": "K002",
+   "descripcion": "Anomalías del tamaño y de la forma del diente"
+  },
+  {
+   "codigo": "K003",
+   "descripcion": "Dientes moteados"
+  },
+  {
+   "codigo": "K004",
+   "descripcion": "Alteraciones en la formación dentaria"
+  },
+  {
+   "codigo": "K005",
+   "descripcion": "Alteraciones hereditarias de la estructura dentaria"
+  },
+  {
+   "codigo": "K006",
+   "descripcion": "Alteraciones en la erupción dentaria"
+  },
+  {
+   "codigo": "K007",
+   "descripcion": "Síndrome de la erupción dentaria"
+  },
+  {
+   "codigo": "K008",
+   "descripcion": "Otros trastornos del desarrollo de los dientes"
+  },
+  {
+   "codigo": "K009",
+   "descripcion": "Trastorno del desarrollo de los dientes, no especificado"
+  },
+  {
+   "codigo": "K010",
+   "descripcion": "Dientes incluidos"
+  },
+  {
+   "codigo": "K011",
+   "descripcion": "Dientes impactados"
+  },
+  {
+   "codigo": "K020",
+   "descripcion": "Caries limitada al esmalte"
+  },
+  {
+   "codigo": "K021",
+   "descripcion": "Caries de la dentina"
+  },
+  {
+   "codigo": "K022",
+   "descripcion": "Caries del cemento"
+  },
+  {
+   "codigo": "K023",
+   "descripcion": "Caries dentaria detenida"
+  },
+  {
+   "codigo": "K024",
+   "descripcion": "Odontoclasia"
+  },
+  {
+   "codigo": "K028",
+   "descripcion": "Otras caries dentales"
+  },
+  {
+   "codigo": "K029",
+   "descripcion": "Caries dental, no especificada"
+  },
+  {
+   "codigo": "K030",
+   "descripcion": "Atrición excesiva de los dientes"
+  },
+  {
+   "codigo": "K031",
+   "descripcion": "Abrasión de los dientes"
+  },
+  {
+   "codigo": "K032",
+   "descripcion": "Erosión de los dientes"
+  },
+  {
+   "codigo": "K033",
+   "descripcion": "Reabsorción patológica de los dientes"
+  },
+  {
+   "codigo": "K034",
+   "descripcion": "Hipercementosis"
+  },
+  {
+   "codigo": "K035",
+   "descripcion": "Anquilosis de los dientes"
+  },
+  {
+   "codigo": "K036",
+   "descripcion": "Depósitos en los dientes"
+  },
+  {
+   "codigo": "K037",
+   "descripcion": "Cambios posteruptivos del color de los tejidos duros del diente"
+  },
+  {
+   "codigo": "K038",
+   "descripcion": "Otras enfermedades especificadas de los tejidos duros de los dientes"
+  },
+  {
+   "codigo": "K039",
+   "descripcion": "Enfermedad de los tejidos duros de los dientes, no especificada"
+  },
+  {
+   "codigo": "K040",
+   "descripcion": "Pulpitis"
+  },
+  {
+   "codigo": "K041",
+   "descripcion": "Necrosis de la pulpa"
+  },
+  {
+   "codigo": "K042",
+   "descripcion": "Degeneración de la pulpa"
+  },
+  {
+   "codigo": "K043",
+   "descripcion": "Formación anormal de tejido duro en la pulpa"
+  },
+  {
+   "codigo": "K044",
+   "descripcion": "Periodontitis apical aguda originada en la pulpa"
+  },
+  {
+   "codigo": "K045",
+   "descripcion": "Periodontitis apical crónica"
+  },
+  {
+   "codigo": "K046",
+   "descripcion": "Absceso periapical con fístula"
+  },
+  {
+   "codigo": "K047",
+   "descripcion": "Absceso periapical sin fístula"
+  },
+  {
+   "codigo": "K048",
+   "descripcion": "Quiste radicular"
+  },
+  {
+   "codigo": "K049",
+   "descripcion": "Otras enfermedades de la pulpa y de los tejidos periapicales"
+  },
+  {
+   "codigo": "K050",
+   "descripcion": "Gingivitis aguda"
+  },
+  {
+   "codigo": "K051",
+   "descripcion": "Gingivitis crónica"
+  },
+  {
+   "codigo": "K052",
+   "descripcion": "Periodontitis aguda"
+  },
+  {
+   "codigo": "K053",
+   "descripcion": "Periodontitis crónica"
+  },
+  {
+   "codigo": "K054",
+   "descripcion": "Periodontosis"
+  },
+  {
+   "codigo": "K055",
+   "descripcion": "Otras enfermedades periodontales"
+  },
+  {
+   "codigo": "K056",
+   "descripcion": "Enfermedad periodontal, no especificada"
+  },
+  {
+   "codigo": "K060",
+   "descripcion": "Retracción gingival"
+  },
+  {
+   "codigo": "K061",
+   "descripcion": "Hiperplasia gingival"
+  },
+  {
+   "codigo": "K062",
+   "descripcion": "Lesiones de la encía y de la zona edéntula asociadas con traumatismo"
+  },
+  {
+   "codigo": "K068",
+   "descripcion": "Otros trastornos especificados de la encía y de la zona edéntula"
+  },
+  {
+   "codigo": "K069",
+   "descripcion": "Trastorno de la encía y de la zona edéntula, no especificado"
+  },
+  {
+   "codigo": "K070",
+   "descripcion": "Anomalías importantes del tamaño de los maxilares"
+  },
+  {
+   "codigo": "K071",
+   "descripcion": "Anomalías de la relación maxilobasilar"
+  },
+  {
+   "codigo": "K072",
+   "descripcion": "Anomalías de la relación entre los arcos dentarios"
+  },
+  {
+   "codigo": "K073",
+   "descripcion": "Anomalías de la posición del diente"
+  },
+  {
+   "codigo": "K074",
+   "descripcion": "Maloclusión, no especificada"
+  },
+  {
+   "codigo": "K075",
+   "descripcion": "Anomalías dentofaciales funcionales"
+  },
+  {
+   "codigo": "K076",
+   "descripcion": "Trastornos de la articulación temporomandibular"
+  },
+  {
+   "codigo": "K078",
+   "descripcion": "Otras anomalías dentofaciales"
+  },
+  {
+   "codigo": "K079",
+   "descripcion": "Anomalía dentofacial, no especificada"
+  },
+  {
+   "codigo": "K080",
+   "descripcion": "Exfoliación de los dientes debida a causas sistémicas"
+  },
+  {
+   "codigo": "K081",
+   "descripcion": "Pérdida de dientes debida a accidente, extracción o enfermedad periodontal local"
+  },
+  {
+   "codigo": "K082",
+   "descripcion": "Atrofia del reborde alveolar desdentado"
+  },
+  {
+   "codigo": "K083",
+   "descripcion": "Raíz dental retenida"
+  },
+  {
+   "codigo": "K088",
+   "descripcion": "Otros trastornos especificados de los dientes y de sus estructuras de sostén"
+  },
+  {
+   "codigo": "K089",
+   "descripcion": "Trastorno de los dientes y de sus estructuras de sostén, no especificado"
+  },
+  {
+   "codigo": "S025",
+   "descripcion": "Fractura de los dientes"
+  },
+  {
+   "codigo": "Z012",
+   "descripcion": "Examen odontológico"
+  }
+ ]
+}

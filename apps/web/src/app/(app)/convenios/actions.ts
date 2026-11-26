@@ -18,6 +18,10 @@ const esquema = z
     nombre: z.string().trim().min(1, "Falta el nombre"),
     nit: texto,
     contacto: texto,
+    tipoPagador: z.enum(["PARTICULAR", "EPS", "PREPAGADA", "POLIZA", "EMPRESA", "OTRO"]).or(z.literal("")).optional().transform((v) => v || null),
+    nitPagador: texto,
+    cucon: texto,
+    coberturaPlan: texto,
     descuentoGeneral: num(0, 100),
     vigenteDesde: fecha,
     vigenteHasta: fecha,
@@ -30,11 +34,14 @@ export async function guardarConvenio(_: EstadoForm, fd: FormData): Promise<Esta
   const ctx = await exigirContexto(ADMIN);
   const r = esquema.safeParse(Object.fromEntries(fd));
   if (!r.success) return { error: r.error.issues[0]?.message ?? "Datos inválidos" };
-  const { id, nit, contacto, vigenteDesde, vigenteHasta, ...resto } = r.data;
+  const { id, nit, contacto, nitPagador, cucon, coberturaPlan, vigenteDesde, vigenteHasta, ...resto } = r.data;
   const data = {
     ...resto,
     nit: nit || null,
     contacto: contacto || null,
+    nitPagador: nitPagador || null,
+    cucon: cucon || null,
+    coberturaPlan: coberturaPlan || null,
     vigenteDesde: vigenteDesde ? new Date(vigenteDesde) : null,
     vigenteHasta: vigenteHasta ? new Date(vigenteHasta) : null,
   };

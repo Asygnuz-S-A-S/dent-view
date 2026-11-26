@@ -15,11 +15,11 @@ const CASOS = [
   },
   {
     tipo: "Centro odontológico", slug: "odontologico",
-    con: ["Laboratorio", "Odontólogos", "Cartera"], sin: ["Seguimiento de doctores", "Convenios y tarifas", "Estaciones de ingesta"], bloqueada: "/seguimiento-doctores",
+    con: ["Laboratorio", "Odontólogos", "Cartera", "Convenios y tarifas"], sin: ["Seguimiento de doctores", "Estaciones de ingesta"], bloqueada: "/seguimiento-doctores",
   },
   {
     tipo: "Clínica odontológica", slug: "clinica",
-    con: ["Laboratorio", "Odontólogos"], sin: ["Seguimiento de doctores", "Doctores remitentes"], bloqueada: "/convenios",
+    con: ["Laboratorio", "Odontólogos"], sin: ["Seguimiento de doctores", "Doctores remitentes"], bloqueada: "/seguimiento-doctores",
   },
   {
     tipo: "Odontólogo particular", slug: "particular",

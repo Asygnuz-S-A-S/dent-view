@@ -85,6 +85,10 @@ model Organization {
   createdAt               DateTime                 @default(now())
   metadata                String?
   members                 Member[]
+  vinculosSolicitados     VinculoCentro[]          @relation("VinculoSolicitante")
+  vinculosRecibidos       VinculoCentro[]          @relation("VinculoReceptor")
+  remisionesEnviadas      Remision[]               @relation("RemisionOrigen")
+  remisionesRecibidas     Remision[]               @relation("RemisionDestino")
   invitations             Invitation[]
   pacientes               PacienteTenant[]
   estudios                Estudio[]
@@ -106,6 +110,10 @@ model Organization {
   contactosDoctor         ContactoDoctor[]
   configSeguimientoDoctor ConfigSeguimientoDoctor?
   pasarelasPago           PasarelaPago[]
+  configFacturacion       ConfigFacturacion?
+  conexionesFE            ConexionFE[]
+  documentosElectronicos  DocumentoElectronico[]
+  enviosRips              EnvioRips[]
   linksPago               LinkPago[]
   eventosPasarela         EventoPasarela[]
   valoraciones            Valoracion[]
