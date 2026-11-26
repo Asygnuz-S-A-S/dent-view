@@ -1,1 +1,7 @@
-{ "operacion": "diagnostico", "confirmar": "", "parametros": {} }
+{
+  "operacion": "restablecer-2fa",
+  "confirmar": "RESTABLECER-2FA",
+  "parametros": {
+    "correo": "andres.agudelo@asygnuz.com"
+  }
+}
