@@ -1,10 +1,1 @@
-{
-  "operacion": "reiniciar-demo",
-  "confirmar": "REINICIAR-DEMO",
-  "parametros": {
-    "admin_correo": "andres.agudelo@asygnuz.com",
-    "admin_nombre": "Andres Agudelo",
-    "admin_hash": "04008eab62c71866eb0aea0a9ef6d7aa:34edbfe2d73b0d7cf767108a64938f947dc329952d6006b8b43b69bc4582a7140c1b87578b45dff5fbc9b63f955919656f675177d5bf7efb92dcf360966029e0",
-    "demo_clave": "Demo-Dentview-2026"
-  }
-}
+{ "operacion": "diagnostico", "confirmar": "", "parametros": {} }
