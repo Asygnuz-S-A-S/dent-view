@@ -117,18 +117,18 @@ test.describe("C3 volumen y coherencia", () => {
     anotar("paginacion", { control: await p.getByRole("navigation").allInnerTexts() });
     await c.close();
   });
-  test("C3 ordenes Lumia: ~452 con paginacion", async ({ browser }) => {
+  test("C3 ordenes Lumia: ~700 con paginacion", async ({ browser }) => {
     const c = await ctxDe(browser, "LUMIA_ADMIN"); const p = await c.newPage();
     const ids = new Set<string>(); let paginas = 0;
-    for (let n = 1; n <= 14; n++) {
+    for (let n = 1; n <= 18; n++) {
       await p.goto(n === 1 ? "/ordenes" : `/ordenes?pagina=${n}`); await listo(p);
       const h = await p.locator("tbody a").evaluateAll((e) => e.map((x) => x.getAttribute("href")!).filter((x) => /\/ordenes\/lumia-ord-/.test(x)));
       if (!h.length) break; h.forEach((x) => ids.add(x)); paginas = n;
       if (h.length < 50) break;
     }
     anotar("ordenes", { paginas, total: ids.size });
-    expect.soft(ids.size, "ordenes unicas paginando").toBeGreaterThanOrEqual(440);
-    expect.soft(ids.size).toBeLessThanOrEqual(460);
+    expect.soft(ids.size, "ordenes unicas paginando").toBeGreaterThanOrEqual(650);
+    expect.soft(ids.size).toBeLessThanOrEqual(760);
     await c.close();
   });
   test("C3 cartera Lumia: suma por responsable = total", async ({ browser }) => {
@@ -364,7 +364,15 @@ test.describe("C4 seguridad", () => {
     expect.soft([403, 404], `orden ajena ${r1.status()}`).toContain(r1.status());
     const ap = await ctxDe(browser, "LUMIA_ADMIN"); const pa = await ap.newPage();
     await pa.goto("/estudios"); await listo(pa);
-    const fila = pa.locator("tbody tr").filter({ hasText: "Camila Alberto Franco" }).filter({ has: pa.getByRole("cell", { name: "CT", exact: true }) }).first();
+    // Un CT que el doctor NO ve en su propia lista (el volumen de la demo cambia, no se fija un paciente).
+    const pd = await c.newPage(); await pd.goto("/estudios"); await listo(pd);
+    const propios = await pd.locator("tbody tr").evaluateAll((trs) => trs.map((tr) => (tr.textContent ?? "").trim()));
+    const candidatas = pa.locator("tbody tr").filter({ has: pa.getByRole("cell", { name: "CT", exact: true }) });
+    const textos = await candidatas.evaluateAll((trs) => trs.map((tr) => (tr.textContent ?? "").trim()));
+    const idx = textos.findIndex((t) => !propios.includes(t));
+    anotar("doctor-ajena", { ruta: "CT ajeno elegido", idx, candidatas: textos.length });
+    expect.soft(idx, "hay un CT ajeno para probar").toBeGreaterThanOrEqual(0);
+    const fila = candidatas.nth(Math.max(idx, 0));
     const ajeno = await idsDeFila(pa, fila);
     if (ajeno.zip) { const z = await doc.get(ajeno.zip); anotar("doctor-ajena", { ruta: "zip ajeno", status: z.status() }); expect.soft([403, 404], `zip ajeno ${z.status()}`).toContain(z.status()); }
     const inf = await doc.get("/api/informes/lumia-inf-343/pdf"); anotar("doctor-ajena", { ruta: "pdf ajeno", status: inf.status() });
