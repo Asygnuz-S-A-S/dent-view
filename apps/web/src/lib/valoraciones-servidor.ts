@@ -3,12 +3,13 @@ import { GetObjectCommand } from "@aws-sdk/client-s3";
 import { prisma } from "@dent-view/db";
 import { cookies, headers } from "next/headers";
 import { generarCodigoAcceso, generarToken, hashCodigo, hashToken, firmarCookie, verificarCookie } from "./entrega";
+import { registrarEvento } from "./eventos";
 import { despachar, encolarMensaje } from "./notificar";
 import { secreto, urlBase } from "./resultados";
 import { s3 } from "./s3";
 import { contextoActivo, modulosHabilitadoEnCentro } from "./sesion";
 import {
-  COOKIE_VALORACION, DIAS_VENCIMIENTO, filtroValoraciones, puedeCrearValoracion, puedeValorar, puedeVerValoraciones, truncarIp, vencimiento, IP_DESCONOCIDA,
+  COOKIE_VALORACION, DIAS_VENCIMIENTO, MAX_RECORDATORIOS, debeRecordar, filtroValoraciones, puedeAsignarValoracion, puedeCrearValoracion, puedeValorar, puedeVerValoraciones, truncarIp, vencimiento, IP_DESCONOCIDA, type EstadoVal,
 } from "./valoraciones";
 
 const secretoCookie = () => `${secreto()}:valoracion`; // la cookie de valoración nunca vale como la de resultados
@@ -29,7 +30,7 @@ export async function contextoValoraciones() {
   if (!ctx || ctx.usuario.debeCambiarClave || !puedeVerValoraciones(ctx.rol)) return null;
   const m = await prisma.member.findUnique({ where: { organizationId_userId: { organizationId: ctx.organizationId, userId: ctx.usuario.id } }, select: { esOdontologo: true } });
   const esOdontologo = !!m?.esOdontologo;
-  return { ...ctx, esOdontologo, puedeValorar: puedeValorar(ctx.rol, esOdontologo), puedeCrear: puedeCrearValoracion(ctx.rol) };
+  return { ...ctx, esOdontologo, puedeValorar: puedeValorar(ctx.rol, esOdontologo), puedeCrear: puedeCrearValoracion(ctx.rol), puedeAsignar: puedeAsignarValoracion(ctx.rol) };
 }
 export type ContextoVal = NonNullable<Awaited<ReturnType<typeof contextoValoraciones>>>;
 
@@ -46,17 +47,17 @@ export const odontologosDelCentro = (organizationId: string) =>
   });
 
 // --- Credenciales del enlace público ---
-/** Token + código nuevos (solo hashes en BD) y vencimiento; devuelve lo que se muestra/envía una única vez. */
-export async function regenerarCredenciales(valoracionId: string, dias = DIAS_VENCIMIENTO) {
+/** Token + código nuevos (solo hashes en BD) y vencimiento; devuelve lo que se muestra/envía una única vez. `conservarExpiraEn` deja el vencimiento como está (recordatorios). */
+export async function regenerarCredenciales(valoracionId: string, dias = DIAS_VENCIMIENTO, conservarExpiraEn?: Date) {
   const token = generarToken(), codigo = generarCodigoAcceso(), tokenHash = hashToken(token);
-  const expiraEn = vencimiento(dias);
-  await prisma.valoracion.update({ where: { id: valoracionId }, data: { tokenHash, codigoHash: hashCodigo(tokenHash, codigo, secreto()), intentosCodigo: 0, expiraEn } });
+  const expiraEn = conservarExpiraEn ?? vencimiento(dias);
+  await prisma.valoracion.update({ where: { id: valoracionId }, data: { tokenHash, codigoHash: hashCodigo(tokenHash, codigo, secreto()), intentosCodigo: 0, expiraEn, enlaceEnviadoEn: new Date(), ultimoAccesoEn: null } });
   return { token, codigo, expiraEn };
 }
 export const enlacePublico = (token: string) => `${urlBase()}/valoracion/${token}`;
 
 /** Encola enlace y código en mensajes separados (sin PHI) y los despacha ya; true si ambos quedaron en cola. */
-export async function enviarCredenciales(v: { id: string; organizationId: string; pacienteId: string | null; correo: string | null }, c: { token: string; codigo: string; expiraEn: Date }, tipo: "VALORACION_ENLACE" | "VALORACION_RESULTADO") {
+export async function enviarCredenciales(v: { id: string; organizationId: string; pacienteId: string | null; correo: string | null }, c: { token: string; codigo: string; expiraEn: Date }, tipo: "VALORACION_ENLACE" | "VALORACION_RESULTADO" | "VALORACION_RECORDATORIO") {
   if (!v.correo) return false;
   const [centro, pac] = await Promise.all([
     nombreCentro(v.organizationId),
@@ -76,6 +77,46 @@ export async function enviarCredenciales(v: { id: string; organizationId: string
   }
   await despachar({ organizationId: v.organizationId, limite: 10 }).catch((e) => console.error("No se pudo despachar el correo de valoración", e));
   return mensajes.every((m) => m && m.estado !== "OMITIDO");
+}
+
+/**
+ * Recordatorios al paciente que no ha terminado su valoración (los llama el cron de notificaciones). Cada fila se reserva con un updateMany condicionado
+ * ANTES de regenerar el acceso: dos corridas simultáneas no envían dos veces. El enlace nuevo conserva el vencimiento original. Devuelve cuántos se enviaron.
+ */
+export async function generarRecordatoriosValoracion(ahora = new Date()) {
+  const candidatas = await prisma.valoracion.findMany({
+    where: { estado: { in: ["PENDIENTE_PACIENTE", "REQUIERE_MAS_INFO"] }, correo: { not: null }, expiraEn: { gt: new Date(ahora.getTime() + 3_600_000) }, recordatoriosEnviados: { lt: MAX_RECORDATORIOS } },
+    orderBy: { enlaceEnviadoEn: "asc" }, take: 200,
+  });
+  const vencidas = candidatas.filter((v) => debeRecordar({ ...v, estado: v.estado as EstadoVal }, ahora));
+  const sinContacto = new Set((await prisma.lead.findMany({ where: { id: { in: vencidas.flatMap((v) => (v.leadId ? [v.leadId] : [])) }, noContactar: true }, select: { id: true } })).map((l) => l.id));
+  const modulo = new Map<string, boolean>(); // por centro: el recordatorio nunca cruza a un centro sin el módulo
+  let enviados = 0;
+  for (const v of vencidas) {
+    if (v.leadId && sinContacto.has(v.leadId)) continue;
+    if (!modulo.has(v.organizationId)) modulo.set(v.organizationId, await modulosHabilitadoEnCentro(v.organizationId, "valoraciones"));
+    if (!modulo.get(v.organizationId)) continue;
+    const { count } = await prisma.valoracion.updateMany({
+      where: { id: v.id, organizationId: v.organizationId, recordatoriosEnviados: v.recordatoriosEnviados, ultimoRecordatorioEn: v.ultimoRecordatorioEn, estado: v.estado },
+      data: { recordatoriosEnviados: { increment: 1 }, ultimoRecordatorioEn: ahora },
+    });
+    if (count !== 1) continue;
+    try {
+      await enviarCredenciales(v, await regenerarCredenciales(v.id, DIAS_VENCIMIENTO, v.expiraEn), "VALORACION_RECORDATORIO");
+      await registrarEvento({ organizationId: v.organizationId, pacienteId: v.pacienteId, tipo: "valoracion.recordatorio", detalle: { valoracionId: v.id, numero: v.recordatoriosEnviados + 1 } });
+      enviados++;
+    } catch (e) {
+      console.error("No se pudo enviar el recordatorio de valoración", v.id, e);
+    }
+  }
+  return enviados;
+}
+
+/** Ficha del paciente de una valoración: la propia o, si viene de un lead ya convertido, la del lead (misma regla que presupuestos/nuevo). */
+export async function pacienteDeValoracion(v: { organizationId: string; pacienteId: string | null; leadId: string | null }): Promise<string | null> {
+  if (v.pacienteId) return v.pacienteId;
+  const lead = v.leadId ? await prisma.lead.findFirst({ where: { id: v.leadId, organizationId: v.organizationId }, select: { pacienteId: true } }) : null;
+  return lead?.pacienteId ?? null;
 }
 
 /** Aviso al odontólogo asignado (o a los administradores si no hay): sin datos del paciente, solo el enlace a la valoración. */

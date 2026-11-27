@@ -34,6 +34,7 @@ El superadmin (`ADMIN_EMAIL`) siempre necesita su 2FA (si no lo tiene, la app lo
 | | marcela.rios, ricardo.salazar, juliana.pineda, felipe.aguirre, catalina.duque, mauricio.toro, tatiana.bedoya, alvaro.escobar, veronica.osorio, cristian.londono `@lumia.ejemplo.invalid` | doctor_remitente | Vista del remitente: solo sus órdenes, estudios e informes |
 | Radia Centro Radiológico (`radia`, Bogotá) | admin@, recepcion@, recepcion2@, radiologo@, gustavo.rojas, lucia.mora, hector.cano, karen.cifuentes, simon.bermudez `@radia.ejemplo.invalid` | admin_tenant / recepcion / especialista / doctor_remitente | Centro mediano y joven, mismas piezas en menor volumen |
 | Alejandro Restrepo Odontología (`alejandro-restrepo`, consultorio) | admin@alejandro-restrepo.ejemplo.invalid | admin_tenant + odontólogo | Pacientes con foto, odontograma, plan, agenda, valoraciones, CRM, laboratorio |
+| | recepcion@alejandro-restrepo.ejemplo.invalid | recepcion (sin 2FA) | Valoraciones sin contenido clínico (M5): ve etapa, contacto y conteos, nunca motivo, fotos, comentarios ni notas |
 | Orion Laboratorio Dental (`orion-laboratorio`, Medellín, tipo `LABORATORIO_DENTAL`) | admin@, tecnico1@, tecnico2@ `orion-laboratorio.ejemplo.invalid` | admin_tenant / recepcion | Tablero de laboratorio (paginado), facturación, cartera y convenios por volumen. Sin Agenda, Estudios ni Informes |
 | | monica.valencia, rodrigo.mesa, lorena.zapata, ivan.correa, paula.agudelo, samuel.henao `@orion-laboratorio.ejemplo.invalid` | doctor_remitente (odontólogos clientes) | Clientes con convenio por volumen |
 | Todos | `ADMIN_EMAIL` | superadmin + admin_tenant en los 4 centros | Cambiar de centro con el selector |
@@ -45,7 +46,11 @@ El superadmin (`ADMIN_EMAIL`) siempre necesita su 2FA (si no lo tiene, la app lo
 4. **(2 min) Informes** (radiólogo): borradores por firmar, un informe emitido con PDF de marca y código de verificación; entregas con enlace (vistas/vencidas).
 5. **(2 min) Cartera y caja** (admin): tramos 0-30/31-60/61-90/>90, cuentas a cargo del doctor y de convenios, anticipos, notas crédito, cierres de caja.
 6. **(1 min) Seguimiento de doctores**: semáforo Activo/En riesgo/Inactivo/Crítico/Nuevo con gestiones y próximos contactos; la vista de un doctor remitente.
-7. **(2 min) Alejandro**: ficha de paciente con foto y odontograma, agenda de la semana, valoración virtual recibida (4 fotos) y completada, CRM con 30 leads, secuencias instaladas e inactivas, laboratorio.
+7. **(2 min) Alejandro**: ficha de paciente con foto y odontograma, agenda de la semana, CRM con 30 leads, secuencias instaladas e inactivas, laboratorio y **valoraciones virtuales** (ver abajo).
+   - `/valoraciones` trae 16 solicitudes, una o más en cada etapa: Enviada (2), Abierta (2, con 2 de 7 tomas; una con 1 recordatorio), Material recibido (2, una con dolor 8/10 y video), En revisión (2, con notas internas y comentarios por foto), Esperando otra toma (2; una pide repetir una toma ya subida), Respondida (2; una sin enviar y otra que recomienda cita presencial), Cotizada (2, con su cotización Enviada y Aceptada), Vencida (1, con 2 recordatorios) y Cancelada (1). Las solicitudes sin paciente tienen su lead `VALORACION_VIRTUAL` en el CRM.
+   - En el detalle de una en revisión: abre una foto, escribe un comentario, usa «Comparar», «Pedir otra toma» o «Guardar en la ficha» (pide confirmación; solo funciona en las que ya tienen paciente: las Respondidas y las Cotizadas).
+   - Entra como `recepcion@alejandro-restrepo.ejemplo.invalid` para mostrar que recepción ve el estado y los conteos pero no el motivo, las fotos, los comentarios ni las notas.
+   - **Lado paciente en vivo:** los enlaces `/valoracion/<token>` sembrados NO se abren (en la base solo hay hashes ficticios, a propósito). Para mostrarlo, crea una solicitud nueva con solo teléfono (sin correo: así no se envía nada), copia el enlace y el código del diálogo y ábrelos en el celular.
 8. **(1 min) Orion**: laboratorio (todas las etapas, trabajos atrasados y tabla paginada), cartera por odontólogo cliente y reportes. El menú no trae Agenda, Estudios ni Informes.
 9. **(2 min) Remisiones (Lumia -> Radia)**: `/remisiones` con una remisión en cada estado; abrir la `DEVUELTA` (descargar el informe PDF y abrir el estudio en el visor, solo lectura) y la `RECHAZADA` (motivo); en Radia, `Recibidas` y la orden creada desde la remisión.
 10. **(1 min) RIPS y evolutivos**: una orden de Lumia o de Alejandro, pestaña RIPS (datos, lista de verificación, descarga del JSON) y, en Alejandro, la pestaña Evolución de un paciente (folios, firma, adendas).
@@ -62,8 +67,17 @@ El superadmin (`ADMIN_EMAIL`) siempre necesita su 2FA (si no lo tiene, la app lo
 Las órdenes y evolutivos nuevos solo aparecen con `--reset` (con `--solo-datos` un centro ya poblado no se regenera).
 
 ## Notas de diseño
-- Nada puede enviar mensajes: pacientes y leads sin correo, ningún mensaje `EN_COLA`, secuencias/fidelización/agenda pública/webhooks/integraciones inactivos, sin pasarelas.
+- Nada puede enviar mensajes: pacientes, leads y valoraciones sin correo (el cron de recordatorios de valoración exige correo, así que nunca envía en la demo), ningún mensaje `EN_COLA`, secuencias/fidelización/agenda pública/webhooks/integraciones inactivos, sin pasarelas.
 - Estudios DICOM sintéticos (figuras con la marca DEMO) con etiqueta `tenant-<organizationId>` y filas `Estudio` creadas antes de subir (el worker solo actualiza datos técnicos). El id de Orthanc se calcula (SHA-1 de `PatientID|StudyUID`) y se comprueba al subir. Los pacientes con estudio usan `CC` y `PatientID` = documento, como espera el worker.
 - Solo los estudios DICOM (Lumia ~16, Radia ~7, Alejandro 3) tienen imagen; las demás órdenes tomadas no tienen fila `Estudio` (los tableros que cuentan estudios reflejan solo esos).
 - `EstadoLab` solo tiene 5 valores: en Orion la etapa fina (diseño, proceso, prueba, repetir) va en `notas` y en el estado de la orden.
 - Orion es de tipo `LABORATORIO_DENTAL` (migración `20261126100000_tipo_laboratorio_dental`, módulos en `lib/tipo-centro.ts`): conserva laboratorio, órdenes, convenios por volumen, facturación y cartera y oculta Agenda, Estudios, Informes, CRM y Remisiones; sus convenios de volumen ahora sí se ven. No se siembran bodega, pasarelas ni reservas públicas.
+
+## Valoraciones virtuales (`valoraciones.ts`)
+- Reemplaza las 4 valoraciones antiguas de `odontologo.ts`. Cuestionarios validados con el esquema de la app al sembrar y otra vez en `verificar.ts` (≥ 15 valoraciones, una por etapa del tablero, ≥ 2 cotizadas, lead por cada solicitud sin paciente, objetos S3 presentes).
+- Fotos: `fotoValoracionJpeg(angulo, variante)` en `imagenes.ts` (dibujos con la marca «DEMO · imagen sintética»; ninguna foto real). Original, copia web y miniatura en `tenants/<centro>/valoraciones/<id>/<medio>/` con las claves de la app.
+- Video: `assets/valoracion-apertura-demo.mp4` (14 s, ~118 KB, sintético, versionado en el repo). Se regeneró con
+  `ffmpeg -f lavfi -i "testsrc=duration=14:size=480x360:rate=24" -pix_fmt yuv420p -c:v libx264 -preset slow -crf 16 -an -movflags +faststart assets/valoracion-apertura-demo.mp4`.
+  Si el archivo no existe, la demo se siembra sin video y lo avisa en el log.
+- Las 4 completadas tienen un tiempo recibida→completada de 4, 8, 5 y 7 h (media 6 h); los eventos `valoracion.*` coinciden con `recibidaEn`/`completadaEn`.
+- El reinicio de la demo en producción corre `index.ts --reset` desde el repo, así que todo lo de valoraciones (código, imágenes y video) vive en `scripts/demo`.

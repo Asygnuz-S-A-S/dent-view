@@ -4,6 +4,7 @@ import { NuevaSolicitud } from "@/components/valoraciones/nueva-solicitud";
 import { exigirContexto } from "@/lib/sesion";
 import { ROLES_CREAR_VALORACION } from "@/lib/valoraciones";
 import { odontologosDelCentro } from "@/lib/valoraciones-servidor";
+import { urlBase } from "@/lib/resultados";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function NuevaValoracion({ searchParams }: { searchParams: 
       <NuevaSolicitud
         pacientes={pacientes.map((p) => ({ id: p.id, nombre: p.nombre, documento: `${p.persona.tipoDocumento} ${p.persona.numeroDocumento}`, correo: p.correo ?? "", celular: p.celular ?? "", ciudad: "" }))}
         odontologos={odontologos.map((o) => ({ id: o.userId, nombre: o.user.name }))}
-        inicial={inicial}
+        inicial={inicial} urlGuia={`${urlBase()}/valoracion/guia`} fijarOdontologo={ctx.rol === "especialista"}
       />
     </div>
   );

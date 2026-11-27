@@ -8,10 +8,10 @@ import { EncabezadoPagina } from "@/components/comunes/encabezado-pagina";
 
 export const dynamic = "force-dynamic";
 
-export default async function Agenda({ searchParams }: { searchParams: Promise<{ fecha?: string; orden?: string; sala?: string }> }) {
+export default async function Agenda({ searchParams }: { searchParams: Promise<{ fecha?: string; orden?: string; sala?: string; paciente?: string }> }) {
   const ctx = await exigirContexto(CLINICOS);
   const org = ctx.organizationId;
-  const { fecha: f, orden: ordenId, sala } = await searchParams;
+  const { fecha: f, orden: ordenId, sala, paciente: pacienteQ } = await searchParams;
   const fecha = esFecha(f) ? f : hoyBogota();
 
   const [salas, citas, pacientes, ordenes] = await Promise.all([
@@ -42,6 +42,8 @@ export default async function Agenda({ searchParams }: { searchParams: Promise<{
         alertasPacientes={Object.fromEntries(pacientes.flatMap((p) => (p.alertas ? [[p.id, p.alertas]] : [])))}
         // /agenda?orden=<id> abre «Nueva cita» con ese paciente y orden.
         ordenInicial={ordenes.find((o) => o.id === ordenId)?.id ?? null}
+        // /agenda?paciente=<id> abre «Nueva cita» con ese paciente (p. ej. «Agendar cita» desde una valoración).
+        pacienteInicial={pacientes.find((p) => p.id === pacienteQ)?.id ?? null}
         ordenes={ordenes.map((o) => ({ id: o.id, numero: o.numero, pacienteId: o.pacienteId, servicios: o.items.map((i) => i.nombre) }))}
         citas={citas.map((c) => ({
           id: c.id,

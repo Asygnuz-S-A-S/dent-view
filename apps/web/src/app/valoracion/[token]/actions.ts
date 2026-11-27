@@ -30,7 +30,7 @@ export async function verificarCodigoValoracion(token: string, codigo: string): 
   const { count } = await prisma.valoracion.updateMany({ where: { id: v.id, intentosCodigo: { lt: MAX_INTENTOS_CODIGO } }, data: { intentosCodigo: { increment: 1 } } });
   if (count !== 1) { await traza("bloqueado"); return { error: MENSAJE_INVALIDO }; }
   if (!igualesSeguro(hashCodigo(tokenHash, c, secreto()), v.codigoHash)) { await traza("codigo_fallido"); return { error: MENSAJE_INVALIDO }; }
-  await prisma.valoracion.update({ where: { id: v.id }, data: { intentosCodigo: 0 } });
+  await prisma.valoracion.update({ where: { id: v.id }, data: { intentosCodigo: 0, ultimoAccesoEn: new Date() } });
   await fijarCookiePaciente({ id: v.id, tokenHash }, venceSesionValoracion(new Date(), v.expiraEn));
   await traza("codigo_ok");
   return {};
@@ -63,7 +63,7 @@ export async function enviarValoracion(token: string): Promise<R> {
   const medios = await prisma.valoracionMedia.findMany({ where: { valoracionId: v.id, organizationId: v.organizationId }, select: { tipo: true, angulo: true } });
   const falta = faltaParaEnviar({ consentimiento: !!v.consentimientoEn, motivo: v.motivo, medios });
   if (falta) return { error: falta };
-  const { count } = await prisma.valoracion.updateMany({ where: { id: v.id, estado: { in: ["PENDIENTE_PACIENTE", "REQUIERE_MAS_INFO"] } }, data: { estado: "RECIBIDA" } });
+  const { count } = await prisma.valoracion.updateMany({ where: { id: v.id, estado: { in: ["PENDIENTE_PACIENTE", "REQUIERE_MAS_INFO"] } }, data: { estado: "RECIBIDA", recibidaEn: v.recibidaEn ?? new Date() } });
   if (count !== 1) return { error: SESION_VENCIDA };
   await registrarEvento({ organizationId: v.organizationId, pacienteId: v.pacienteId, tipo: "valoracion.recibida", detalle: { valoracionId: v.id, fotos: medios.filter((m) => m.tipo === "FOTO").length } });
   await avisarOdontologo(v).catch((e) => console.error("No se pudo avisar al odontólogo", e));

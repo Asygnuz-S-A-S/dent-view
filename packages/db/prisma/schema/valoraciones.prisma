@@ -69,6 +69,16 @@ model Valoracion {
   presupuestoEstimado   Int? // COP, pesos enteros
   tratamientoSugerido   String?
   completadaEn          DateTime?
+  // Guía de captura y seguimiento (lote 1): alimentan el tablero y las métricas sin recorrer eventos.
+  plantillaCaptura      String? // clave de PLANTILLAS_CAPTURA (dato clínico: recepción no la ve)
+  angulosPedidos        AnguloMedia[]          @default([]) // tomas sugeridas al paciente; vacío = todas
+  enlaceEnviadoEn       DateTime?
+  ultimoAccesoEn        DateTime? // última vez que el paciente verificó el código
+  recibidaEn            DateTime? // primera vez que el paciente envió la valoración
+  resultadoEnviadoEn    DateTime?
+  recordatoriosEnviados Int                    @default(0)
+  ultimoRecordatorioEn  DateTime?
+  notasInternas         String? // solo quien valora
   creadoPorId           String?
   creadoEn              DateTime               @default(now())
   actualizadoEn         DateTime               @updatedAt
@@ -77,28 +87,30 @@ model Valoracion {
   inscripciones         InscripcionSecuencia[]
 
   @@index([organizationId, estado])
+  @@index([estado, expiraEn])
   @@index([organizationId, doctorId])
   @@index([pacienteId])
   @@index([leadId])
 }
 
 model ValoracionMedia {
-  id             String       @id @default(cuid())
-  organizationId String
-  organization   Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
-  valoracionId   String
-  valoracion     Valoracion   @relation(fields: [valoracionId], references: [id], onDelete: Cascade)
-  tipo           TipoMedia
-  angulo         AnguloMedia
-  claveS3        String
-  claveMiniatura String?
-  mime           String
-  bytes          Int
-  duracionSeg    Int?
-  ancho          Int?
-  alto           Int?
-  nota           String?
-  creadoEn       DateTime     @default(now())
+  id              String       @id @default(cuid())
+  organizationId  String
+  organization    Organization @relation(fields: [organizationId], references: [id], onDelete: Cascade)
+  valoracionId    String
+  valoracion      Valoracion   @relation(fields: [valoracionId], references: [id], onDelete: Cascade)
+  tipo            TipoMedia
+  angulo          AnguloMedia
+  claveS3         String
+  claveMiniatura  String?
+  mime            String
+  bytes           Int
+  duracionSeg     Int?
+  ancho           Int?
+  alto            Int?
+  nota            String?
+  imagenEstudioId String? // copia de la foto en la ficha del paciente (lote 3)
+  creadoEn        DateTime     @default(now())
 
   @@index([valoracionId])
   @@index([organizationId])

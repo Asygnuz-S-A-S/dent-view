@@ -46,3 +46,14 @@ test("cita cruzada en la misma sala y franja es rechazada", async ({ page }) => 
   await page.reload();
   await expect(page.getByRole("button", { name: /ana torres, 09:15/ })).toHaveCount(0);
 });
+
+test("/agenda?paciente=<id> abre «Nueva cita» con ese paciente (botón «Agendar cita» de una valoración)", async ({ page }) => {
+  const { pacienteId, nombre } = leerEstado();
+  await page.goto(`/agenda?paciente=${pacienteId}`);
+  const dlg = page.getByRole("dialog", { name: "Nueva cita" });
+  await expect(dlg).toBeVisible();
+  await expect(dlg.getByRole("combobox", { name: "Paciente" })).toContainText(new RegExp(nombre!, "i"));
+  // Un id ajeno o inexistente no abre nada.
+  await page.goto("/agenda?paciente=no-existe");
+  await expect(page.getByRole("dialog", { name: "Nueva cita" })).toHaveCount(0);
+});

@@ -11,15 +11,15 @@ import { Checkbox } from "@/components/ui/checkbox";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import { CONSENTIMIENTO_TEXTO, CONSENTIMIENTO_VERSION, ETIQUETA_SINTOMA, faltaParaEnviar, type Cuestionario } from "@/lib/valoraciones";
+import { CONSENTIMIENTO_TEXTO, CONSENTIMIENTO_VERSION, ETIQUETA_SINTOMA, faltaParaEnviar, type Angulo, type Cuestionario } from "@/lib/valoraciones";
 import { CapturaGuiada, type MedioPaciente } from "./captura-guiada";
 
 export type MensajePaciente = { id: string; autor: "PACIENTE" | "PROFESIONAL"; texto: string; solicitaMedia: string | null; fecha: string };
 type Q = Partial<Cuestionario>;
 
 /** Flujo del paciente en una sola página móvil: 1) consentimiento y cuestionario, 2) fotos y video guiados, 3) mensajes y envío. */
-export function FormularioPaciente({ token, motivoInicial, cuestionario, consentido, medios: inicial, mensajes, pedidos }: {
-  token: string; motivoInicial: string; cuestionario: Q | null; consentido: boolean; medios: MedioPaciente[]; mensajes: MensajePaciente[]; pedidos: string[];
+export function FormularioPaciente({ token, motivoInicial, cuestionario, consentido, medios: inicial, mensajes, angulos, pedidos }: {
+  token: string; motivoInicial: string; cuestionario: Q | null; consentido: boolean; medios: MedioPaciente[]; mensajes: MensajePaciente[]; angulos: Angulo[]; pedidos: string[];
 }) {
   const router = useRouter();
   const [pendiente, iniciar] = useTransition();
@@ -99,7 +99,7 @@ export function FormularioPaciente({ token, motivoInicial, cuestionario, consent
       <Card>
         <CardHeader><CardTitle>2. Fotos y video</CardTitle><CardDescription>Busca buena luz. Sube al menos 3 fotos; mientras más ángulos, mejor valoración.</CardDescription></CardHeader>
         <CardContent>
-          {guardado ? <CapturaGuiada token={token} medios={medios} onMedios={setMedios} pedidos={pedidos} editable />
+          {guardado ? <CapturaGuiada token={token} medios={medios} onMedios={setMedios} angulos={angulos} pedidos={pedidos} editable />
             : <p className="text-sm text-muted-foreground">Guarda primero tus datos y tu consentimiento para poder subir fotos.</p>}
         </CardContent>
       </Card>

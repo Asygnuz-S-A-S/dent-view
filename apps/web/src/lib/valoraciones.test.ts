@@ -4,6 +4,8 @@ import {
   ANGULOS, ANGULOS_FOTO, MAX_FOTOS, MAX_INTENTOS_CODIGO, VIDEO_MAX_BYTES, claveCopia, claveMedia, claveValida, duracionLegible, enlaceWhatsapp, estadoCodigo, estadoEfectivo,
   faltaParaEnviar, filtroEstado, filtroValoraciones, ordenarMedios, pacienteEdita, promedioRespuestaMs, puedeCrearValoracion, puedeValorar, tipoDeVideo, transicionValida,
   truncarIp, validarCupo, validarFotoValoracion, validarVideo, esquemaCuestionario, esquemaSolicitud,
+  CLAVES_PLANTILLA, ETAPAS, INFO_ANGULO, PLANTILLAS_CAPTURA, angulosDeSolicitud, enPestana, etapaValoracion, faltantes, metricasValoraciones, ordenarTomas, pasoDeEtapa, pedidosPendientes,
+  puedeAsignarValoracion, siguienteAccion, MAX_VIDEOS, debeRecordar, type EstadoVal,
 } from "./valoraciones";
 
 const bytes = (...b: number[]) => new Uint8Array(b);
@@ -110,7 +112,7 @@ describe("ángulos y cupos", () => {
 describe("permisos y claves", () => {
   it("quién crea y quién valora", () => {
     expect(puedeCrearValoracion("recepcion")).toBe(true);
-    expect(puedeCrearValoracion("especialista")).toBe(false);
+    expect(puedeCrearValoracion("especialista")).toBe(true); // se la asigna a sí mismo
     expect(puedeCrearValoracion("doctor_remitente")).toBe(false);
     expect(puedeValorar("especialista", false)).toBe(true);
     expect(puedeValorar("admin_tenant", true)).toBe(true);
@@ -173,5 +175,133 @@ describe("contenido clínico de valoraciones", () => {
     expect(puedeVerClinico("admin_tenant", false)).toBe(false);
     expect(puedeVerClinico("recepcion", false)).toBe(false);
     expect(puedeVerClinico("recepcion", true)).toBe(false);
+  });
+});
+
+describe("pedidosPendientes", () => {
+  const msg = (solicitaMedia: string | null, ms: number, autor = "PROFESIONAL") => ({ autor, solicitaMedia, creadoEn: en(ms) });
+  it("un pedido sin foto posterior queda pendiente", () => {
+    expect(pedidosPendientes([msg("ZONA_DOLOR", 0)], [])).toEqual(["ZONA_DOLOR"]);
+  });
+  it("repetir una toma que ya existía: sigue pendiente hasta que llegue una foto posterior al mensaje", () => {
+    const medios = [{ angulo: "SONRISA", creadoEn: en(-5000) }]; // la foto vieja no cumple el pedido nuevo
+    expect(pedidosPendientes([msg("SONRISA", 0)], medios)).toEqual(["SONRISA"]);
+    expect(pedidosPendientes([msg("SONRISA", 0)], [...medios, { angulo: "SONRISA", creadoEn: en(1000) }])).toEqual([]);
+  });
+  it("con varios pedidos del mismo ángulo cuenta el último; ignora al paciente y los mensajes sin foto", () => {
+    const medios = [{ angulo: "SONRISA", creadoEn: en(1000) }];
+    expect(pedidosPendientes([msg("SONRISA", 0), msg("SONRISA", 2000)], medios)).toEqual(["SONRISA"]);
+    expect(pedidosPendientes([msg("SONRISA", 0, "PACIENTE"), msg(null, 0)], [])).toEqual([]);
+  });
+});
+
+describe("plantillas de captura", () => {
+  it("cada plantilla respeta los topes (12 fotos, 1 video) y solo trae ángulos válidos y únicos", () => {
+    for (const k of CLAVES_PLANTILLA) {
+      const a = PLANTILLAS_CAPTURA[k].angulos as readonly string[];
+      expect(new Set(a).size).toBe(a.length);
+      expect(a.every((x) => (ANGULOS as readonly string[]).includes(x))).toBe(true);
+      expect(a.filter((x) => x !== "VIDEO_APERTURA").length).toBeLessThanOrEqual(MAX_FOTOS);
+      expect(a.filter((x) => x === "VIDEO_APERTURA").length).toBeLessThanOrEqual(1);
+      expect(MAX_VIDEOS).toBeGreaterThanOrEqual(1);
+    }
+  });
+  it("Dolor trae 5 tomas obligatorias y las opcionales no cuentan", () => {
+    const t = ordenarTomas(PLANTILLAS_CAPTURA.DOLOR.angulos);
+    expect(t.filter((a) => !INFO_ANGULO[a].opcional)).toHaveLength(5);
+    expect(t.slice(-2).every((a) => INFO_ANGULO[a].opcional)).toBe(true); // opcionales al final
+  });
+  it("sin tomas guardadas (solicitudes anteriores) se piden todas; con tomas, solo esas en el orden de la guía", () => {
+    expect(angulosDeSolicitud({ angulosPedidos: [] })).toEqual([...ANGULOS]);
+    expect(angulosDeSolicitud({})).toEqual([...ANGULOS]);
+    expect(angulosDeSolicitud({ angulosPedidos: ["ZONA_DOLOR", "SONRISA"] })).toEqual(["SONRISA", "ZONA_DOLOR"]);
+  });
+  it("la solicitud valida plantilla y ángulos", () => {
+    const base = { nombre: "Ana Pérez", telefono: "3001234567", motivo: "Dolor" };
+    expect(esquemaSolicitud.safeParse({ ...base, plantilla: "DOLOR", angulos: ["ZONA_DOLOR"] }).success).toBe(true);
+    expect(esquemaSolicitud.safeParse({ ...base, plantilla: "INVENTADA" }).success).toBe(false);
+    expect(esquemaSolicitud.safeParse({ ...base, angulos: ["NO_EXISTE"] }).success).toBe(false);
+  });
+});
+
+describe("etapas, siguiente acción, faltantes y métricas", () => {
+  const f = (estado: EstadoVal, extra: Partial<{ expiraEn: Date; ultimoAccesoEn: Date | null; resultadoEnviadoEn: Date | null }> = {}) =>
+    ({ estado, expiraEn: en(86_400_000), ultimoAccesoEn: null, resultadoEnviadoEn: null, ...extra });
+  it("las 8 etapas se derivan del estado y las marcas", () => {
+    expect(etapaValoracion(f("PENDIENTE_PACIENTE"), ahora)).toBe("SIN_ABRIR");
+    expect(etapaValoracion(f("PENDIENTE_PACIENTE", { ultimoAccesoEn: ahora }), ahora)).toBe("COMPLETANDO");
+    expect(etapaValoracion(f("RECIBIDA"), ahora)).toBe("POR_VALORAR");
+    expect(etapaValoracion(f("EN_REVISION"), ahora)).toBe("EN_REVISION");
+    expect(etapaValoracion(f("REQUIERE_MAS_INFO"), ahora)).toBe("ESPERANDO_PACIENTE");
+    expect(etapaValoracion(f("COMPLETADA"), ahora)).toBe("POR_ENVIAR");
+    expect(etapaValoracion(f("COMPLETADA", { resultadoEnviadoEn: ahora }), ahora)).toBe("CERRADA");
+    expect(etapaValoracion(f("PENDIENTE_PACIENTE", { expiraEn: en(-1) }), ahora)).toBe("VENCIDA");
+    expect(etapaValoracion(f("CANCELADA"), ahora)).toBe("CERRADA");
+    expect(new Set(ETAPAS).size).toBe(8);
+  });
+  it("cada etapa tiene una siguiente acción y un paso; recepción no ve acciones clínicas", () => {
+    for (const e of ETAPAS) { expect(siguienteAccion(e, true).titulo).toBeTruthy(); expect(pasoDeEtapa(e)).toBeGreaterThanOrEqual(0); }
+    expect(siguienteAccion("POR_VALORAR", true).destino).toBe("paciente");
+    expect(siguienteAccion("POR_VALORAR", false).destino).toBe("ninguno");
+    expect(siguienteAccion("POR_ENVIAR", true).destino).toBe("enviar");
+    expect(siguienteAccion("VENCIDA", false).destino).toBe("reenviar");
+  });
+  it("pestañas: 'Por atender' depende de quién mira", () => {
+    expect(enPestana("atender", "POR_VALORAR", true)).toBe(true);
+    expect(enPestana("atender", "POR_VALORAR", false)).toBe(false);
+    expect(enPestana("atender", "SIN_ABRIR", false)).toBe(true);
+    expect(enPestana("esperando", "COMPLETANDO", true)).toBe(true);
+    expect(enPestana("todas", "CERRADA", false)).toBe(true);
+  });
+  it("faltantes: solo conteos y estados", () => {
+    expect(faltantes({ etapa: "COMPLETANDO", consentimientoEn: null, fotos: 1, valoracionEscrita: false })).toEqual(["Consentimiento", "2 fotos más"]);
+    expect(faltantes({ etapa: "COMPLETANDO", consentimientoEn: ahora, fotos: 2, valoracionEscrita: false })).toEqual(["1 foto más"]);
+    expect(faltantes({ etapa: "EN_REVISION", consentimientoEn: ahora, fotos: 5, valoracionEscrita: false })).toEqual(["Valoración escrita"]);
+    expect(faltantes({ etapa: "CERRADA", consentimientoEn: ahora, fotos: 5, valoracionEscrita: true })).toEqual([]);
+  });
+  it("métricas: por revisar, esperando, por vencer (48 h) y tiempo medio de los últimos 90 días", () => {
+    const hora = 3_600_000;
+    const m = metricasValoraciones([
+      { ...f("RECIBIDA"), recibidaEn: en(-hora), completadaEn: null },
+      { ...f("EN_REVISION"), recibidaEn: en(-hora), completadaEn: null },
+      { ...f("PENDIENTE_PACIENTE", { expiraEn: en(24 * hora) }), recibidaEn: null, completadaEn: null }, // vence en 24 h
+      { ...f("REQUIERE_MAS_INFO", { expiraEn: en(5 * 24 * hora) }), recibidaEn: null, completadaEn: null },
+      { ...f("COMPLETADA"), recibidaEn: en(-10 * hora), completadaEn: en(-6 * hora) }, // 4 h
+      { ...f("COMPLETADA"), recibidaEn: en(-200 * 24 * hora), completadaEn: en(-199 * 24 * hora) }, // fuera de los 90 días
+    ], ahora);
+    expect(m).toMatchObject({ porRevisar: 2, esperando: 2, porVencer: 1, tiempoMedioMs: 4 * hora });
+  });
+  it("el especialista puede crear solicitudes pero no asignar", () => {
+    expect(puedeCrearValoracion("especialista")).toBe(true);
+    expect(puedeAsignarValoracion("especialista")).toBe(false);
+    expect(puedeAsignarValoracion("recepcion")).toBe(true);
+  });
+});
+
+describe("debeRecordar", () => {
+  const H = 3_600_000;
+  const base = { estado: "PENDIENTE_PACIENTE" as EstadoVal, expiraEn: en(4 * 24 * H), correo: "a@b.co", recordatoriosEnviados: 0, ultimoRecordatorioEn: null, enlaceEnviadoEn: en(-49 * H), ultimoAccesoEn: null };
+  it("recuerda a las 48 h del envío del enlace", () => {
+    expect(debeRecordar(base, ahora)).toBe(true);
+    expect(debeRecordar({ ...base, enlaceEnviadoEn: en(-47 * H) }, ahora)).toBe(false);
+  });
+  it("cuenta desde el último recordatorio y se detiene en 2", () => {
+    expect(debeRecordar({ ...base, recordatoriosEnviados: 1, ultimoRecordatorioEn: en(-47 * H) }, ahora)).toBe(false);
+    expect(debeRecordar({ ...base, recordatoriosEnviados: 1, ultimoRecordatorioEn: en(-49 * H) }, ahora)).toBe(true);
+    expect(debeRecordar({ ...base, recordatoriosEnviados: 2, ultimoRecordatorioEn: en(-90 * H) }, ahora)).toBe(false);
+  });
+  it("no recuerda con sesión activa del paciente (accedió hace menos de 3 h)", () => {
+    expect(debeRecordar({ ...base, ultimoAccesoEn: en(-2 * H) }, ahora)).toBe(false);
+    expect(debeRecordar({ ...base, ultimoAccesoEn: en(-4 * H) }, ahora)).toBe(true);
+  });
+  it("no recuerda si vence en una hora o menos, o ya venció", () => {
+    expect(debeRecordar({ ...base, expiraEn: en(H) }, ahora)).toBe(false);
+    expect(debeRecordar({ ...base, expiraEn: en(H + 1000) }, ahora)).toBe(true);
+    expect(debeRecordar({ ...base, expiraEn: en(-H) }, ahora)).toBe(false);
+  });
+  it("no recuerda sin correo ni cuando no espera al paciente; sí en «más información»", () => {
+    expect(debeRecordar({ ...base, correo: null }, ahora)).toBe(false);
+    for (const estado of ["RECIBIDA", "EN_REVISION", "COMPLETADA", "CANCELADA"] as const) expect(debeRecordar({ ...base, estado }, ahora), estado).toBe(false);
+    expect(debeRecordar({ ...base, estado: "REQUIERE_MAS_INFO" }, ahora)).toBe(true);
   });
 });

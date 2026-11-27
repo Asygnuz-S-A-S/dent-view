@@ -2,6 +2,7 @@
 import { cronAutorizado } from "@/lib/cron";
 import { despachar } from "@/lib/notificar";
 import { generarRecordatoriosCita } from "@/lib/recordatorios";
+import { generarRecordatoriosValoracion } from "@/lib/valoraciones-servidor";
 
 export const dynamic = "force-dynamic";
 
@@ -9,5 +10,6 @@ export const dynamic = "force-dynamic";
 export async function POST(req: Request) {
   if (!cronAutorizado(req)) return new Response(null, { status: 401 });
   const recordatorios = await generarRecordatoriosCita();
-  return Response.json({ recordatorios, ...(await despachar()) });
+  const valoraciones = await generarRecordatoriosValoracion();
+  return Response.json({ recordatorios, valoraciones, ...(await despachar()) });
 }

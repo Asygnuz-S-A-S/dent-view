@@ -1,6 +1,7 @@
 import type { Angulo } from "@/lib/valoraciones";
 
 // Ayuda visual simple por ángulo (trazos con currentColor): qué encuadre se espera, no una foto de ejemplo.
+// Es decorativa: la etiqueta de la toma ya está en texto al lado, así que se oculta a lectores de pantalla.
 const rostro = <ellipse cx="50" cy="48" rx="26" ry="34" />;
 const perfil = "M38 14 C60 12 72 28 70 44 L76 54 L68 56 L68 64 C68 78 56 86 44 84 C34 82 30 70 32 58 C26 40 28 20 38 14 Z";
 const arcada = (inferior: boolean) => (
@@ -31,7 +32,7 @@ function Dibujo({ angulo }: { angulo: Angulo }) {
 
 export function SiluetaAngulo({ angulo, className }: { angulo: Angulo; className?: string }) {
   return (
-    <svg viewBox="0 0 100 100" role="img" aria-label={`Guía visual: ${angulo}`} className={className} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
+    <svg viewBox="0 0 100 100" aria-hidden="true" focusable="false" className={className} fill="none" stroke="currentColor" strokeWidth="2.2" strokeLinecap="round" strokeLinejoin="round">
       <Dibujo angulo={angulo} />
     </svg>
   );

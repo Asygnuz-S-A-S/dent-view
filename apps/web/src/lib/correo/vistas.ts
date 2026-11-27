@@ -17,6 +17,7 @@ const POR_TIPO: Record<TipoMensaje, { titulo: string; boton?: string; aviso?: st
   VALORACION_ENLACE: { titulo: "Completa tu valoración", boton: "Completar valoración", aviso: IGNORAR },
   VALORACION_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },
   VALORACION_RESULTADO: { titulo: "Tu valoración está lista", boton: "Ver valoración", aviso: IGNORAR },
+  VALORACION_RECORDATORIO: { titulo: "Tu valoración te espera", boton: "Continuar valoración", aviso: IGNORAR },
   VALORACION_AVISO: { titulo: "Valoración por revisar", boton: "Abrir valoración" },
   PRESUPUESTO_ENLACE: { titulo: "Tu cotización está lista", boton: "Ver cotización", aviso: IGNORAR },
   PRESUPUESTO_CODIGO: { titulo: "Tu código de acceso", aviso: "No compartas este código con nadie. " + IGNORAR },

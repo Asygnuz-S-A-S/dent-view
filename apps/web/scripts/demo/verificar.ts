@@ -15,6 +15,7 @@ import { armarEntrada } from "../../src/lib/rips/datos";
 import { generarRips } from "../../src/lib/rips/generar";
 import { moduloHabilitado } from "../../src/lib/tipo-centro";
 import { transicionRemision, type EstadoRemision } from "../../src/lib/remisiones";
+import { esquemaCuestionario, etapaValoracion, ETAPAS, claveCopia, type EstadoVal } from "../../src/lib/valoraciones";
 import { bog } from "./util";
 
 const ORTHANC = process.env.ORTHANC_URL?.replace(/\/+$/, "");
@@ -91,6 +92,28 @@ await cero("informe BORRADOR sin PDF ni código", `SELECT 1 FROM "Informe" WHERE
 await cero("un solo informe vigente por grupo", `SELECT "grupoId" FROM "Informe" WHERE vigente GROUP BY 1 HAVING count(*) > 1`);
 await cero("estudios con orthancId y UID", `SELECT 1 FROM "Estudio" WHERE "orthancId" IS NULL OR "orthancId" = '' OR "studyInstanceUid" = ''`);
 await cero("estudio asignado: paciente del mismo centro", `SELECT 1 FROM "Estudio" e JOIN "PacienteTenant" p ON p.id = e."pacienteId" WHERE p."organizationId" <> e."organizationId"`);
+
+console.log("\nValoraciones virtuales (Alejandro Restrepo):");
+{
+  const alejandro = orgs.find((x) => x.slug === "alejandro-restrepo");
+  const vals = alejandro ? await prisma.valoracion.findMany({ where: { organizationId: alejandro.id } }) : [];
+  if (alejandro) {
+    ok("al menos 15 valoraciones", vals.length >= 15, `${vals.length}`);
+    const etapas = new Map<string, number>();
+    for (const v of vals) { const e = etapaValoracion({ ...v, estado: v.estado as EstadoVal }); etapas.set(e, (etapas.get(e) ?? 0) + 1); }
+    const sinEtapa = ETAPAS.filter((e) => !etapas.has(e));
+    ok("al menos una valoración por etapa del tablero", sinEtapa.length === 0, sinEtapa.length ? `faltan: ${sinEtapa.join(", ")}` : [...etapas].map(([e, c]) => `${e} ${c}`).join(" · "));
+    ok("hay canceladas", vals.some((v) => v.estado === "CANCELADA"));
+    const invalidos = vals.filter((v) => v.cuestionario !== null && !esquemaCuestionario.safeParse(v.cuestionario).success).length;
+    ok("todos los cuestionarios cumplen el esquema de la app", invalidos === 0, invalidos ? `${invalidos} inválidos` : "");
+    const cotizadas = await n(`SELECT 1 FROM "Valoracion" v WHERE v."organizationId" = '${alejandro.id}' AND v.estado = 'COMPLETADA' AND EXISTS (SELECT 1 FROM "Presupuesto" p WHERE p."valoracionId" = v.id AND p."organizationId" = v."organizationId")`);
+    ok("al menos 2 valoraciones cotizadas (Presupuesto.valoracionId)", cotizadas >= 2, `${cotizadas}`);
+    await cero("cotización con otro paciente que la valoración", `SELECT 1 FROM "Presupuesto" p JOIN "Valoracion" v ON v.id = p."valoracionId" WHERE v."pacienteId" IS NOT NULL AND p."pacienteId" IS DISTINCT FROM v."pacienteId"`);
+    await cero("valoraciones sin paciente que no tengan lead VALORACION_VIRTUAL", `SELECT 1 FROM "Valoracion" v WHERE v."pacienteId" IS NULL AND NOT EXISTS (SELECT 1 FROM "Lead" l WHERE l.id = v."leadId" AND l.origen = 'VALORACION_VIRTUAL')`);
+    await cero("completadas sin recibidaEn/completadaEn coherentes", `SELECT 1 FROM "Valoracion" WHERE estado = 'COMPLETADA' AND ("recibidaEn" IS NULL OR "completadaEn" IS NULL OR "completadaEn" < "recibidaEn")`);
+    ok("recepción de Alejandro existe (muestra el límite de datos clínicos)", (await n(`SELECT 1 FROM "Member" WHERE "organizationId" = '${alejandro.id}' AND role = 'recepcion'`)) >= 1);
+  }
+}
 
 console.log("\nSeguridad (la demo no debe poder enviar nada):");
 await cero("mensajes en cola (EN_COLA)", `SELECT 1 FROM "Mensaje" WHERE estado = 'EN_COLA'`);
@@ -287,7 +310,7 @@ if (ORTHANC) {
 const claves = [
   ...(await prisma.pacienteTenant.findMany({ where: { fotoKey: { not: null } }, select: { fotoKey: true } })).map((x) => x.fotoKey!),
   ...(await prisma.estudio.findMany({ where: { superficieKey: { not: null } }, select: { superficieKey: true } })).map((x) => x.superficieKey!),
-  ...(await prisma.valoracionMedia.findMany({ select: { claveS3: true, claveMiniatura: true } })).flatMap((x) => [x.claveS3, x.claveMiniatura!]),
+  ...(await prisma.valoracionMedia.findMany({ select: { claveS3: true, claveMiniatura: true, tipo: true } })).flatMap((x) => [x.claveS3, ...(x.tipo === "FOTO" ? [claveCopia(x.claveS3, "web"), x.claveMiniatura!] : [])]),
 ];
 let faltan = 0;
 for (const Key of claves) await s3.send(new HeadObjectCommand({ Bucket: BUCKET, Key })).catch(() => { faltan++; });

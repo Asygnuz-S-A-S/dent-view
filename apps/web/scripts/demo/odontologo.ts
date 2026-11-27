@@ -3,7 +3,6 @@
 import { prisma } from "@dent-view/db";
 import { fechaHoraCompleta } from "../../src/lib/fechas";
 import { PLANTILLAS_SECUENCIA } from "../../src/lib/crm";
-import { claveCopia, claveMedia } from "../../src/lib/valoraciones";
 import { CATALOGO_ALEJANDRO, cupsDe, tipoRipsDe } from "./catalogos";
 import { digitoVerificacionNit } from "../../src/lib/fe/dian";
 import { generarYGuardarRips } from "../../src/lib/rips/servicio";
@@ -16,7 +15,7 @@ import { asegurarMiembro, Acum, consentimientos, crearCentro, crearUsuarios, egr
 import { crearPacientes, historiaClinica, registrarPacientes } from "./pacientes";
 import { fechaDicom, nombreDicom, planEstudio, uidEstudio, type PlanEstudio } from "./estudios";
 import { subirS3 } from "./externos";
-import { fotoClinicaJpeg, miniatura } from "./imagenes";
+import { COTIZADAS, sembrarValoraciones } from "./valoraciones";
 import { bog, conConcurrencia, crearAgendador, crearRng, diaSemana, diaUtc, enMin, hashFicticio, log, type Entorno, type Persona } from "./util";
 
 const DIENTES = [...[1, 2, 3, 4].flatMap((c) => [1, 2, 3, 4, 5, 6, 7, 8].map((d) => c * 10 + d))];
@@ -42,7 +41,8 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
   const org = await crearCentro(D);
   const orgId = org.id;
   const emailAdmin = `admin@${slug}.ejemplo.invalid`;
-  const uid = await crearUsuarios(orgId, [{ email: emailAdmin, nombre: "Dr. Alejandro Restrepo Naranjo", rol: "admin_tenant", esOdontologo: true, perfil: { tarjeta: "TP-DEMO-2291", especialidad: "Odontología general y rehabilitación oral", telefono: "3205550173", consultorio: "Consultorio 202, Manizales" } }], hash);
+  const uid = await crearUsuarios(orgId, [{ email: emailAdmin, nombre: "Dr. Alejandro Restrepo Naranjo", rol: "admin_tenant", esOdontologo: true, perfil: { tarjeta: "TP-DEMO-2291", especialidad: "Odontología general y rehabilitación oral", telefono: "3205550173", consultorio: "Consultorio 202, Manizales" } },
+    { email: `recepcion@${slug}.ejemplo.invalid`, nombre: "Daniela Ospina Cardona", rol: "recepcion" }], hash); // recepción no exige 2FA y muestra el límite de datos clínicos (M5)
   await asegurarMiembro(orgId, g.superId, "admin_tenant");
   if (soloBasico) return null;
   const doc = uid.get(emailAdmin)!;
@@ -203,7 +203,7 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
     const respondida = ["ACEPTADO", "CONVERTIDO"].includes(estado);
     const token = generarToken(), tokenHash = hashToken(token);
     A.add("presupuesto", {
-      id, organizationId: orgId, numero: i + 1, pacienteId: p.id, profesionalId: doc, estado, titulo: titulos[i % titulos.length], margen: 30, validoHasta, creadoPorId: doc, creadoEn: creado, actualizadoEn: creado,
+      id, organizationId: orgId, numero: i + 1, pacienteId: p.id, profesionalId: doc, estado, valoracionId: COTIZADAS.some((c) => c.pres === i) ? `${slug}-val-${COTIZADAS.find((c) => c.pres === i)!.val}` : null, titulo: titulos[i % titulos.length], margen: 30, validoHasta, creadoPorId: doc, creadoEn: creado, actualizadoEn: creado,
       ...(enviado ? { tokenHash, codigoHash: hashCodigo(tokenHash, generarCodigoAcceso(), env.secreto), intentosCodigo: 0, enviadoEn: enMin(creado, 45) } : {}),
       ...(["VISTO", "ACEPTADO", "RECHAZADO", "CONVERTIDO"].includes(estado) ? { vistoEn: enMin(creado, 600) } : {}),
       ...(respondida ? {
@@ -228,44 +228,8 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
     A.add("casoLaboratorio", { id: `${slug}-lab-${i + 1}`, organizationId: orgId, pacienteId: p.id, laboratorio: labs[i % labs.length], tipo, dientes: rng.pick(["36", "46", "11-21", "14-15", "24", "36-37"]), valor, estado, enviado, entregaEsperada: vencido ? bog(-rng.int(2, 6), 10) : esperada, recibido: estado === "RECIBIDO" || estado === "ENTREGADO" ? (enviado ? new Date(Math.min(enMin(enviado, 1440 * 8).getTime(), bog(-1, 10).getTime())) : null) : null, notas: estado === "CANCELADO" ? "El paciente decidió otro tratamiento" : null, creadoEn: enviado ?? bog(-1) });
   });
 
-  // ---- Valoraciones virtuales (fotos sintéticas en S3) ----
-  const ang = ["FRONTAL_REPOSO", "SONRISA", "INTRAORAL_FRONTAL", "OCLUSAL_SUPERIOR", "LATERAL_DERECHA"] as const;
-  type V = { estado: string; nombre: string; motivo: string; medios: number; completa?: boolean; pacienteIdx?: number; dias: number };
-  const vals: V[] = [
-    { estado: "PENDIENTE_PACIENTE", nombre: g.nombre().nombre, motivo: "Quiero saber cuánto cuesta un blanqueamiento y si mis dientes lo permiten", medios: 0, dias: 1 },
-    { estado: "RECIBIDA", nombre: g.nombre().nombre, motivo: "Dolor al masticar en una muela de arriba", medios: 4, dias: 2 },
-    { estado: "REQUIERE_MAS_INFO", nombre: g.nombre().nombre, motivo: "Se me quebró un diente de adelante", medios: 2, dias: 4 },
-    { estado: "COMPLETADA", nombre: pacs[7]!.nombre, motivo: "Manchas en los dientes y encías inflamadas", medios: 3, completa: true, pacienteIdx: 7, dias: 9 },
-  ];
-  const valRows: Record<string, unknown>[] = [], mediaRows: Record<string, unknown>[] = [], msgRows: Record<string, unknown>[] = [];
-  for (const [i, v] of vals.entries()) {
-    const id = `${slug}-val-${i + 1}`;
-    const creado = bog(-v.dias, 10);
-    valRows.push({
-      id, organizationId: orgId, pacienteId: v.pacienteIdx !== undefined ? pacs[v.pacienteIdx]!.id : null, nombre: v.nombre, telefono: `3105550${100 + i}`, correo: null, ciudad: "Manizales", motivo: v.motivo,
-      cuestionario: { dolor: v.estado === "RECIBIDA" ? "Moderado" : "Ninguno", sintomas: ["Sensibilidad al frío"], antecedentes: "Ninguno relevante", alergias: "Ninguna conocida", medicamentos: "Ninguno" },
-      estado: v.estado, doctorId: doc, tokenHash: hashFicticio(`${slug}-val-${i}`), codigoHash: null, expiraEn: v.estado === "PENDIENTE_PACIENTE" ? bog(5) : bog(20), consentimientoEn: v.medios ? creado : null, consentimientoVersion: v.medios ? "2026-11-v1" : null,
-      diagnosticoPreliminar: v.completa ? "Gingivitis asociada a placa y tinciones extrínsecas. Sin signos de caries profundas en las fotografías." : null,
-      recomendaciones: v.completa ? "Profilaxis con detartraje y refuerzo de higiene oral. Blanqueamiento posterior a la fase periodontal." : null, requierePresencial: v.completa ? true : false,
-      presupuestoEstimado: v.completa ? 240000 : null, tratamientoSugerido: v.completa ? "Profilaxis, detartraje y control a los 15 días" : null, completadaEn: v.completa ? enMin(creado, 1440) : null, creadoPorId: doc, creadoEn: creado, actualizadoEn: creado,
-    });
-    for (let m = 0; m < v.medios; m++) {
-      const mid = `${id}-m${m + 1}`;
-      const key = claveMedia(orgId, id, mid, "jpg");
-      const foto = await fotoClinicaJpeg(i * 5 + m + 1);
-      const mini = await miniatura(foto);
-      await Promise.all([subirS3(env.bucket, key, foto, "image/jpeg"), subirS3(env.bucket, claveCopia(key, "web"), foto, "image/jpeg"), subirS3(env.bucket, claveCopia(key, "thumb"), mini, "image/jpeg")]);
-      mediaRows.push({ id: mid, organizationId: orgId, valoracionId: id, tipo: "FOTO", angulo: ang[m % ang.length], claveS3: key, claveMiniatura: claveCopia(key, "thumb"), mime: "image/jpeg", bytes: foto.length, ancho: 960, alto: 720, creadoEn: creado });
-    }
-    if (v.estado === "REQUIERE_MAS_INFO") msgRows.push({ id: `${id}-msg1`, organizationId: orgId, valoracionId: id, autor: "PROFESIONAL", autorId: doc, texto: "Gracias por las fotos. ¿Podría enviar una foto del diente fracturado desde un lado?", solicitaMedia: "LATERAL_DERECHA", creadoEn: enMin(creado, 600) });
-    if (v.completa) {
-      msgRows.push({ id: `${id}-msg1`, organizationId: orgId, valoracionId: id, autor: "PROFESIONAL", autorId: doc, texto: "Ya revisé sus fotos; le dejo el diagnóstico preliminar y las recomendaciones.", creadoEn: enMin(creado, 1440), leidoEn: enMin(creado, 1500) });
-      msgRows.push({ id: `${id}-msg2`, organizationId: orgId, valoracionId: id, autor: "PACIENTE", texto: "Muchas gracias, doctor. Agendo la limpieza esta semana.", creadoEn: enMin(creado, 1700) });
-    }
-  }
-  A.add("valoracion", ...valRows);
-  A.add("valoracionMedia", ...mediaRows);
-  A.add("valoracionMensaje", ...msgRows);
+  // ---- Valoraciones virtuales: 16 solicitudes en todas las etapas, con fotos sintéticas, video, leads y dos cotizaciones (valoraciones.ts) ----
+  const nValoraciones = await sembrarValoraciones({ A, env, orgId, slug, doc, pacs, g });
 
   // ---- CRM: 30 leads en todas las etapas, actividades y tareas ----
   let an = 0, tn = 0;
@@ -315,5 +279,5 @@ export async function construirAlejandro(env: Entorno, hash: string, g: { nombre
     for (const c of [...conOrden].reverse()) { if (n >= 6) break; if ((await generarYGuardarRips({ organizationId: orgId, actorId: doc, ordenId: ordenDeCita.get(c.id)!.id })).estado === "ok") n++; }
     log(`  ${slug}: ${n} RIPS generados (JSON en S3).`);
   };
-  return { A, org, planes, despues, resumen: { ordenes: conOrden.length, evolutivos: evo.evolutivos, pacientes: pacs.length, citas: citas.length, facturas: docs.length, notasClinicas: notas.length, presupuestos: PRES.length, leads: ETAPAS.length, valoraciones: vals.length, estudiosDicom: planes.length } };
+  return { A, org, planes, despues, resumen: { ordenes: conOrden.length, evolutivos: evo.evolutivos, pacientes: pacs.length, citas: citas.length, facturas: docs.length, notasClinicas: notas.length, presupuestos: PRES.length, leads: ETAPAS.length, valoraciones: nValoraciones, estudiosDicom: planes.length } };
 }

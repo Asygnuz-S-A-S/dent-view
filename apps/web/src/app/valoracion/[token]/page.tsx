@@ -9,7 +9,7 @@ import { registrarEvento } from "@/lib/eventos";
 import { cop } from "@/lib/precios";
 import { cssMarca } from "@/lib/marca";
 import { fechaHora, fechaLarga } from "@/lib/fechas";
-import { esquemaCuestionario, ordenarMedios, pacienteEdita, truncarIp, type EstadoVal } from "@/lib/valoraciones";
+import { angulosDeSolicitud, esquemaCuestionario, ordenarMedios, pacienteEdita, pedidosPendientes, truncarIp, type EstadoVal } from "@/lib/valoraciones";
 import { ipCliente, valoracionDelPaciente } from "@/lib/valoraciones-servidor";
 
 export const dynamic = "force-dynamic";
@@ -45,8 +45,8 @@ export default async function ValoracionPublica({ params }: { params: Promise<{ 
   const estado = v.estado as EstadoVal;
   const edita = pacienteEdita({ estado, expiraEn: v.expiraEn });
   const cuest = esquemaCuestionario.safeParse(v.cuestionario);
-  // Fotos pedidas por el profesional que aún no se han subido.
-  const pedidos = mensajes.flatMap((m) => (m.autor === "PROFESIONAL" && m.solicitaMedia ? [m.solicitaMedia] : []));
+  // Fotos pedidas por el profesional que aún no se han subido (repetir una toma ya existente cuenta como pendiente).
+  const pedidos = pedidosPendientes(mensajes, medios);
 
   return (
     <main className="mx-auto flex min-h-svh max-w-2xl flex-col gap-6 px-4 py-6 sm:px-6 sm:py-10">
@@ -91,7 +91,7 @@ export default async function ValoracionPublica({ params }: { params: Promise<{ 
             token={token} motivoInicial={v.motivo} cuestionario={cuest.success ? cuest.data : null} consentido={!!v.consentimientoEn}
             medios={ordenarMedios(medios).map((m) => ({ id: m.id, angulo: m.angulo, tipo: m.tipo, duracionSeg: m.duracionSeg }))}
             mensajes={mensajes.map((m) => ({ id: m.id, autor: m.autor, texto: m.texto, solicitaMedia: m.solicitaMedia, fecha: fechaHora(m.creadoEn) }))}
-            pedidos={pedidos.filter((a) => !medios.some((m) => m.angulo === a))}
+            angulos={angulosDeSolicitud(v)} pedidos={pedidos}
           />
         </>
       ) : estado === "RECIBIDA" || estado === "EN_REVISION" ? (

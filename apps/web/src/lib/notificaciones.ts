@@ -3,9 +3,9 @@
 
 export const CANALES = ["CORREO", "SMS", "WHATSAPP"] as const;
 export type Canal = (typeof CANALES)[number];
-export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "VALORACION_AVISO", "PRESUPUESTO_ENLACE", "PRESUPUESTO_CODIGO", "PRESUPUESTO_RESPUESTA", "VINCULO_SOLICITADO", "REMISION_RECIBIDA", "REMISION_RESPONDIDA"] as const;
+export const TIPOS_MENSAJE = ["CITA_CREADA", "CITA_RECORDATORIO", "INFORME_PACIENTE", "INFORME_REMITENTE", "SEGUIMIENTO", "ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "VALORACION_RECORDATORIO", "VALORACION_AVISO", "PRESUPUESTO_ENLACE", "PRESUPUESTO_CODIGO", "PRESUPUESTO_RESPUESTA", "VINCULO_SOLICITADO", "REMISION_RECIBIDA", "REMISION_RESPONDIDA"] as const;
 /** Mensajes con credenciales de acceso: una vez enviados no se conserva su contenido. */
-export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "PRESUPUESTO_ENLACE", "PRESUPUESTO_CODIGO"];
+export const TIPOS_SENSIBLES: readonly string[] = ["ENTREGA_ENLACE", "ENTREGA_CODIGO", "ESTUDIO_ENLACE", "ESTUDIO_CODIGO", "VALORACION_ENLACE", "VALORACION_CODIGO", "VALORACION_RESULTADO", "VALORACION_RECORDATORIO", "PRESUPUESTO_ENLACE", "PRESUPUESTO_CODIGO"];
 export type TipoMensaje = (typeof TIPOS_MENSAJE)[number];
 export const ETIQUETA_TIPO_MENSAJE: Record<TipoMensaje, string> = {
   CITA_CREADA: "Cita agendada", CITA_RECORDATORIO: "Recordatorio de cita", INFORME_PACIENTE: "Informe listo (paciente)",
@@ -13,7 +13,7 @@ export const ETIQUETA_TIPO_MENSAJE: Record<TipoMensaje, string> = {
   ENTREGA_ENLACE: "Entrega de resultados (enlace)", ENTREGA_CODIGO: "Entrega de resultados (código)",
   ESTUDIO_ENLACE: "Estudio compartido (enlace)", ESTUDIO_CODIGO: "Estudio compartido (código)",
   VALORACION_ENLACE: "Valoración virtual (enlace)", VALORACION_CODIGO: "Valoración virtual (código)",
-  VALORACION_RESULTADO: "Valoración virtual (resultado)", VALORACION_AVISO: "Valoración virtual (aviso al odontólogo)",
+  VALORACION_RESULTADO: "Valoración virtual (resultado)", VALORACION_RECORDATORIO: "Valoración virtual (recordatorio)", VALORACION_AVISO: "Valoración virtual (aviso al odontólogo)",
   PRESUPUESTO_ENLACE: "Cotización virtual (enlace)", PRESUPUESTO_CODIGO: "Cotización virtual (código)", PRESUPUESTO_RESPUESTA: "Cotización virtual (aviso al centro)",
   VINCULO_SOLICITADO: "Remisiones (solicitud de vínculo)", REMISION_RECIBIDA: "Remisiones (remisión recibida)", REMISION_RESPONDIDA: "Remisiones (respuesta del centro)",
 };
@@ -107,6 +107,10 @@ export const PLANTILLAS_DEFECTO: Record<TipoMensaje, { asunto: string; cuerpo: s
   VALORACION_RESULTADO: {
     asunto: "{{centro}}: tu valoración está lista",
     cuerpo: "Hola, {{centro}} ya tiene lista tu valoración virtual.\nConsúltala en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
+  },
+  VALORACION_RECORDATORIO: {
+    asunto: "{{centro}}: tu valoración está pendiente",
+    cuerpo: "Hola, aún no recibimos tus fotos para la valoración virtual en {{centro}}. Te toma unos minutos desde tu celular.\nContinúa en: {{enlace}}\nEl código de acceso te llega en un mensaje aparte. El enlace vence el {{vence}}.",
   },
   VALORACION_AVISO: {
     asunto: "Tienes una valoración virtual por revisar",

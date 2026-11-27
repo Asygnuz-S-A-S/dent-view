@@ -11,6 +11,7 @@ export const MIN_FOTOS = 3;
 export const FOTO_MAX_BYTES = 15 * 1024 * 1024; // el cliente comprime a ~1 MB; esto cubre HEIC/JPEG crudos de la galería
 export const VIDEO_MAX_BYTES = 50 * 1024 * 1024;
 export const VIDEO_MAX_SEG = 45;
+export const MAX_NOTA_FOTO = 500;
 export const MAX_SUBIDAS_VENTANA = 40; // por valoración, cada 10 minutos
 export const CONSENTIMIENTO_VERSION = "2026-11-v1";
 export const COOKIE_VALORACION = "dv_valoracion";
@@ -47,6 +48,18 @@ export const pacienteEdita = (v: { estado: EstadoVal; expiraEn: Date }, ahora = 
 };
 
 export const MAX_INTENTOS_CODIGO = 5;
+export const MAX_RECORDATORIOS = 2;
+export const HORAS_ENTRE_RECORDATORIOS = 48;
+/**
+ * Si toca recordarle al paciente que su valoración sigue pendiente: espera su parte, tiene correo, el enlace aún vive >1 h, van menos de 2 recordatorios,
+ * pasaron ≥48 h desde el último envío del enlace o recordatorio y no la tiene abierta (sin acceso en las últimas 3 h).
+ */
+export function debeRecordar(v: { estado: EstadoVal; expiraEn: Date; correo: string | null; recordatoriosEnviados: number; ultimoRecordatorioEn: Date | null; enlaceEnviadoEn: Date | null; ultimoAccesoEn: Date | null }, ahora = new Date()): boolean {
+  if (!v.correo || !pacienteEdita(v, ahora) || v.expiraEn.getTime() - ahora.getTime() <= 3_600_000 || v.recordatoriosEnviados >= MAX_RECORDATORIOS) return false;
+  const ultimo = Math.max(v.ultimoRecordatorioEn?.getTime() ?? 0, v.enlaceEnviadoEn?.getTime() ?? 0);
+  if (!ultimo || ahora.getTime() - ultimo < HORAS_ENTRE_RECORDATORIOS * 3_600_000) return false;
+  return !v.ultimoAccesoEn || ahora.getTime() - v.ultimoAccesoEn.getTime() >= SESION_VALORACION_MS;
+}
 export type EstadoCodigo = "ACTIVO" | "VENCIDO" | "CERRADO" | "BLOQUEADO";
 /** Si el enlace aún admite verificar el código (vencimiento, estado final o demasiados intentos). */
 export function estadoCodigo(v: { estado: EstadoVal; expiraEn: Date; intentosCodigo: number }, ahora = new Date()): EstadoCodigo {
@@ -67,21 +80,57 @@ export const ANGULOS_FOTO = ANGULOS.filter((a) => a !== "VIDEO_APERTURA");
 export const ANGULOS_MULTIPLES: readonly Angulo[] = ["OTRO"]; // el resto admite una sola foto (repetirla la reemplaza)
 export const ANGULOS_CAMARA_FRONTAL: readonly Angulo[] = ["FRONTAL_REPOSO", "SONRISA"]; // selfie
 
-export const INFO_ANGULO: Record<Angulo, { etiqueta: string; instruccion: string }> = {
-  FRONTAL_REPOSO: { etiqueta: "Rostro de frente", instruccion: "De frente, boca cerrada y relajada, con buena luz y sin lentes." },
-  SONRISA: { etiqueta: "Sonrisa", instruccion: "De frente, sonríe mostrando todos tus dientes." },
-  LATERAL_DERECHA: { etiqueta: "Perfil derecho", instruccion: "Gira la cabeza para mostrar el lado derecho de tu cara." },
-  LATERAL_IZQUIERDA: { etiqueta: "Perfil izquierdo", instruccion: "Gira la cabeza para mostrar el lado izquierdo de tu cara." },
-  OCLUSAL_SUPERIOR: { etiqueta: "Dientes de arriba", instruccion: "Abre bien la boca e inclina la cabeza hacia atrás: fotografía el techo de la boca." },
-  OCLUSAL_INFERIOR: { etiqueta: "Dientes de abajo", instruccion: "Abre bien la boca y baja el mentón: fotografía los dientes de abajo desde arriba." },
-  INTRAORAL_FRONTAL: { etiqueta: "Mordida de frente", instruccion: "Muerde con los dientes juntos y separa los labios con los dedos; foto de frente." },
-  INTRAORAL_DERECHA: { etiqueta: "Mordida lado derecho", instruccion: "Dientes juntos, separa la mejilla derecha y toma la foto desde ese lado." },
-  INTRAORAL_IZQUIERDA: { etiqueta: "Mordida lado izquierdo", instruccion: "Dientes juntos, separa la mejilla izquierda y toma la foto desde ese lado." },
-  ZONA_DOLOR: { etiqueta: "Zona que te duele", instruccion: "Acércate a la zona con molestia (diente, encía o hinchazón) y fotografíala." },
-  RADIOGRAFIA: { etiqueta: "Radiografía (si tienes)", instruccion: "Si tienes una radiografía reciente, tómale una foto o súbela desde tu galería." },
-  VIDEO_APERTURA: { etiqueta: "Video de apertura y mordida", instruccion: `Video de máximo ${VIDEO_MAX_SEG} segundos: abre y cierra la boca despacio y muerde con los dientes juntos.` },
-  OTRO: { etiqueta: "Otras fotos", instruccion: "Cualquier otra foto que ayude al odontólogo (puedes subir varias)." },
+export type InfoAngulo = {
+  etiqueta: string; instruccion: string;
+  bien: readonly string[]; evita: readonly string[]; // consejos para la toma
+  orientacion: "vertical" | "horizontal"; // cómo sostener el celular
+  opcional: boolean; // no cuenta en "X de N tomas"
 };
+const rostro = { orientacion: "vertical", opcional: false } as const;
+const boca = { orientacion: "horizontal", opcional: false } as const;
+export const INFO_ANGULO: Record<Angulo, InfoAngulo> = {
+  FRONTAL_REPOSO: { etiqueta: "Rostro de frente", instruccion: "De frente, boca cerrada y relajada, con buena luz y sin lentes.", bien: ["Mira a la cámara, cabeza recta", "Luz natural de frente"], evita: ["Lentes, gorra o cabello sobre la cara", "Luz solo desde atrás"], ...rostro },
+  SONRISA: { etiqueta: "Sonrisa", instruccion: "De frente, sonríe mostrando todos tus dientes.", bien: ["Sonríe de forma natural y muestra los dientes", "Se ve la boca completa"], evita: ["Tapar la boca con la mano", "Foto cortada abajo"], ...rostro },
+  LATERAL_DERECHA: { etiqueta: "Perfil derecho", instruccion: "Gira la cabeza para mostrar el lado derecho de tu cara.", bien: ["Gira todo el cuerpo, no solo los ojos", "Se ve la oreja y la nariz"], evita: ["Medio perfil", "Cabello tapando la mandíbula"], ...rostro },
+  LATERAL_IZQUIERDA: { etiqueta: "Perfil izquierdo", instruccion: "Gira la cabeza para mostrar el lado izquierdo de tu cara.", bien: ["Gira todo el cuerpo, no solo los ojos", "Se ve la oreja y la nariz"], evita: ["Medio perfil", "Cabello tapando la mandíbula"], ...rostro },
+  OCLUSAL_SUPERIOR: { etiqueta: "Dientes de arriba", instruccion: "Abre bien la boca e inclina la cabeza hacia atrás: fotografía el techo de la boca.", bien: ["Boca muy abierta, cabeza hacia atrás", "Pide ayuda para sostener el celular"], evita: ["Sombra de la nariz sobre los dientes", "Lengua o labios tapando"], ...boca },
+  OCLUSAL_INFERIOR: { etiqueta: "Dientes de abajo", instruccion: "Abre bien la boca y baja el mentón: fotografía los dientes de abajo desde arriba.", bien: ["Boca muy abierta, lengua hacia atrás", "Pide ayuda para sostener el celular"], evita: ["Lengua sobre los dientes", "Foto borrosa por el movimiento"], ...boca },
+  INTRAORAL_FRONTAL: { etiqueta: "Mordida de frente", instruccion: "Muerde con los dientes juntos y separa los labios con los dedos; foto de frente.", bien: ["Dientes juntos y labios separados", "Celular a la altura de la boca"], evita: ["Labios cubriendo los dientes", "Foto desde abajo o desde arriba"], ...boca },
+  INTRAORAL_DERECHA: { etiqueta: "Mordida lado derecho", instruccion: "Dientes juntos, separa la mejilla derecha y toma la foto desde ese lado.", bien: ["Separa bien la mejilla", "Se ven los dientes del fondo"], evita: ["Mejilla cerrando el encuadre", "Foto oscura"], ...boca },
+  INTRAORAL_IZQUIERDA: { etiqueta: "Mordida lado izquierdo", instruccion: "Dientes juntos, separa la mejilla izquierda y toma la foto desde ese lado.", bien: ["Separa bien la mejilla", "Se ven los dientes del fondo"], evita: ["Mejilla cerrando el encuadre", "Foto oscura"], ...boca },
+  ZONA_DOLOR: { etiqueta: "Zona que te duele", instruccion: "Acércate a la zona con molestia (diente, encía o hinchazón) y fotografíala.", bien: ["Acércate a 10-15 cm de la zona", "Separa labios o mejilla con los dedos"], evita: ["Foto lejana donde no se distingue", "Dedos tapando la zona"], ...boca },
+  RADIOGRAFIA: { etiqueta: "Radiografía (si tienes)", instruccion: "Si tienes una radiografía reciente, tómale una foto o súbela desde tu galería.", bien: ["Ponla contra una ventana o pantalla blanca", "Que se vea completa y derecha"], evita: ["Reflejos del flash", "Radiografía cortada"], orientacion: "horizontal", opcional: true },
+  VIDEO_APERTURA: { etiqueta: "Video de apertura y mordida", instruccion: `Video de máximo ${VIDEO_MAX_SEG} segundos: abre y cierra la boca despacio y muerde con los dientes juntos.`, bien: ["Celular vertical, de frente", "De 10 a 20 segundos"], evita: ["Moverte demasiado", "Hablar tapando la boca"], orientacion: "vertical", opcional: true },
+  OTRO: { etiqueta: "Otras fotos", instruccion: "Cualquier otra foto que ayude al odontólogo (puedes subir varias).", bien: ["Cualquier foto que ayude a entender tu caso"], evita: ["Fotos sin relación con tu boca"], orientacion: "horizontal", opcional: true },
+};
+// --- Plantillas de captura: tomas SUGERIDAS por tipo de consulta (el mínimo de fotos no cambia) ---
+export const PLANTILLAS_CAPTURA = {
+  REVISION: { nombre: "Revisión / limpieza", angulos: ["FRONTAL_REPOSO", "SONRISA", "INTRAORAL_FRONTAL", "INTRAORAL_DERECHA", "INTRAORAL_IZQUIERDA", "OCLUSAL_SUPERIOR", "OCLUSAL_INFERIOR", "VIDEO_APERTURA"] },
+  DOLOR: { nombre: "Dolor / urgencia", angulos: ["FRONTAL_REPOSO", "ZONA_DOLOR", "INTRAORAL_FRONTAL", "INTRAORAL_DERECHA", "INTRAORAL_IZQUIERDA", "RADIOGRAFIA", "VIDEO_APERTURA"] },
+  ORTODONCIA: { nombre: "Ortodoncia / estética", angulos: ["FRONTAL_REPOSO", "SONRISA", "LATERAL_DERECHA", "LATERAL_IZQUIERDA", "INTRAORAL_FRONTAL", "INTRAORAL_DERECHA", "INTRAORAL_IZQUIERDA", "OCLUSAL_SUPERIOR", "OCLUSAL_INFERIOR", "VIDEO_APERTURA"] },
+  IMPLANTE: { nombre: "Implante / dientes perdidos", angulos: ["FRONTAL_REPOSO", "SONRISA", "INTRAORAL_FRONTAL", "INTRAORAL_DERECHA", "INTRAORAL_IZQUIERDA", "OCLUSAL_SUPERIOR", "OCLUSAL_INFERIOR", "RADIOGRAFIA"] },
+  COMPLETA: { nombre: "Completa", angulos: [...ANGULOS] },
+  PERSONALIZADA: { nombre: "Personalizada", angulos: [] },
+} as const satisfies Record<string, { nombre: string; angulos: readonly Angulo[] }>;
+export type PlantillaCaptura = keyof typeof PLANTILLAS_CAPTURA;
+export const CLAVES_PLANTILLA = Object.keys(PLANTILLAS_CAPTURA) as [PlantillaCaptura, ...PlantillaCaptura[]];
+/** Tomas que se le piden al paciente: lo guardado en la solicitud; vacío (solicitudes anteriores) = todas. */
+export const angulosDeSolicitud = (v: { angulosPedidos?: readonly string[] | null }): Angulo[] =>
+  v.angulosPedidos?.length ? ANGULOS.filter((a) => v.angulosPedidos!.includes(a)) : [...ANGULOS];
+/** Orden de la guía con las tomas obligatorias primero y las opcionales (radiografía, video, otras) al final. */
+export const ordenarTomas = (a: readonly Angulo[]): Angulo[] =>
+  ANGULOS.filter((x) => a.includes(x)).sort((x, y) => Number(INFO_ANGULO[x].opcional) - Number(INFO_ANGULO[y].opcional));
+
+/**
+ * Fotos que el odontólogo pidió y siguen pendientes: un pedido se cumple solo con una foto de ese ángulo subida DESPUÉS del mensaje
+ * (repetir una toma que ya existía cuenta como pendiente hasta que llegue la nueva).
+ */
+export function pedidosPendientes(mensajes: readonly { autor: string; solicitaMedia: string | null; creadoEn: Date }[], medios: readonly { angulo: string; creadoEn: Date }[]): Angulo[] {
+  const ultimo = new Map<string, number>(); // último pedido por ángulo
+  for (const m of mensajes) if (m.autor === "PROFESIONAL" && m.solicitaMedia) ultimo.set(m.solicitaMedia, Math.max(ultimo.get(m.solicitaMedia) ?? 0, m.creadoEn.getTime()));
+  return [...ultimo].filter(([a, t]) => !medios.some((x) => x.angulo === a && x.creadoEn.getTime() > t)).map(([a]) => a as Angulo);
+}
+
 export const ordenAngulo = (a: string) => ANGULOS.indexOf(a as Angulo);
 /** Ordena por el orden de la guía y, a igual ángulo, por fecha de subida. */
 export const ordenarMedios = <T extends { angulo: string; creadoEn: Date }>(m: readonly T[]) =>
@@ -134,10 +183,12 @@ export const claveValida = (key: string, organizationId: string, valoracionId: s
 
 // --- Permisos ---
 export const ROLES_VER_VALORACIONES = ["admin_tenant", "recepcion", "especialista"] as const;
-export const ROLES_CREAR_VALORACION = ["admin_tenant", "recepcion"] as const;
+export const ROLES_CREAR_VALORACION = ["admin_tenant", "recepcion", "especialista"] as const; // el especialista se la asigna a sí mismo
+export const ROLES_ASIGNAR_VALORACION = ["admin_tenant", "recepcion"] as const;
 /** Valoran el especialista y el administrador marcado como odontólogo (Member.esOdontologo). */
 export const puedeValorar = (rol: string, esOdontologo: boolean) => rol === "especialista" || (rol === "admin_tenant" && esOdontologo);
 export const puedeCrearValoracion = (rol: string) => (ROLES_CREAR_VALORACION as readonly string[]).includes(rol);
+export const puedeAsignarValoracion = (rol: string) => (ROLES_ASIGNAR_VALORACION as readonly string[]).includes(rol);
 export const puedeVerValoraciones = (rol: string) => (ROLES_VER_VALORACIONES as readonly string[]).includes(rol);
 /** Solo quien valora ve el contenido clínico de la solicitud (motivo, cuestionario, fotos, video, mensajes y resultado). */
 export const puedeVerClinico = puedeValorar;
@@ -178,6 +229,8 @@ export const esquemaSolicitud = z.object({
   doctorId: z.string().optional(),
   pacienteId: z.string().optional(),
   leadId: z.string().optional(),
+  plantilla: z.enum(CLAVES_PLANTILLA).optional(),
+  angulos: z.array(z.enum(ANGULOS)).max(ANGULOS.length).optional(), // vacío = todas las tomas
 }).refine((d) => d.correo || d.telefono, { message: "Escribe un correo o un teléfono para enviar el enlace", path: ["correo"] });
 
 export const esquemaCuestionario = z.object({
@@ -223,4 +276,90 @@ export function filtroEstado(estado: EstadoVal, ahora = new Date()) {
   if (espera) return { estado, expiraEn: { gt: ahora } };
   if (estado === "EXPIRADA") return { OR: [{ estado }, { estado: { in: ["PENDIENTE_PACIENTE", "REQUIERE_MAS_INFO"] as EstadoVal[] }, expiraEn: { lte: ahora } }] };
   return { estado };
+}
+
+// --- Etapas del tablero: se derivan del estado (sin cambiar el enum) y de las marcas de seguimiento ---
+export const ETAPAS = ["SIN_ABRIR", "COMPLETANDO", "POR_VALORAR", "EN_REVISION", "ESPERANDO_PACIENTE", "POR_ENVIAR", "CERRADA", "VENCIDA"] as const;
+export type Etapa = (typeof ETAPAS)[number];
+export const ETIQUETA_ETAPA: Record<Etapa, string> = {
+  SIN_ABRIR: "Enlace sin abrir", COMPLETANDO: "Paciente completando", POR_VALORAR: "Lista para valorar", EN_REVISION: "Valorando",
+  ESPERANDO_PACIENTE: "Esperando respuesta", POR_ENVIAR: "Resultado sin enviar", CERRADA: "Cerrada", VENCIDA: "Enlace vencido",
+};
+export type FilaEtapa = { estado: EstadoVal; expiraEn: Date; ultimoAccesoEn: Date | null; resultadoEnviadoEn: Date | null };
+export function etapaValoracion(v: FilaEtapa, ahora = new Date()): Etapa {
+  switch (estadoEfectivo(v, ahora)) {
+    case "EXPIRADA": return "VENCIDA";
+    case "BORRADOR": return "SIN_ABRIR"; // aún no se envía; no se crea en el flujo actual
+    case "PENDIENTE_PACIENTE": return v.ultimoAccesoEn ? "COMPLETANDO" : "SIN_ABRIR";
+    case "RECIBIDA": return "POR_VALORAR";
+    case "EN_REVISION": return "EN_REVISION";
+    case "REQUIERE_MAS_INFO": return "ESPERANDO_PACIENTE";
+    case "COMPLETADA": return v.resultadoEnviadoEn ? "CERRADA" : "POR_ENVIAR";
+    default: return "CERRADA"; // CANCELADA
+  }
+}
+/** Posición en la barra de pasos: 0 enlace, 1 paciente, 2 valoración, 3 resultado, 4 todo listo. */
+export const PASOS = ["Enlace enviado", "Paciente completa", "Valoración", "Resultado enviado"] as const;
+export const pasoDeEtapa = (e: Etapa) => ({ SIN_ABRIR: 0, COMPLETANDO: 1, ESPERANDO_PACIENTE: 1, VENCIDA: 1, POR_VALORAR: 2, EN_REVISION: 2, POR_ENVIAR: 3, CERRADA: 4 })[e];
+
+export const PESTANAS = ["atender", "esperando", "vencidas", "cerradas", "todas"] as const;
+export type Pestana = (typeof PESTANAS)[number];
+export const ETIQUETA_PESTANA: Record<Pestana, string> = { atender: "Por atender", esperando: "Esperando al paciente", vencidas: "Vencidas", cerradas: "Cerradas", todas: "Todas" };
+/** "Por atender" depende de quién mira: quien valora ve lo que debe valorar o enviar; los demás, lo que hay que recordar o reenviar. */
+export function enPestana(p: Pestana, e: Etapa, puedeValorar: boolean): boolean {
+  switch (p) {
+    case "atender": return puedeValorar ? e === "POR_VALORAR" || e === "EN_REVISION" || e === "POR_ENVIAR" : e === "SIN_ABRIR" || e === "VENCIDA";
+    case "esperando": return e === "SIN_ABRIR" || e === "COMPLETANDO" || e === "ESPERANDO_PACIENTE";
+    case "vencidas": return e === "VENCIDA";
+    case "cerradas": return e === "CERRADA";
+    default: return true;
+  }
+}
+
+export type DestinoAccion = "paciente" | "responder" | "reenviar" | "enviar" | "ninguno";
+/** Qué sigue en esta etapa según quien mira (el destino es la pestaña o botón del detalle donde se hace). */
+export function siguienteAccion(e: Etapa, puedeValorar: boolean): { titulo: string; detalle: string; destino: DestinoAccion } {
+  switch (e) {
+    case "SIN_ABRIR": return { titulo: "Recordar al paciente", detalle: "Aún no abre el enlace. Reenvíalo por WhatsApp o correo.", destino: "reenviar" };
+    case "COMPLETANDO": return { titulo: "Esperar al paciente", detalle: "Ya abrió el enlace y está subiendo sus fotos.", destino: "ninguno" };
+    case "POR_VALORAR": return puedeValorar
+      ? { titulo: "Revisar fotos y valorar", detalle: "El paciente ya envió todo. Revisa sus fotos y escribe la valoración.", destino: "paciente" }
+      : { titulo: "Esperar al odontólogo", detalle: "El paciente ya envió todo; el odontólogo debe valorar.", destino: "ninguno" };
+    case "EN_REVISION": return puedeValorar
+      ? { titulo: "Completar la valoración", detalle: "Escribe el diagnóstico preliminar y las recomendaciones.", destino: "responder" }
+      : { titulo: "Esperar al odontólogo", detalle: "El odontólogo está valorando.", destino: "ninguno" };
+    case "ESPERANDO_PACIENTE": return { titulo: "Esperar la respuesta del paciente", detalle: "Se le pidió más información; si no responde, reenvía el acceso.", destino: "reenviar" };
+    case "POR_ENVIAR": return puedeValorar
+      ? { titulo: "Enviar el resultado", detalle: "La valoración está lista; envíala al paciente.", destino: "enviar" }
+      : { titulo: "Esperar al odontólogo", detalle: "La valoración está lista; el odontólogo debe enviarla.", destino: "ninguno" };
+    case "VENCIDA": return { titulo: "Enviar un enlace nuevo", detalle: "El enlace venció. Reenvíalo para reactivar la solicitud.", destino: "reenviar" };
+    default: return { titulo: "Sin pendientes", detalle: "Esta valoración está cerrada.", destino: "ninguno" };
+  }
+}
+
+/** Qué falta para pasar a la siguiente etapa; solo conteos y estados (no revela qué tomas se pidieron). */
+export function faltantes(v: { etapa: Etapa; consentimientoEn: Date | null; fotos: number; valoracionEscrita: boolean }): string[] {
+  switch (v.etapa) {
+    case "SIN_ABRIR": case "COMPLETANDO": case "VENCIDA":
+      return [...(v.consentimientoEn ? [] : ["Consentimiento"]), ...(v.fotos < MIN_FOTOS ? [`${MIN_FOTOS - v.fotos} ${MIN_FOTOS - v.fotos === 1 ? "foto" : "fotos"} más`] : [])];
+    case "POR_VALORAR": case "EN_REVISION": return v.valoracionEscrita ? [] : ["Valoración escrita"];
+    case "ESPERANDO_PACIENTE": return ["Respuesta del paciente"];
+    case "POR_ENVIAR": return ["Enviar el resultado"];
+    default: return [];
+  }
+}
+
+export type FilaMetrica = FilaEtapa & { recibidaEn: Date | null; completadaEn: Date | null };
+export const HORAS_POR_VENCER = 48;
+/** Indicadores del tablero a partir de las marcas de cada fila (sin recorrer eventos). */
+export function metricasValoraciones(filas: readonly FilaMetrica[], ahora = new Date()) {
+  let porRevisar = 0, esperando = 0, porVencer = 0;
+  const desde = ahora.getTime() - 90 * 86_400_000, limite = ahora.getTime() + HORAS_POR_VENCER * 3_600_000;
+  for (const f of filas) {
+    const e = etapaValoracion(f, ahora);
+    if (e === "POR_VALORAR" || e === "EN_REVISION") porRevisar++;
+    if (e === "SIN_ABRIR" || e === "COMPLETANDO" || e === "ESPERANDO_PACIENTE") { esperando++; if (f.expiraEn.getTime() <= limite) porVencer++; }
+  }
+  const pares = filas.flatMap((f) => (f.estado === "COMPLETADA" && f.recibidaEn && f.completadaEn && f.completadaEn.getTime() >= desde ? [{ desde: f.recibidaEn, hasta: f.completadaEn }] : []));
+  return { porRevisar, esperando, porVencer, tiempoMedioMs: promedioRespuestaMs(pares) };
 }

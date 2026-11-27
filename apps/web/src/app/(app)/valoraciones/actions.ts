@@ -1,19 +1,23 @@
 "use server";
 
 import { prisma } from "@dent-view/db";
+import { randomUUID } from "node:crypto";
 import { revalidatePath } from "next/cache";
 import { notFound } from "next/navigation";
 import { z } from "zod";
 import { generarCodigoAcceso, generarToken, hashCodigo, hashToken } from "@/lib/entrega";
 import { registrarEvento } from "@/lib/eventos";
+import { fechaCorta } from "@/lib/fechas";
+import { claveOriginal, claveVariante, EXTENSION, type TipoImagen } from "@/lib/imagenes";
+import { borrarS3, bytesS3, guardarS3 } from "@/lib/imagenes-servidor";
 import { secreto } from "@/lib/resultados";
 import { exigirContexto, exigirModulo } from "@/lib/sesion";
 import {
-  DIAS_RESULTADO, DIAS_VENCIMIENTO, ROLES_VER_VALORACIONES, enlaceWhatsapp, esquemaMensaje, esquemaResultado, esquemaSolicitud, estadoEfectivo, transicionValida, vencimiento,
-  type EstadoVal,
+  DIAS_RESULTADO, DIAS_VENCIMIENTO, INFO_ANGULO, MAX_NOTA_FOTO, PLANTILLAS_CAPTURA, ROLES_VER_VALORACIONES, ANGULOS, claveCopia, claveValida, enlaceWhatsapp, esquemaMensaje, esquemaResultado, esquemaSolicitud, estadoEfectivo, transicionValida, vencimiento,
+  type Angulo, type EstadoVal,
 } from "@/lib/valoraciones";
 import {
-  contextoValoraciones, enlacePublico, enviarCredenciales, nombreCentro, odontologosDelCentro, regenerarCredenciales, valoracionVisible, type ContextoVal,
+  contextoValoraciones, enlacePublico, enviarCredenciales, nombreCentro, odontologosDelCentro, pacienteDeValoracion, regenerarCredenciales, valoracionVisible, type ContextoVal,
 } from "@/lib/valoraciones-servidor";
 
 /** Credenciales que se muestran al personal una sola vez (en BD solo quedan los hashes). */
@@ -56,7 +60,12 @@ export async function crearSolicitud(entrada: z.input<typeof esquemaSolicitud>):
     odontologosDelCentro(org),
   ]);
   if ((d.pacienteId && !paciente) || (d.leadId && !lead)) return { error: "Paciente o lead no encontrado." };
-  if (d.doctorId && !odontologos.some((o) => o.userId === d.doctorId)) return { error: "El odontólogo elegido no es válido." };
+  // El especialista solo crea solicitudes para sí mismo.
+  const doctorId = ctx.rol === "especialista" ? ctx.usuario.id : d.doctorId || null;
+  if (doctorId && !odontologos.some((o) => o.userId === doctorId)) return { error: "El odontólogo elegido no es válido." };
+  // Tomas sugeridas: las marcadas a mano, o las de la plantilla; vacío = todas (solicitudes anteriores a las plantillas).
+  const elegidas = d.angulos?.length ? d.angulos : d.plantilla ? PLANTILLAS_CAPTURA[d.plantilla].angulos : [];
+  const angulosPedidos = ANGULOS.filter((a) => (elegidas as readonly string[]).includes(a));
 
   let leadId = lead?.id ?? null;
   if (!paciente && !lead) {
@@ -67,7 +76,8 @@ export async function crearSolicitud(entrada: z.input<typeof esquemaSolicitud>):
   const v = await prisma.valoracion.create({
     data: {
       organizationId: org, pacienteId: paciente?.id ?? null, leadId, nombre: d.nombre, telefono: d.telefono || null, correo: d.correo || null, ciudad: d.ciudad || null,
-      motivo: d.motivo, doctorId: d.doctorId || null, estado: "PENDIENTE_PACIENTE", tokenHash, codigoHash: hashCodigo(tokenHash, codigo, secreto()), expiraEn, creadoPorId: ctx.usuario.id,
+      motivo: d.motivo, doctorId, estado: "PENDIENTE_PACIENTE", tokenHash, codigoHash: hashCodigo(tokenHash, codigo, secreto()), expiraEn, creadoPorId: ctx.usuario.id,
+      plantillaCaptura: d.plantilla ?? null, angulosPedidos, enlaceEnviadoEn: new Date(),
     },
   });
   await registrarEvento({ organizationId: org, pacienteId: v.pacienteId, actorId: ctx.usuario.id, tipo: "valoracion.creada", detalle: { valoracionId: v.id, leadId, doctorId: v.doctorId } });
@@ -105,7 +115,7 @@ export async function cancelarValoracion(id: string): Promise<R> {
 
 export async function asignarOdontologo(id: string, doctorId: string | null): Promise<R> {
   const ctx = await ctxPersonal();
-  if (!ctx.puedeCrear) return { error: "No tienes permiso para asignar." };
+  if (!ctx.puedeAsignar) return { error: "No tienes permiso para asignar." };
   const v = await prisma.valoracion.findFirst({ where: { id, organizationId: ctx.organizationId } });
   if (!v) return { error: "Valoración no encontrada." };
   if (doctorId && !(await odontologosDelCentro(ctx.organizationId)).some((o) => o.userId === doctorId)) return { error: "El odontólogo elegido no es válido." };
@@ -164,8 +174,73 @@ export async function enviarResultado(id: string): Promise<D<{ credenciales: Cre
   if (!v || !ctx.puedeValorar) return { error: "No tienes permiso para enviar el resultado." };
   if (v.estado !== "COMPLETADA") return { error: "Completa la valoración antes de enviarla." };
   const c = await regenerarCredenciales(id, DIAS_RESULTADO);
+  await prisma.valoracion.update({ where: { id }, data: { resultadoEnviadoEn: new Date() } });
   await registrarEvento({ organizationId: v.organizationId, pacienteId: v.pacienteId, actorId: ctx.usuario.id, tipo: "valoracion.resultado_enviado", detalle: { valoracionId: id } });
   const credenciales = await paraMostrar(v, c, "VALORACION_RESULTADO");
   refrescar(id);
   return { credenciales };
+}
+
+/** Notas internas: solo las ve y escribe quien valora (nunca recepción ni el paciente). */
+export async function guardarNotasInternas(id: string, texto: string): Promise<R> {
+  const ctx = await ctxPersonal();
+  const v = await valoracionVisible(ctx, id);
+  if (!v || !ctx.puedeValorar) return { error: "No tienes permiso para escribir notas internas." };
+  const r = z.string().max(3000, "Las notas admiten hasta 3000 caracteres").safeParse(texto);
+  if (!r.success) return { error: r.error.issues[0]?.message ?? "Notas inválidas" };
+  await prisma.valoracion.update({ where: { id }, data: { notasInternas: r.data.trim() || null } });
+  await registrarEvento({ organizationId: v.organizationId, pacienteId: v.pacienteId, actorId: ctx.usuario.id, tipo: "valoracion.notas", detalle: { valoracionId: id } }); // sin el contenido
+  refrescar(id);
+  return {};
+}
+
+/** Comentario de quien valora sobre una foto: solo lo ven quienes valoran (nunca recepción ni el paciente). */
+export async function guardarNotaFoto(id: string, mediaId: string, texto: string): Promise<R> {
+  const ctx = await ctxPersonal();
+  const v = await valoracionVisible(ctx, id);
+  if (!v || !ctx.puedeValorar) return { error: "No tienes permiso para comentar fotos." };
+  const r = z.string().max(MAX_NOTA_FOTO, `El comentario admite hasta ${MAX_NOTA_FOTO} caracteres`).safeParse(texto);
+  if (!r.success) return { error: r.error.issues[0]?.message ?? "Comentario inválido" };
+  const { count } = await prisma.valoracionMedia.updateMany({ where: { id: mediaId, valoracionId: id, organizationId: v.organizationId, tipo: "FOTO" }, data: { nota: r.data.trim() || null } });
+  if (count !== 1) return { error: "Foto no encontrada." };
+  await registrarEvento({ organizationId: v.organizationId, pacienteId: v.pacienteId, actorId: ctx.usuario.id, tipo: "valoracion.nota_foto", detalle: { valoracionId: id, medioId: mediaId } }); // sin el contenido
+  refrescar(id);
+  return {};
+}
+
+/**
+ * Copia una foto de la valoración a la ficha del paciente (Imágenes). La foto pasa a ser visible para quien ve las imágenes del paciente, por eso la UI pide confirmación.
+ * La reserva atómica con imagenEstudioId evita duplicarla si se pulsa dos veces; si la copia falla se deshace.
+ */
+export async function guardarFotoEnFicha(id: string, mediaId: string): Promise<R> {
+  const ctx = await ctxPersonal();
+  const v = await valoracionVisible(ctx, id);
+  if (!v || !ctx.puedeValorar) return { error: "No tienes permiso para guardar fotos en la ficha." };
+  const m = await prisma.valoracionMedia.findFirst({ where: { id: mediaId, valoracionId: id, organizationId: v.organizationId, tipo: "FOTO" } });
+  if (!m || !claveValida(m.claveS3, v.organizationId, id)) return { error: "Foto no encontrada." };
+  const pacienteId = await pacienteDeValoracion(v);
+  if (!pacienteId) return { error: "Esta solicitud aún no tiene ficha de paciente: créala o vincúlala primero." };
+  const imagenId = randomUUID();
+  const { count } = await prisma.valoracionMedia.updateMany({ where: { id: mediaId, valoracionId: id, organizationId: v.organizationId, imagenEstudioId: null }, data: { imagenEstudioId: imagenId } });
+  if (count !== 1) return { error: "Esta foto ya está en la ficha del paciente." };
+  const mime = m.mime as TipoImagen, original = claveOriginal(v.organizationId, imagenId, mime), llaves = [original, claveVariante(original, "web"), claveVariante(original, "thumb")];
+  try {
+    const [orig, web, thumb] = await Promise.all([bytesS3(m.claveS3), bytesS3(claveCopia(m.claveS3, "web")), bytesS3(claveCopia(m.claveS3, "thumb"))]);
+    if (!orig || !web || !thumb) throw new Error("No se pudo leer la foto original");
+    await Promise.all([guardarS3(llaves[0]!, orig, mime), guardarS3(llaves[1]!, web, "image/jpeg"), guardarS3(llaves[2]!, thumb, "image/jpeg")]);
+    await prisma.imagenEstudio.create({
+      data: {
+        id: imagenId, organizationId: v.organizationId, pacienteId, claveS3: original, nombreOriginal: `valoracion-${m.angulo.toLowerCase()}.${EXTENSION[mime]}`, mime, bytes: orig.length, ancho: m.ancho, alto: m.alto,
+        titulo: `Valoración virtual · ${INFO_ANGULO[m.angulo as Angulo].etiqueta} · ${fechaCorta(m.creadoEn)}`, subidoPorId: ctx.usuario.id,
+      },
+    });
+  } catch (e) {
+    console.error("No se pudo guardar la foto en la ficha", e);
+    await Promise.all(llaves.map(borrarS3));
+    await prisma.valoracionMedia.updateMany({ where: { id: mediaId, imagenEstudioId: imagenId }, data: { imagenEstudioId: null } });
+    return { error: "No se pudo guardar la foto en la ficha. Inténtalo de nuevo." };
+  }
+  await registrarEvento({ organizationId: v.organizationId, pacienteId, actorId: ctx.usuario.id, tipo: "valoracion.foto_en_ficha", detalle: { valoracionId: id, medioId: mediaId, imagenId } });
+  refrescar(id);
+  return {};
 }

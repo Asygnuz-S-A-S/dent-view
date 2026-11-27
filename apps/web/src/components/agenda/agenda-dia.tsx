@@ -36,9 +36,9 @@ const ALTO = 28; // px por franja de 15 min
 const FRANJAS = Array.from({ length: (FIN_DIA_MIN - INICIO_DIA_MIN) / PASO_MIN }, (_, i) => INICIO_DIA_MIN + i * PASO_MIN);
 const sumarDias = (f: string, n: number) => new Date(Date.parse(`${f}T00:00:00Z`) + n * 86_400_000).toISOString().slice(0, 10);
 
-export function AgendaDia({ fecha, hoy, salas: todasSalas, salaFiltro, citas, pacientes, ordenes, alertasPacientes, ordenInicial }: {
+export function AgendaDia({ fecha, hoy, salas: todasSalas, salaFiltro, citas, pacientes, ordenes, alertasPacientes, ordenInicial, pacienteInicial }: {
   fecha: string; hoy: string; salas: Sala[]; salaFiltro: string; citas: Cita[]; pacientes: PacienteOpcion[]; ordenes: OrdenOpcion[];
-  alertasPacientes: Record<string, string>; ordenInicial: string | null;
+  alertasPacientes: Record<string, string>; ordenInicial: string | null; pacienteInicial: string | null;
 }) {
   const router = useRouter();
   // El filtro `?sala=` solo recorta las columnas; el diálogo de cita sigue ofreciendo todas las salas.
@@ -46,7 +46,8 @@ export function AgendaDia({ fecha, hoy, salas: todasSalas, salaFiltro, citas, pa
   const sufijo = salaFiltro ? `&sala=${salaFiltro}` : "";
   const orden0 = ordenInicial ? ordenes.find((o) => o.id === ordenInicial) : undefined;
   const [borrador, setBorrador] = useState<Borrador | null>(
-    orden0 && salas[0] ? { salaId: salas[0].id, inicioMin: 9 * 60, pacienteId: orden0.pacienteId, ordenId: orden0.id, duracion: 30, notas: "", estado: "PROGRAMADA" } : null,
+    orden0 && salas[0] ? { salaId: salas[0].id, inicioMin: 9 * 60, pacienteId: orden0.pacienteId, ordenId: orden0.id, duracion: 30, notas: "", estado: "PROGRAMADA" }
+      : pacienteInicial && salas[0] ? { salaId: salas[0].id, inicioMin: 9 * 60, pacienteId: pacienteInicial, ordenId: "", duracion: 30, notas: "", estado: "PROGRAMADA" } : null,
   );
   const [salaVista, setSalaVista] = useState(salas[0]?.id ?? ""); // en móvil se ve una sala a la vez
   const [llegando, iniciarLlegada] = useTransition();
