@@ -20,7 +20,7 @@ export default async function Perfil() {
   const pf = esProfesional ? await prisma.perfilDoctor.findUnique({ where: { userId: user.id } }) : null;
 
   return (
-    <div className="max-w-2xl space-y-6">
+    <div className="max-w-5xl space-y-6">
       <div>
         <h1 className="text-2xl font-semibold tracking-tight">Mi perfil</h1>
         <p className="text-sm text-muted-foreground">Tus datos de cuenta y tu contraseña.</p>
@@ -35,20 +35,27 @@ export default async function Perfil() {
           Tu rol de administrador exige la verificación en dos pasos. Actívala para continuar.
         </p>
       )}
-      <FormDatos nombre={user.name} correo={user.email} />
-      <FormClave />
-      {/* Una suplantación no gestiona el MFA ajeno (además exigiría la contraseña del titular). */}
-      {!suplantado && <FormMfa activo={!!user.twoFactorEnabled} />}
-      {esProfesional && (
-        <FormProfesional
-          inicial={{
-            tarjetaProfesional: pf?.tarjetaProfesional ?? "",
-            especialidad: pf?.especialidad ?? "",
-            telefono: pf?.telefono ?? "",
-            consultorio: pf?.consultorio ?? "",
-          }}
-        />
-      )}
+      {/* Dos columnas en pantallas anchas: cuenta y perfil a la izquierda; seguridad (clave y 2FA) a la derecha. */}
+      <div className="grid items-start gap-6 lg:grid-cols-2">
+        <div className="space-y-6">
+          <FormDatos nombre={user.name} correo={user.email} />
+          {esProfesional && (
+            <FormProfesional
+              inicial={{
+                tarjetaProfesional: pf?.tarjetaProfesional ?? "",
+                especialidad: pf?.especialidad ?? "",
+                telefono: pf?.telefono ?? "",
+                consultorio: pf?.consultorio ?? "",
+              }}
+            />
+          )}
+        </div>
+        <div className="space-y-6">
+          {/* Una suplantación no gestiona el MFA ajeno (además exigiría la contraseña del titular). */}
+          {!suplantado && <FormMfa activo={!!user.twoFactorEnabled} />}
+          <FormClave />
+        </div>
+      </div>
     </div>
   );
 }
