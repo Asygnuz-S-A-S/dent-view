@@ -35,11 +35,13 @@ export default async function Perfil() {
           Tu rol de administrador exige la verificación en dos pasos. Actívala para continuar.
         </p>
       )}
-      {/* Dos columnas en pantallas anchas: cuenta y perfil a la izquierda; seguridad (clave y 2FA) a la derecha. */}
-      <div className="grid items-start gap-6 lg:grid-cols-2">
-        <div className="space-y-6">
-          <FormDatos nombre={user.name} correo={user.email} />
-          {esProfesional && (
+      {/* Cuadrícula de 2x2 con tarjetas de la misma altura por fila: cuenta | seguridad, y perfil profesional | contraseña. */}
+      <div className="grid gap-6 lg:grid-cols-2 [&>div]:flex [&>div>[data-slot=card]]:flex-1">
+        <div><FormDatos nombre={user.name} correo={user.email} /></div>
+        {/* Una suplantación no gestiona el MFA ajeno (además exigiría la contraseña del titular). */}
+        {!suplantado ? <div><FormMfa activo={!!user.twoFactorEnabled} /></div> : <div />}
+        {esProfesional && (
+          <div>
             <FormProfesional
               inicial={{
                 tarjetaProfesional: pf?.tarjetaProfesional ?? "",
@@ -48,13 +50,9 @@ export default async function Perfil() {
                 consultorio: pf?.consultorio ?? "",
               }}
             />
-          )}
-        </div>
-        <div className="space-y-6">
-          {/* Una suplantación no gestiona el MFA ajeno (además exigiría la contraseña del titular). */}
-          {!suplantado && <FormMfa activo={!!user.twoFactorEnabled} />}
-          <FormClave />
-        </div>
+          </div>
+        )}
+        <div><FormClave /></div>
       </div>
     </div>
   );
